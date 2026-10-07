@@ -7,6 +7,7 @@ rules_version = '2';
 // - 보상을 사는 코인은 부모가 승인할 때만 빠지고, 잔액은 0 아래로 내려갈 수 없다.
 // - 뭐먹지의 메뉴는 가족 누구나 올리고, 먹고 싶다는 표시와 먹은 날 기록도 누구나 할 수 있다. 별점은 자기 것만 준다.
 //   내용을 고치거나 지우는 것은 올린 사람과 부모만 할 수 있다.
+// - 캘린더의 일정은 가족 누구나 올리고, 고치기와 지우기는 올린 사람과 부모만 할 수 있다.
 // - 위치 기록은 본인 것만 남길 수 있고 가족만 볼 수 있다. 장소 이름은 부모가 관리한다.
 // - 위치 공유 코인은 예외적으로 본인이 직접 받지만, 가족 설정에 정해진 금액만, 하루에 정해진 횟수까지만 받을 수 있다.
 // - 자녀가 퀘스트를 만들 수 있는 경우는 두 가지뿐이다:
@@ -219,6 +220,18 @@ service cloud.firestore {
         && d.lng is number && d.lng >= -180 && d.lng <= 180;
     }
 
+    // 캘린더 일정의 모양
+    function validEvent() {
+      let d = request.resource.data;
+      return d.title is string && d.title.size() > 0 && d.title.size() <= 40
+        && d.memo is string && d.memo.size() <= 100
+        && d.startDay is string && d.startDay.size() == 10
+        && d.endDay is string && d.endDay.size() == 10 && d.endDay >= d.startDay
+        && d.allDay is bool
+        && d.who is list && d.who.size() <= 30
+        && d.repeat in ['none', 'weekly', 'monthly', 'yearly'];
+    }
+
     // 뭐먹지 메뉴의 모양
     function validFood() {
       let d = request.resource.data;
@@ -350,6 +363,17 @@ service cloud.firestore {
             || resource.data.addedBy == request.auth.uid
             || isParent(fid)
           );
+      }
+
+      match /events/{eventId} {
+        allow read: if isMember(fid);
+        allow create: if isMember(fid) && validEvent()
+          && request.resource.data.createdBy == request.auth.uid;
+        allow update: if isMember(fid) && validEvent()
+          && request.resource.data.createdBy == resource.data.createdBy
+          && (resource.data.createdBy == request.auth.uid || isParent(fid));
+        allow delete: if isMember(fid)
+          && (resource.data.createdBy == request.auth.uid || isParent(fid));
       }
 
       match /locations/{locId} {

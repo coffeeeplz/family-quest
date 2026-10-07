@@ -4,7 +4,7 @@ import { useFamilyData } from '../../app/familyData';
 import { useBackend, useSession } from '../../app/session';
 import type { Member, Order, Proposal, Run } from '../../backend/types';
 import { canCounter } from '../../domain/proposals';
-import { buildBoard, relativeDay, todayProgress } from '../../domain/quests';
+import { relativeDay } from '../../domain/quests';
 import { MAX_PRAISE_LENGTH, MAX_REWARD } from '../../domain/settings';
 import { planStreak } from '../../domain/streak';
 import { formatWhen } from '../../lib/dates';
@@ -14,6 +14,7 @@ import { Avatar, AvatarFrame, Icon } from '../../ui/Sprite';
 import { SwipePages, type SwipePage } from '../../ui/SwipePages';
 import { Button, CoinInline, Empty, Field, FieldGroup, Sheet } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
+import { TodayEvents } from '../calendar/TodayEvents';
 import { OfferSheet } from '../negotiation/OfferSheet';
 import { KidStatus } from './KidStatus';
 
@@ -22,6 +23,7 @@ const QUICK_REASONS = ['조금만 더 해 보자', '다시 확인해 줘', '끝�
 /**
  * 부모의 첫 화면: 완료 요청과 코인 제안에 답한다. 부모 중 한 명만 답하면 된다.
  * 왼쪽으로 밀면(또는 위의 버튼을 누르면) 자녀별 현황이 나온다.
+ * 화면에는 답해야 할 카드만 두고, 칭찬 코인과 관리 화면으로 가는 길은 더 보기 안에 있다.
  */
 export function ApprovalsPage() {
   const backend = useBackend();
@@ -36,6 +38,7 @@ export function ApprovalsPage() {
   const [giftKidUid, setGiftKidUid] = useState<string | null>(null);
   /** 0 = 승인, 1부터는 자녀 현황 */
   const [page, setPage] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [orderRejectTarget, setOrderRejectTarget] = useState<Order | null>(null);
 
   const settings = family.settings;
@@ -71,24 +74,9 @@ export function ApprovalsPage() {
 
   const approvals = (
     <div className="stack" style={{ gap: 22 }}>
-      <section className="px member-strip" aria-label="가족">
-        {members.map((member) => (
-          <MemberChip
-            key={member.uid}
-            member={member}
-            summary={member.role === 'child' ? summaryOf(buildBoard(quests, runs, proposals, member.uid, today)) : null}
-            onOpen={member.role === 'child' ? () => setPage(kids.findIndex((kid) => kid.uid === member.uid) + 1) : undefined}
-          />
-        ))}
-      </section>
+      <TodayEvents />
 
-      {kids.length > 0 && (
-        <Button tone="mint" big block onClick={() => setGiftKidUid(kids[0].uid)}>
-          칭찬 코인 주기
-        </Button>
-      )}
-
-      {(offersForParent.length > 0 || waitingOnKid.length > 0) && (
+      {offersForParent.length > 0 && (
         <section className="stack" aria-label="코인 제안">
           <h2 className="t-title">코인 제안</h2>
           {offersForParent.map((proposal) => {
@@ -140,16 +128,6 @@ export function ApprovalsPage() {
               </article>
             );
           })}
-          {waitingOnKid.map((proposal) => (
-            <article key={proposal.id} className="card card-row">
-              <Icon name="clock" size={36} />
-              <div className="card-main">
-                <h3 className="t-body item-title">{proposal.title}</h3>
-                <p className="t-cap">{nameOf(proposal.ownerUid)}의 답을 기다리는 중</p>
-              </div>
-              <CoinInline amount={proposal.lastAmount ?? 0} />
-            </article>
-          ))}
         </section>
       )}
 
@@ -225,49 +203,54 @@ export function ApprovalsPage() {
         </section>
       )}
 
-      <section className="stack" aria-label="승인 대기">
-        <h2 className="t-title">승인 대기</h2>
-        {!loading && pending.length === 0 && (
-          <Empty icon={<Icon name="check_inbox" size={48} />} title="기다리는 퀘스트가 없어요" hint="완료 요청이 오면 여기에 나타나요." />
-        )}
-        {pending.map((item) => {
-          const member = memberById.get(item.assigneeUid);
-          return (
-            <article key={item.id} className="card">
-              <div className="card-row">
-                {member ? <Avatar avatar={member.avatar} size={36} /> : <Icon name="quest" size={36} />}
-                <div className="card-main">
-                  <h3 className="t-body item-title">{item.questTitle}</h3>
-                  <p className="t-cap">
-                    {nameOf(item.assigneeUid)} · {formatWhen(item.submittedAt, today)} 완료 요청
-                  </p>
-                  {item.late && <p className="t-capb">{relativeDay(item.dateKey, today)} 못 한 일 · 늦어서 절반</p>}
+      {pending.length > 0 && (
+        <section className="stack" aria-label="승인 대기">
+          <h2 className="t-title">승인 대기</h2>
+          {pending.map((item) => {
+            const member = memberById.get(item.assigneeUid);
+            return (
+              <article key={item.id} className="card">
+                <div className="card-row">
+                  {member ? <Avatar avatar={member.avatar} size={36} /> : <Icon name="quest" size={36} />}
+                  <div className="card-main">
+                    <h3 className="t-body item-title">{item.questTitle}</h3>
+                    <p className="t-cap">
+                      {nameOf(item.assigneeUid)} · {formatWhen(item.submittedAt, today)} 완료 요청
+                    </p>
+                    {item.late && <p className="t-capb">{relativeDay(item.dateKey, today)} 못 한 일 · 늦어서 절반</p>}
+                  </div>
+                  <CoinInline amount={item.reward} sign />
                 </div>
-                <CoinInline amount={item.reward} sign />
-              </div>
-              <div className="segmented" style={{ marginTop: 14 }}>
-                <Button
-                  tone="plain"
-                  disabled={busy}
-                  onClick={() => {
-                    setReason('');
-                    setRejectTarget(item);
-                  }}
-                >
-                  다시 하기
-                </Button>
-                <Button tone="mint" disabled={busy} onClick={() => setApproveTarget(item)}>
-                  승인하고 코인 주기
-                </Button>
-              </div>
-            </article>
-          );
-        })}
-      </section>
+                <div className="segmented" style={{ marginTop: 14 }}>
+                  <Button
+                    tone="plain"
+                    disabled={busy}
+                    onClick={() => {
+                      setReason('');
+                      setRejectTarget(item);
+                    }}
+                  >
+                    다시 하기
+                  </Button>
+                  <Button tone="mint" disabled={busy} onClick={() => setApproveTarget(item)}>
+                    승인하고 코인 주기
+                  </Button>
+                </div>
+              </article>
+            );
+          })}
+        </section>
+      )}
 
-      <Link className="btn big block" to="/quests/new">
-        + 새 퀘스트 만들기
-      </Link>
+      {!loading && waitingCount === 0 && toGive.length === 0 && (
+        <Empty icon={<Icon name="check_inbox" size={48} />} title="답할 일이 없어요" hint="완료 요청이나 신청이 오면 여기에 나타나요." />
+      )}
+
+      {waitingOnKid.length > 0 && (
+        <p className="t-cap">
+          자녀의 답을 기다리는 코인 제안 {waitingOnKid.length}개: {waitingOnKid.map((p) => p.title).join(', ')}
+        </p>
+      )}
     </div>
   );
 
@@ -294,11 +277,18 @@ export function ApprovalsPage() {
   return (
     <main className="screen">
       <header className="screen-head">
-        <AvatarFrame avatar={me.avatar} size={64} background="var(--coin-bg)" />
+        <AvatarFrame avatar={me.avatar} size={48} background="var(--coin-bg)" />
         <div className="grow">
           <h1 className="t-title">{me.displayName}</h1>
-          <p className="t-cap">{waitingCount > 0 ? `답을 기다리는 일 ${waitingCount}개` : '답할 일이 없어요'}</p>
+          <p className="t-cap">{waitingCount > 0 ? `답할 일 ${waitingCount}개` : '답할 일이 없어요'}</p>
         </div>
+        {/* 새 퀘스트는 자주 만들므로 작은 버튼으로 늘 보이게 둔다. 나머지는 더 보기 안에 있다. */}
+        <Link className="btn icon-btn" to="/quests/new" aria-label="새 퀘스트 만들기">
+          +
+        </Link>
+        <Button tone="plain" className="icon-btn" aria-label="더 보기: 칭찬 코인, 상점 관리, 가족 설정" onClick={() => setMenuOpen(true)}>
+          <Icon name="more" size={24} />
+        </Button>
       </header>
 
       {kids.length > 0 ? (
@@ -405,6 +395,33 @@ export function ApprovalsPage() {
         />
       )}
 
+      {menuOpen && (
+        <Sheet title="승인 메뉴" onClose={() => setMenuOpen(false)}>
+          {kids.length > 0 && (
+            <Button
+              tone="mint"
+              big
+              block
+              onClick={() => {
+                setMenuOpen(false);
+                setGiftKidUid(kids[0].uid);
+              }}
+            >
+              칭찬 코인 주기
+            </Button>
+          )}
+          <Link className="btn plain big block" to="/shop">
+            상점 관리
+          </Link>
+          <Link className="btn plain big block" to="/settings">
+            가족 설정
+          </Link>
+          <Button tone="plain" big block onClick={() => setMenuOpen(false)}>
+            닫기
+          </Button>
+        </Sheet>
+      )}
+
       {giftKidUid !== null && (
         <GiftSheet
           kids={kids}
@@ -421,41 +438,6 @@ export function ApprovalsPage() {
         />
       )}
     </main>
-  );
-}
-
-function summaryOf(board: ReturnType<typeof buildBoard>): string[] {
-  const progress = todayProgress(board);
-  const lines = [progress.total === 0 ? '오늘 없음' : `오늘 ${progress.done}/${progress.total}`];
-  // 이미 완료를 알리고 확인을 기다리는 것은 빼고 센다.
-  const open = board.missed.filter((item) => item.state === 'todo' || item.state === 'rejected').length;
-  if (open > 0) lines.push(`놓친 일 ${open}`);
-  return lines;
-}
-
-function MemberChip({ member, summary, onOpen }: { member: Member; summary: string[] | null; onOpen?: () => void }) {
-  // 자녀는 누르면 그 자녀의 현황으로 넘어간다.
-  const Tag = onOpen ? 'button' : 'div';
-  return (
-    <Tag
-      className="member-chip"
-      {...(onOpen ? { type: 'button' as const, onClick: onOpen, 'aria-label': `${member.displayName} 현황 보기` } : {})}
-    >
-      <Avatar avatar={member.avatar} size={48} />
-      <span className="t-cap name">{member.displayName}</span>
-      {summary ? (
-        <>
-          <CoinInline amount={member.coins} />
-          {summary.map((line) => (
-            <span key={line} className="t-cap">
-              {line}
-            </span>
-          ))}
-        </>
-      ) : (
-        <span className="t-cap">부모</span>
-      )}
-    </Tag>
   );
 }
 

@@ -3,13 +3,14 @@ import { useFamilyData } from '../../app/familyData';
 import { limitLabel } from '../../domain/shop';
 import type { IconName } from '../../lib/sprites';
 import { Icon } from '../../ui/Sprite';
-import { CoinInline, Empty } from '../../ui/kit';
+import { BackLink, CoinInline, Empty } from '../../ui/kit';
 
 /** 부모용: 상점에 올린 보상 목록. 누르면 고칠 수 있다. */
 export function ShopAdminPage() {
   const { rewards, loading } = useFamilyData();
   return (
     <main className="screen">
+      <BackLink />
       <header className="screen-head">
         <div className="grow">
           <h1 className="t-title">상점 관리</h1>

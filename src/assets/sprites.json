@@ -682,6 +682,20 @@
    ".KWWK..KWWK.",
    "KWKK....KKWK",
    "KKK......KKK"
+  ],
+  "calendar": [
+   "..K......K..",
+   ".KKKKKKKKKK.",
+   "KRRRRRRRRRRK",
+   "KRRRRRRRRRRK",
+   "KKKKKKKKKKKK",
+   "KWWWWWWWWWWK",
+   "KWKKWKKWKKWK",
+   "KWWWWWWWWWWK",
+   "KWKKWPPWKKWK",
+   "KWWWWWWWWWWK",
+   "KKKKKKKKKKKK",
+   "............"
   ]
  }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Icon } from './Sprite';
 
@@ -83,6 +83,35 @@ export function FieldGroup({ label, children }: { label: string; children: React
       </div>
       {children}
     </div>
+  );
+}
+
+interface FoldProps {
+  title: string;
+  /** 접혀 있을 때도 보이는 짧은 요약(개수 등) */
+  summary?: string;
+  children: ReactNode;
+}
+
+/** 접어 두는 구역: 제목 줄을 누르면 펼쳐진다. 자주 보지 않는 내용을 화면에서 덜어 낼 때 쓴다. */
+export function Fold({ title, summary, children }: FoldProps) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  return (
+    <section className="fold" aria-label={title}>
+      <button type="button" className="px fold-head" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}>
+        <span className="t-capb">{title}</span>
+        <span className="t-cap">
+          {summary ? `${summary} ` : ''}
+          {open ? '접기' : '펼치기'}
+        </span>
+      </button>
+      {open && (
+        <div id={id} className="stack">
+          {children}
+        </div>
+      )}
+    </section>
   );
 }
 

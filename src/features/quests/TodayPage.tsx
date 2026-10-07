@@ -6,12 +6,12 @@ import { currentStreak } from '../../domain/streak';
 import { formatDay } from '../../lib/dates';
 import type { IconName } from '../../lib/sprites';
 import { AvatarFrame, Icon } from '../../ui/Sprite';
-import { Button, CoinInline, CoinPill, Empty, Sheet } from '../../ui/kit';
+import { Button, CoinInline, CoinPill, Empty, Fold, Sheet } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
-import { CheckinCard } from '../location/CheckinCard';
+import { TodayEvents } from '../calendar/TodayEvents';
+import { CheckinButton } from '../location/CheckinButton';
 import { recordAuto } from '../location/auto';
 import { MyOfferCard } from '../negotiation/MyOfferCard';
-import { GoalCard } from '../shop/GoalCard';
 import { AddTaskSheet } from './AddTaskSheet';
 
 const CARD_CLASS: Record<BoardItem['state'], string> = {
@@ -27,7 +27,10 @@ function iconOf(item: BoardItem): IconName {
   return item.kind === 'memo' ? 'log' : 'quest';
 }
 
-/** 자녀의 첫 화면: 놓친 일, 오늘 할 일, 다가오는 일 */
+/**
+ * 자녀의 첫 화면: 놓친 일과 오늘 할 일을 보여 준다.
+ * 다가오는 일은 접어 두고, 목표 저금통은 상점에 있다.
+ */
 export function TodayPage() {
   const backend = useBackend();
   const { me, family } = useSession();
@@ -171,13 +174,14 @@ export function TodayPage() {
         </div>
       )}
 
-      <GoalCard />
+      <div className="segmented">
+        <CheckinButton />
+        <Button tone="plain" onClick={() => setAdding(true)}>
+          + 내 할 일 추가
+        </Button>
+      </div>
 
-      <CheckinCard />
-
-      <Button tone="plain" big block onClick={() => setAdding(true)}>
-        + 내 할 일 추가
-      </Button>
+      <TodayEvents />
 
       {myOffers.length > 0 && (
         <section className="stack" aria-label="코인 협상">
@@ -210,13 +214,9 @@ export function TodayPage() {
       </section>
 
       {board.upcoming.length > 0 && (
-        <section className="stack" aria-label="다가오는 일">
-          <div className="section-head">
-            <h2 className="t-title">다가오는 일</h2>
-            <span className="t-cap">{board.upcoming.length}개</span>
-          </div>
+        <Fold title="다가오는 일" summary={`${board.upcoming.length}개`}>
           {board.upcoming.map(renderItem)}
-        </section>
+        </Fold>
       )}
 
       {adding && <AddTaskSheet onClose={() => setAdding(false)} />}

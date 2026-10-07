@@ -17,6 +17,7 @@ export function ShopPage() {
   const { rewards, orders, today, loading } = useFamilyData();
   const { busy, run } = useAction();
   const [picked, setPicked] = useState<Reward | null>(null);
+  const [showMine, setShowMine] = useState(false);
 
   const mine = orders.filter((o) => o.uid === me.uid);
   const requested = mine.filter((o) => o.status === 'requested').sort((a, b) => a.requestedAt - b.requestedAt);
@@ -24,6 +25,15 @@ export function ShopPage() {
   // 오늘 거절된 신청은 이유와 함께 하루 동안 보여 준다.
   const rejectedToday = mine.filter((o) => o.status === 'rejected' && dateKey(new Date(o.decidedAt ?? 0)) === today);
   const reserved = reservedCoins(orders, me.uid);
+  const mineCount = requested.length + toReceive.length + rejectedToday.length;
+  // 첫 화면에는 한 줄만: 자세한 내용은 눌러서 본다.
+  const summary = [
+    toReceive.length > 0 ? `받을 보상 ${toReceive.length}개` : '',
+    requested.length > 0 ? `승인 대기 ${requested.length}개` : '',
+    rejectedToday.length > 0 ? `거절 ${rejectedToday.length}개` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   const pickedState = picked ? buyState(picked, me, orders, today) : null;
   const pickedUsage = picked ? limitUsage(picked, orders, me.uid, today) : null;
@@ -48,60 +58,18 @@ export function ShopPage() {
         <CoinPill amount={me.coins} />
       </header>
 
-      {reserved > 0 && (
-        <p className="px note t-cap" style={{ color: 'var(--ink)', lineHeight: '18px' }}>
-          신청한 보상에 {reserved}코인이 묶여 있어요. 지금 쓸 수 있는 코인은 {me.coins - reserved}개예요.
-        </p>
+      {mineCount > 0 && (
+        <button type="button" className="px today-line" aria-label={`내 신청 보기: ${summary}`} onClick={() => setShowMine(true)}>
+          <Icon name="check_inbox" size={24} />
+          <span className="t-capb">내 신청</span>
+          <span className="t-cap grow">{summary}</span>
+          <span className="t-title" aria-hidden="true">
+            ›
+          </span>
+        </button>
       )}
 
       <GoalCard onChange={() => setGoal(null)} />
-
-      {toReceive.length > 0 && (
-        <section className="stack" aria-label="받을 보상">
-          <h2 className="t-title">받을 보상</h2>
-          {toReceive.map((order) => (
-            <article key={order.id} className="card is-done card-row">
-              <Icon name={order.icon as IconName} size={36} />
-              <div className="card-main">
-                <h3 className="t-body item-title">{order.rewardTitle}</h3>
-                <p className="t-cap">승인됐어요. 부모님께 말하면 받을 수 있어요.</p>
-              </div>
-            </article>
-          ))}
-        </section>
-      )}
-
-      {(requested.length > 0 || rejectedToday.length > 0) && (
-        <section className="stack" aria-label="신청한 보상">
-          <h2 className="t-title">신청한 보상</h2>
-          {requested.map((order) => (
-            <article key={order.id} className="card is-wait card-row">
-              <Icon name={order.icon as IconName} size={36} />
-              <div className="card-main">
-                <h3 className="t-body item-title">{order.rewardTitle}</h3>
-                <div className="meta t-cap">
-                  <span>승인을 기다리는 중</span>
-                  <CoinInline amount={order.price} />
-                </div>
-              </div>
-              <Button tone="plain" disabled={busy} onClick={() => void run(() => backend.cancelOrder(family.id, order.id), '신청을 취소했어요.')}>
-                취소
-              </Button>
-            </article>
-          ))}
-          {rejectedToday.map((order) => (
-            <article key={order.id} className="card is-redo card-row">
-              <Icon name={order.icon as IconName} size={36} />
-              <div className="card-main">
-                <h3 className="t-body item-title">{order.rewardTitle}</h3>
-                <p className="t-capb">
-                  이번에는 안 된대요.{order.rejectReason ? ` "${order.rejectReason}"` : ''} 코인은 그대로예요.
-                </p>
-              </div>
-            </article>
-          ))}
-        </section>
-      )}
 
       <section className="stack" aria-label="보상 목록">
         <h2 className="t-title">보상 목록</h2>
@@ -133,6 +101,65 @@ export function ShopPage() {
           })}
         </div>
       </section>
+
+      {showMine && mineCount > 0 && (
+        <Sheet title="내 신청" onClose={() => setShowMine(false)}>
+          {reserved > 0 && (
+            <p className="t-cap" style={{ lineHeight: '18px' }}>
+              신청한 보상에 {reserved}코인이 묶여 있어요. 지금 쓸 수 있는 코인은 {me.coins - reserved}개예요.
+            </p>
+          )}
+          {toReceive.length > 0 && (
+            <section className="stack" aria-label="받을 보상">
+              <h3 className="t-title" style={{ fontSize: 15 }}>받을 보상</h3>
+              {toReceive.map((order) => (
+                <article key={order.id} className="card is-done card-row">
+                  <Icon name={order.icon as IconName} size={36} />
+                  <div className="card-main">
+                    <h3 className="t-body item-title">{order.rewardTitle}</h3>
+                    <p className="t-cap">승인됐어요. 부모님께 말하면 받을 수 있어요.</p>
+                  </div>
+                </article>
+              ))}
+            </section>
+          )}
+
+          {(requested.length > 0 || rejectedToday.length > 0) && (
+            <section className="stack" aria-label="신청한 보상">
+              <h3 className="t-title" style={{ fontSize: 15 }}>신청한 보상</h3>
+              {requested.map((order) => (
+                <article key={order.id} className="card is-wait card-row">
+                  <Icon name={order.icon as IconName} size={36} />
+                  <div className="card-main">
+                    <h3 className="t-body item-title">{order.rewardTitle}</h3>
+                    <div className="meta t-cap">
+                      <span>승인을 기다리는 중</span>
+                      <CoinInline amount={order.price} />
+                    </div>
+                  </div>
+                  <Button tone="plain" disabled={busy} onClick={() => void run(() => backend.cancelOrder(family.id, order.id), '신청을 취소했어요.')}>
+                    취소
+                  </Button>
+                </article>
+              ))}
+              {rejectedToday.map((order) => (
+                <article key={order.id} className="card is-redo card-row">
+                  <Icon name={order.icon as IconName} size={36} />
+                  <div className="card-main">
+                    <h3 className="t-body item-title">{order.rewardTitle}</h3>
+                    <p className="t-capb">
+                      이번에는 안 된대요.{order.rejectReason ? ` "${order.rejectReason}"` : ''} 코인은 그대로예요.
+                    </p>
+                  </div>
+                </article>
+              ))}
+            </section>
+          )}
+          <Button tone="plain" big block onClick={() => setShowMine(false)}>
+            닫기
+          </Button>
+        </Sheet>
+      )}
 
       {picked && pickedState && pickedUsage && (
         <Sheet title={picked.title} onClose={() => setPicked(null)}>

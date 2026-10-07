@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { HashRouter, Link, MemoryRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { ApprovalsPage } from '../features/approvals/ApprovalsPage';
+import { CalendarPage } from '../features/calendar/CalendarPage';
 import { FamilyPage } from '../features/family/FamilyPage';
 import { FoodCategoriesPage } from '../features/food/FoodCategoriesPage';
 import { FoodPage } from '../features/food/FoodPage';
@@ -12,6 +13,7 @@ import { QuestFormPage } from '../features/quests/QuestFormPage';
 import { QuestListPage } from '../features/quests/QuestListPage';
 import { TodayPage } from '../features/quests/TodayPage';
 import { SettingsPage } from '../features/settings/SettingsPage';
+import { SettingsSectionPage } from '../features/settings/SettingsSections';
 import { RewardFormPage } from '../features/shop/RewardFormPage';
 import { ShopAdminPage } from '../features/shop/ShopAdminPage';
 import { ShopPage } from '../features/shop/ShopPage';
@@ -49,13 +51,15 @@ export function Shell() {
     ? [
         { to: '/approve', label: '승인', icon: 'check_inbox', count: pending.length + offersForParent.length + ordersForParent.length },
         { to: '/quests', label: '퀘스트', icon: 'quest' },
-        { to: '/shop', label: '상점', icon: 'shop' },
+        { to: '/calendar', label: '캘린더', icon: 'calendar' },
         { to: '/food', label: '뭐먹지', icon: 'food' },
-        { to: '/more', label: '더보기', icon: 'more', also: MORE_PATHS },
+        // 부모의 상점 관리는 자주 열지 않으므로 더보기 안에 있다(보상 신청은 승인 탭으로 온다).
+        { to: '/more', label: '더보기', icon: 'more', also: [...MORE_PATHS, '/shop'] },
       ]
     : [
         { to: '/quests', label: '퀘스트', icon: 'quest' },
         { to: '/shop', label: '상점', icon: 'shop' },
+        { to: '/calendar', label: '캘린더', icon: 'calendar' },
         { to: '/food', label: '뭐먹지', icon: 'food' },
         { to: '/more', label: '더보기', icon: 'more', also: MORE_PATHS },
       ];
@@ -70,6 +74,7 @@ export function Shell() {
             <Route path="/quests/new" element={<QuestFormPage />} />
             <Route path="/quests/:questId" element={<QuestFormPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/settings/:section" element={<SettingsSectionPage />} />
             <Route path="/shop" element={<ShopAdminPage />} />
             <Route path="/shop/new" element={<RewardFormPage />} />
             <Route path="/shop/:rewardId" element={<RewardFormPage />} />
@@ -81,6 +86,7 @@ export function Shell() {
             <Route path="/shop" element={<ShopPage />} />
           </>
         )}
+        <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/food" element={<FoodPage />} />
         <Route path="/food/saved" element={<FoodSavedPage />} />
         <Route path="/more" element={<MorePage />} />

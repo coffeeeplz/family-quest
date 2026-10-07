@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import type { Food, Member, Order, Place, Proposal, Quest, Reward, Run } from '../src/backend/types';
+import type { CalendarEvent, Food, Member, Order, Place, Proposal, Quest, Reward, Run } from '../src/backend/types';
+import {
+  canEditEvent,
+  cleanEventInput,
+  clockLabel,
+  daysBetween,
+  isFor,
+  monthGrid,
+  occurrencesByDay,
+  occurrencesOn,
+  repeatText,
+  shiftMonth,
+  todayLine,
+  whenLabel,
+} from '../src/domain/calendar';
+import { holidayName, holidaysComplete } from '../src/domain/holidays';
 import {
   DEFAULT_FOOD_CATEGORIES,
   MAX_EATEN,
@@ -701,5 +716,133 @@ describe('위치', () => {
     expect(() => cleanPlaceInput({ ...base, name: '' })).toThrow('장소 이름');
     expect(() => cleanPlaceInput({ ...base, radius: 10 })).toThrow('범위');
     expect(() => cleanPlaceInput({ ...base, lat: 200 })).toThrow('위치를 알 수 없어요');
+  });
+});
+
+describe('캘린더', () => {
+  const event = (over: Partial<CalendarEvent>): CalendarEvent => ({
+    id: 'e1',
+    title: '치과',
+    memo: '',
+    startDay: TODAY,
+    endDay: over.startDay ?? TODAY,
+    allDay: false,
+    startTime: '15:30',
+    endTime: '',
+    who: [],
+    repeat: 'none',
+    repeatUntil: '',
+    createdBy: 'mom',
+    createdAt: 0,
+    ...over,
+  });
+  const daysOf = (e: CalendarEvent, from: string, to: string) => [...occurrencesByDay([e], from, to).keys()].sort();
+
+  it('validates event input', () => {
+    const base = { title: ' 치과 ', memo: '', startDay: TODAY, endDay: '', allDay: false, startTime: '15:30', endTime: '', who: ['kid', 'kid', ''], repeat: 'none' as const, repeatUntil: '2026-12-31' };
+    expect(cleanEventInput(base)).toEqual({ title: '치과', memo: '', startDay: TODAY, endDay: TODAY, allDay: false, startTime: '15:30', endTime: '', who: ['kid'], repeat: 'none', repeatUntil: '' });
+    expect(cleanEventInput({ ...base, allDay: true, endTime: '16:00' })).toMatchObject({ startTime: '', endTime: '' });
+    expect(() => cleanEventInput({ ...base, title: ' ' })).toThrow('일정 이름');
+    expect(() => cleanEventInput({ ...base, startDay: '2026-02-30' })).toThrow('날짜를 골라');
+    expect(() => cleanEventInput({ ...base, endDay: '2026-10-01' })).toThrow('앞설 수 없어요');
+    expect(() => cleanEventInput({ ...base, endDay: '2026-12-25' })).toThrow('31일까지');
+    expect(() => cleanEventInput({ ...base, startTime: '' })).toThrow('시작 시각');
+    expect(() => cleanEventInput({ ...base, startTime: '25:00' })).toThrow('시작 시각');
+    expect(() => cleanEventInput({ ...base, endTime: '15:00' })).toThrow('시작 시각보다 뒤');
+    expect(cleanEventInput({ ...base, endDay: '2026-10-07', endTime: '09:00' }).endTime).toBe('09:00'); // 다음 날 아침에 끝남
+    expect(() => cleanEventInput({ ...base, repeat: 'weekly', endDay: '2026-10-14' })).toThrow('7일까지만');
+    expect(() => cleanEventInput({ ...base, repeat: 'weekly', repeatUntil: '2026-10-01' })).toThrow('반복을 끝내는 날');
+    expect(cleanEventInput({ ...base, repeat: 'weekly' }).repeatUntil).toBe('2026-12-31');
+  });
+
+  it('places one-off and multi-day events on every day they cover', () => {
+    expect(daysOf(event({}), '2026-10-01', '2026-10-31')).toEqual([TODAY]);
+    expect(daysOf(event({}), '2026-10-07', '2026-10-31')).toEqual([]);
+    const trip = event({ startDay: '2026-10-30', endDay: '2026-11-02', allDay: true });
+    expect(daysOf(trip, '2026-10-01', '2026-10-31')).toEqual(['2026-10-30', '2026-10-31']);
+    expect(daysOf(trip, '2026-11-01', '2026-11-30')).toEqual(['2026-11-01', '2026-11-02']); // 지난달에 시작한 일정
+    expect(daysBetween('2026-10-30', '2026-11-02')).toBe(3);
+  });
+
+  it('repeats weekly on the same weekday, within the repeat window', () => {
+    const piano = event({ startDay: '2026-09-23', endDay: '2026-09-23', repeat: 'weekly' }); // 수요일
+    expect(daysOf(piano, '2026-10-01', '2026-10-31')).toEqual(['2026-10-07', '2026-10-14', '2026-10-21', '2026-10-28']);
+    expect(daysOf(piano, '2026-09-01', '2026-09-30')).toEqual(['2026-09-23', '2026-09-30']); // 시작 전에는 없다
+    expect(daysOf({ ...piano, repeatUntil: '2026-10-14' }, '2026-10-01', '2026-10-31')).toEqual(['2026-10-07', '2026-10-14']);
+    const camp = event({ startDay: '2026-09-25', endDay: '2026-09-27', repeat: 'weekly', allDay: true }); // 금~일
+    expect(daysOf(camp, '2026-10-04', '2026-10-10')).toEqual(['2026-10-04', '2026-10-09', '2026-10-10']); // 앞 회차의 끝과 다음 회차의 시작
+  });
+
+  it('repeats monthly and yearly, skipping dates that do not exist', () => {
+    const rent = event({ startDay: '2026-01-31', endDay: '2026-01-31', repeat: 'monthly' });
+    expect(daysOf(rent, '2026-02-01', '2026-05-31')).toEqual(['2026-03-31', '2026-05-31']); // 2월과 4월에는 31일이 없다
+    const birthday = event({ startDay: '2020-10-12', endDay: '2020-10-12', repeat: 'yearly', allDay: true });
+    expect(daysOf(birthday, '2026-10-01', '2026-10-31')).toEqual(['2026-10-12']);
+    expect(daysOf(birthday, '2026-01-01', '2027-12-31')).toEqual(['2026-10-12', '2027-10-12']);
+    const leap = event({ startDay: '2024-02-29', endDay: '2024-02-29', repeat: 'yearly', allDay: true });
+    expect(daysOf(leap, '2026-01-01', '2028-12-31')).toEqual(['2028-02-29']);
+  });
+
+  it('orders a day: all-day first, then by time', () => {
+    const events = [
+      event({ id: 'b', title: '학원', startTime: '16:00' }),
+      event({ id: 'a', title: '치과', startTime: '09:30' }),
+      event({ id: 'c', title: '여행', allDay: true, startTime: '' }),
+    ];
+    expect(occurrencesOn(events, TODAY).map((o) => o.event.id)).toEqual(['c', 'a', 'b']);
+    expect(todayLine(occurrencesOn(events, TODAY))).toBe('여행 외 2개');
+    expect(todayLine(occurrencesOn([events[1]], TODAY))).toBe('오전 9:30 치과');
+    expect(todayLine([])).toBeNull();
+  });
+
+  it('labels times, ranges and repeats', () => {
+    expect(clockLabel('00:05')).toBe('오전 12:05');
+    expect(clockLabel('12:00')).toBe('오후 12:00');
+    expect(clockLabel('15:30')).toBe('오후 3:30');
+    const on = (e: CalendarEvent) => whenLabel(occurrencesOn([e], e.startDay)[0], TODAY);
+    expect(on(event({}))).toBe('오후 3:30');
+    expect(on(event({ endTime: '17:00' }))).toBe('오후 3:30~오후 5:00');
+    expect(on(event({ allDay: true, startTime: '' }))).toBe('하루 종일');
+    expect(on(event({ startDay: '2026-10-09', endDay: '2026-10-11', allDay: true, startTime: '' }))).toBe('10월 9일~10월 11일');
+    expect(repeatText(event({}))).toBe('');
+    expect(repeatText(event({ startDay: '2026-10-07', repeat: 'weekly' }))).toBe('매주 수요일');
+    expect(repeatText(event({ startDay: '2026-10-09', repeat: 'monthly' }))).toBe('매달 9일');
+    expect(repeatText(event({ startDay: '2026-10-09', repeat: 'yearly', repeatUntil: '2028-10-09' }))).toBe('매년 10월 9일 (2028년 10월 9일까지)');
+  });
+
+  it('builds the month grid starting on Sunday', () => {
+    const october = monthGrid(2026, 10);
+    expect(october[0]).toEqual(['2026-09-27', '2026-09-28', '2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03']);
+    expect(october).toHaveLength(5);
+    expect(october[4][6]).toBe('2026-10-31');
+    expect(monthGrid(2026, 2)).toHaveLength(4); // 일요일에 시작하는 28일짜리 달
+    expect(monthGrid(2026, 8)).toHaveLength(6); // 토요일에 시작하는 31일짜리 달
+    expect(shiftMonth(2026, 12, 1)).toEqual({ year: 2027, month: 1 });
+    expect(shiftMonth(2026, 1, -1)).toEqual({ year: 2025, month: 12 });
+  });
+
+  it('knows who an event is for and who may edit it', () => {
+    expect(isFor(event({ who: [] }), 'kid')).toBe(true);
+    expect(isFor(event({ who: ['mom'] }), 'kid')).toBe(false);
+    expect(canEditEvent(event({ createdBy: 'kid' }), 'kid', false)).toBe(true);
+    expect(canEditEvent(event({ createdBy: 'mom' }), 'kid', false)).toBe(false);
+    expect(canEditEvent(event({ createdBy: 'kid' }), 'dad', true)).toBe(true);
+  });
+
+  it('knows Korean public holidays for 2026 and 2027', () => {
+    expect(holidayName('2026-10-09')).toBe('한글날');
+    expect(holidayName('2026-10-05')).toBe('대체공휴일'); // 개천절이 토요일
+    expect(holidayName('2026-09-25')).toBe('추석');
+    expect(holidayName('2026-07-17')).toBe('제헌절');
+    expect(holidayName('2025-07-17')).toBeNull(); // 2026년부터 공휴일
+    expect(holidayName('2026-05-01')).toBeNull();
+    expect(holidayName('2027-05-01')).toBe('노동절');
+    expect(holidayName('2027-02-07')).toBe('설날');
+    expect(holidayName('2027-02-09')).toBe('대체공휴일');
+    expect(holidayName('2027-12-27')).toBe('대체공휴일');
+    expect(holidayName('2026-10-07')).toBeNull();
+    expect(holidayName('2030-12-25')).toBe('성탄절'); // 표가 없는 해도 날짜가 고정된 공휴일은 보인다
+    expect(holidaysComplete(2027)).toBe(true);
+    expect(holidaysComplete(2028)).toBe(false);
   });
 });

@@ -17,6 +17,7 @@
  *   families/{fid}/foods/{id}            뭐먹지의 메뉴
  *   families/{fid}/locations/{id}        위치 기록(최근 며칠 치)
  *   families/{fid}/places/{id}           이름을 붙여 둔 장소
+ *   families/{fid}/events/{id}           가족 캘린더의 일정
  */
 import { FirebaseError, initializeApp } from 'firebase/app';
 import {
@@ -56,6 +57,7 @@ import {
 } from 'firebase/firestore';
 import { firebaseConfig } from '../config/firebase';
 import { INVITE_TTL_MS, isInviteCodeShape, newInviteCode, normalizeInviteCode } from '../domain/invites';
+import { cleanEventInput } from '../domain/calendar';
 import { ETC_CATEGORY_ID, MAX_EATEN, cleanFoodInput, cleanStars, withEaten } from '../domain/foods';
 import { cleanFix, cleanPlaceInput, planCheckin } from '../domain/location';
 import { cleanFamilyName, cleanProfile } from '../domain/profile';
@@ -74,6 +76,7 @@ import { dateKey, dayNumber, weekStart } from '../lib/dates';
 import {
   AppError,
   type Backend,
+  type CalendarEvent,
   type Family,
   type FamilySettings,
   type Food,
@@ -184,6 +187,7 @@ export function createFirebaseBackend(): Backend {
   const foodsCol = (fid: string) => collection(db, 'families', fid, 'foods');
   const locationsCol = (fid: string) => collection(db, 'families', fid, 'locations');
   const placesCol = (fid: string) => collection(db, 'families', fid, 'places');
+  const eventsCol = (fid: string) => collection(db, 'families', fid, 'events');
 
   const onListenError = (what: string) => (error: Error) => console.error(`[${what}]`, error);
 
@@ -301,6 +305,22 @@ export function createFirebaseBackend(): Backend {
     at: d.at ?? 0,
     trigger: d.trigger === 'open' || d.trigger === 'quest' ? d.trigger : 'button',
     coins: d.coins ?? 0,
+  });
+
+  const toEvent = (id: string, d: DocumentData): CalendarEvent => ({
+    id,
+    title: d.title,
+    memo: d.memo ?? '',
+    startDay: d.startDay,
+    endDay: d.endDay ?? d.startDay,
+    allDay: d.allDay === true,
+    startTime: d.startTime ?? '',
+    endTime: d.endTime ?? '',
+    who: [...((d.who as string[] | undefined) ?? [])],
+    repeat: d.repeat === 'weekly' || d.repeat === 'monthly' || d.repeat === 'yearly' ? d.repeat : 'none',
+    repeatUntil: d.repeatUntil ?? '',
+    createdBy: d.createdBy,
+    createdAt: d.createdAt ?? 0,
   });
 
   const toPlace = (id: string, d: DocumentData): Place => ({
@@ -1065,6 +1085,34 @@ export function createFirebaseBackend(): Backend {
     deletePlace: (familyId, placeId) =>
       guard(async () => {
         await deleteDoc(doc(placesCol(familyId), placeId));
+      }),
+
+    watchEvents(familyId, cb, onError) {
+      return onSnapshot(
+        eventsCol(familyId),
+        (snap) => cb(snap.docs.map((s) => toEvent(s.id, s.data()))),
+        (error) => {
+          console.error('[events]', error);
+          onError?.();
+        },
+      );
+    },
+
+    createEvent: (familyId, input, byUid) =>
+      guard(async () => {
+        const ref = doc(eventsCol(familyId));
+        await setDoc(ref, { ...cleanEventInput(input), createdBy: byUid, createdAt: Date.now() });
+        return ref.id;
+      }),
+
+    updateEvent: (familyId, eventId, input) =>
+      guard(async () => {
+        await updateDoc(doc(eventsCol(familyId), eventId), { ...cleanEventInput(input) });
+      }),
+
+    deleteEvent: (familyId, eventId) =>
+      guard(async () => {
+        await deleteDoc(doc(eventsCol(familyId), eventId));
       }),
 
     giveCoins: (familyId, toUid, amount, note, byUid) =>

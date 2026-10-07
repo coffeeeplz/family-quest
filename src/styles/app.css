@@ -992,10 +992,201 @@ a.chip {
 }
 
 /* 위치 알리기 */
-.checkin {
-  padding: 14px;
+/* 접어 두는 구역 */
+.fold {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  background: var(--mint-soft);
+  gap: 14px;
+}
+.fold-head {
+  width: calc(100% - var(--px) * 2);
+  min-height: var(--tap);
+  padding: 0 14px;
+  border: 0;
+  border-radius: 0;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* 버튼 한 줄: 주요 버튼 두 개와 더 보기 */
+.action-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 12px;
+}
+.today-line {
+  min-height: var(--tap);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  text-decoration: none;
+  background: var(--sky-soft);
+}
+.today-line .grow {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+/* 캘린더 */
+.cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.cal-head .btn {
+  min-width: var(--tap);
+  font-size: 18px;
+}
+.cal {
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  touch-action: pan-y;
+}
+.cal-week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+}
+.cal-name {
+  padding: 4px 0;
+  font-family: var(--font-title);
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+  color: var(--ink-soft);
+}
+.cal-day {
+  min-height: 46px;
+  padding: 4px 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--ink);
+  font-family: var(--font-title);
+  font-size: 12px;
+  line-height: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.cal-day .num {
+  min-width: 24px;
+  padding: 2px 0;
+  text-align: center;
+}
+.cal-day.other {
+  opacity: 0.35;
+}
+.cal-name.sun,
+.cal-day.sun,
+.holiday {
+  color: #c2334d;
+}
+.cal-name.sat,
+.cal-day.sat {
+  color: #2f6fc4;
+}
+.cal-day.today .num {
+  box-shadow: 0 -2px 0 0 var(--ink), 0 2px 0 0 var(--ink), -2px 0 0 0 var(--ink), 2px 0 0 0 var(--ink);
+}
+.cal-day[aria-selected='true'] {
+  background: var(--pink-soft);
+}
+.cal-day[aria-selected='true'] .num {
+  background: var(--pink);
+  font-weight: 700;
+}
+.cal-day .dots {
+  display: flex;
+  gap: 2px;
+  min-height: 6px;
+}
+.cal-day .dots i {
+  width: 6px;
+  height: 6px;
+  box-shadow: 0 0 0 1px var(--ink);
+}
+.cal-day .dots i.quest {
+  background: var(--yellow);
+}
+.cal-item {
+  width: calc(100% - var(--px) * 2);
+  min-height: 52px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 0;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.cal-item .bar {
+  width: 8px;
+  align-self: stretch;
+  box-shadow: 0 0 0 1px var(--ink);
+  flex-shrink: 0;
+}
+.cal-item .card-main {
+  gap: 4px;
+}
+.cal-item .card-main > span {
+  display: block;
+}
+
+/* 버튼 모서리에 붙는 작은 표시(받을 코인 등) */
+.btn.with-corner {
+  position: relative;
+  white-space: nowrap;
+}
+/* 좁은 화면에서는 글자가 두 줄로 꺾이지 않게 그림을 뺀다. */
+@media (max-width: 359px) {
+  .btn.with-corner .sprite {
+    display: none;
+  }
+}
+.corner-badge {
+  position: absolute;
+  top: -8px;
+  right: -6px;
+  min-width: 22px;
+  padding: 1px 4px;
+  background: var(--yellow);
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+  box-shadow: 0 -2px 0 0 var(--ink), 0 2px 0 0 var(--ink), -2px 0 0 0 var(--ink), 2px 0 0 0 var(--ink);
+}
+button.menu-row {
+  cursor: pointer;
+}
+
+/* 글자 없이 그림만 있는 작은 버튼 */
+.btn.icon-btn {
+  min-width: var(--tap);
+  padding-left: 0;
+  padding-right: 0;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+button.today-line {
+  width: calc(100% - var(--px) * 2);
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  text-align: left;
 }

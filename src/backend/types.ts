@@ -321,6 +321,34 @@ export interface Place extends PlaceInput {
   createdAt: number;
 }
 
+/** 일정이 되풀이되는 방식. weekly=매주 같은 요일, monthly=매달 같은 날, yearly=매년 같은 날 */
+export type EventRepeat = 'none' | 'weekly' | 'monthly' | 'yearly';
+
+export interface EventInput {
+  title: string;
+  memo: string;
+  /** 시작하는 날과 끝나는 날(YYYY-MM-DD). 하루짜리 일정은 둘이 같다 */
+  startDay: string;
+  endDay: string;
+  allDay: boolean;
+  /** 'HH:MM'. 하루 종일이면 빈 문자열 */
+  startTime: string;
+  /** 'HH:MM'. 끝나는 시각을 안 정했으면 빈 문자열 */
+  endTime: string;
+  /** 누구의 일정인지(구성원 uid). 비어 있으면 가족 모두 */
+  who: string[];
+  repeat: EventRepeat;
+  /** 반복을 끝내는 날. 비어 있으면 계속 */
+  repeatUntil: string;
+}
+
+/** 가족 캘린더의 일정 */
+export interface CalendarEvent extends EventInput {
+  id: string;
+  createdBy: string;
+  createdAt: number;
+}
+
 /** 승인과 함께 반영할 연속 달성 변화 */
 export interface StreakUpdate {
   count: number;
@@ -447,6 +475,14 @@ export interface Backend {
   watchPlaces(familyId: string, cb: (places: Place[]) => void, onError?: () => void): Unsub;
   createPlace(familyId: string, input: PlaceInput, byUid: string): Promise<string>;
   deletePlace(familyId: string, placeId: string): Promise<void>;
+
+  // 캘린더
+  /** 가족의 모든 일정. onError 는 목록을 읽지 못했을 때 불린다. */
+  watchEvents(familyId: string, cb: (events: CalendarEvent[]) => void, onError?: () => void): Unsub;
+  createEvent(familyId: string, input: EventInput, byUid: string): Promise<string>;
+  /** 고치기와 지우기는 올린 사람과 부모만 할 수 있다. */
+  updateEvent(familyId: string, eventId: string, input: EventInput): Promise<void>;
+  deleteEvent(familyId: string, eventId: string): Promise<void>;
 
   /** 체험 모드에서만 제공 */
   demo?: {

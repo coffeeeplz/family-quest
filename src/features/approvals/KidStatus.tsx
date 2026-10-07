@@ -9,7 +9,7 @@ import { currentStreak } from '../../domain/streak';
 import { formatDay, formatWhen } from '../../lib/dates';
 import type { IconName } from '../../lib/sprites';
 import { AvatarFrame, Icon } from '../../ui/Sprite';
-import { Button, CoinInline, CoinPill } from '../../ui/kit';
+import { Button, CoinInline, CoinPill, Fold } from '../../ui/kit';
 import { KidLocation } from '../location/KidLocation';
 import { GoalCard } from '../shop/GoalCard';
 
@@ -41,16 +41,20 @@ interface Props {
   onGift: () => void;
 }
 
-/** 부모가 보는 자녀 현황: 자녀의 홈과 같은 목록을 읽기 전용으로 보여 준다. */
+/**
+ * 부모가 보는 자녀 현황: 자녀의 홈과 같은 목록을 읽기 전용으로 보여 준다.
+ * 화면에는 요약, 마지막 위치 한 줄, 놓친 일과 오늘 할 일만 두고 나머지는 접어 둔다.
+ */
 export function KidStatus({ kid, onGift }: Props) {
   const { family } = useSession();
-  const { quests, runs, proposals, orders, ledger, today } = useFamilyData();
+  const { quests, runs, proposals, orders, ledger, rewards, today } = useFamilyData();
 
   const board = useMemo(() => buildBoard(quests, runs, proposals, kid.uid, today), [quests, runs, proposals, kid.uid, today]);
   const progress = todayProgress(board);
   const streak = family.settings.streakOn ? currentStreak(kid, quests, today) : 0;
   const reserved = reservedCoins(orders, kid.uid);
   const recent = ledger.filter((entry) => entry.uid === kid.uid).slice(0, RECENT);
+  const goal = rewards.find((reward) => reward.id === kid.goalRewardId);
 
   const renderItem = (item: BoardItem) => (
     <article key={item.key} className={`${CARD_CLASS[item.state]} card-row`}>
@@ -105,17 +109,15 @@ export function KidStatus({ kid, onGift }: Props) {
       )}
 
       <div className="segmented">
-        <Button tone="mint" big onClick={onGift}>
+        <Button tone="mint" onClick={onGift}>
           칭찬 코인 주기
         </Button>
-        <Link className="btn big" to={`/quests/new?for=${encodeURIComponent(kid.uid)}`}>
+        <Link className="btn" to={`/quests/new?for=${encodeURIComponent(kid.uid)}`}>
           + 퀘스트 추가
         </Link>
       </div>
 
       <KidLocation kid={kid} />
-
-      <GoalCard member={kid} />
 
       {board.missed.length > 0 && (
         <section className="stack" aria-label="놓친 일">
@@ -137,22 +139,18 @@ export function KidStatus({ kid, onGift }: Props) {
       </section>
 
       {board.upcoming.length > 0 && (
-        <section className="stack" aria-label="다가오는 일">
-          <div className="section-head">
-            <h2 className="t-title">다가오는 일</h2>
-            <span className="t-cap">{board.upcoming.length}개</span>
-          </div>
+        <Fold title="다가오는 일" summary={`${board.upcoming.length}개`}>
           {board.upcoming.map(renderItem)}
-        </section>
+        </Fold>
       )}
 
-      <section className="stack" aria-label="최근 코인 기록">
-        <div className="section-head">
-          <h2 className="t-title">최근 코인 기록</h2>
-          <Link className="link" to="/log">
-            전체 보기
-          </Link>
-        </div>
+      {goal && (
+        <Fold title="목표 저금통" summary={goal.title}>
+          <GoalCard member={kid} />
+        </Fold>
+      )}
+
+      <Fold title="최근 코인 기록" summary={recent.length > 0 ? `${recent.length}건` : '없음'}>
         {recent.length === 0 && <p className="t-cap">아직 기록이 없어요.</p>}
         {recent.map((entry) => (
           <div key={entry.id} className="px history-row">
@@ -163,7 +161,10 @@ export function KidStatus({ kid, onGift }: Props) {
             <CoinInline amount={entry.amount} sign />
           </div>
         ))}
-      </section>
+        <Link className="link" to="/log">
+          코인 기록 전체 보기
+        </Link>
+      </Fold>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { createDemoBackend } from '../src/backend/demo';
 import type {
   ApproveOptions,
   Backend,
+  CalendarEvent,
   Family,
   Food,
   LedgerEntry,
@@ -46,6 +47,8 @@ const orders = () => snapshot<Order[]>((cb) => backend.watchOrders(FAMILY, addDa
 const rewardById = (id: string) => rewards().find((r) => r.id === id)!;
 const foods = () => snapshot<Food[]>((cb) => backend.watchFoods(FAMILY, cb));
 const foodById = (id: string) => foods().find((f) => f.id === id);
+const events = () => snapshot<CalendarEvent[]>((cb) => backend.watchEvents(FAMILY, cb));
+const eventById = (id: string) => events().find((e) => e.id === id);
 const locations = () => snapshot<LocationRecord[]>((cb) => backend.watchLocations(FAMILY, 0, cb));
 const places = () => snapshot<Place[]>((cb) => backend.watchPlaces(FAMILY, cb));
 const questById = (id: string) => quests().find((q) => q.id === id)!;
@@ -670,5 +673,37 @@ describe('위치', () => {
     as('demo-dad');
     await backend.pruneLocations(FAMILY, Date.now() - 60 * 60_000); // 한 시간보다 오래된 것
     expect(locations().map((r) => r.id)).toEqual(['loc-seed-2']);
+  });
+});
+
+describe('캘린더', () => {
+  const input = { title: '운동회', memo: '', startDay: addDays(today, 2), endDay: addDays(today, 2), allDay: true, startTime: '', endTime: '', who: [], repeat: 'none' as const, repeatUntil: '' };
+
+  it('가족 누구나 일정을 올린다', async () => {
+    expect(events()).toHaveLength(7);
+    as('demo-kid');
+    const id = await backend.createEvent(FAMILY, { ...input, who: ['demo-kid'] }, 'demo-kid');
+    expect(eventById(id)).toMatchObject({ title: '운동회', createdBy: 'demo-kid', who: ['demo-kid'], allDay: true });
+    await expect(backend.createEvent(FAMILY, { ...input, title: '' }, 'demo-kid')).rejects.toThrow('일정 이름');
+    await expect(backend.createEvent(FAMILY, input, 'demo-dad')).rejects.toThrow('본인만');
+    as('demo-new');
+    await expect(backend.createEvent(FAMILY, input, 'demo-new')).rejects.toThrow('구성원이 아니에요');
+  });
+
+  it('자녀는 자기가 올린 일정만 고치고 지운다. 부모는 모두 할 수 있다', async () => {
+    as('demo-kid');
+    await backend.updateEvent(FAMILY, 'e-kid', { ...input, title: '친구 생일 파티 (장소 바뀜)' }); // 내가 올린 일정
+    expect(eventById('e-kid')!.title).toBe('친구 생일 파티 (장소 바뀜)');
+    expect(eventById('e-kid')!.createdBy).toBe('demo-kid');
+    await expect(backend.updateEvent(FAMILY, 'e-dinner', input)).rejects.toThrow('올린 사람과 부모만'); // 아빠가 올린 일정
+    await expect(backend.deleteEvent(FAMILY, 'e-dentist')).rejects.toThrow('올린 사람과 부모만'); // 내 일정이어도 엄마가 올린 것
+    await backend.deleteEvent(FAMILY, 'e-kid');
+    expect(eventById('e-kid')).toBeUndefined();
+
+    as('demo-dad'); // 엄마가 올린 일정도 부모는 고친다
+    await backend.updateEvent(FAMILY, 'e-mom', { ...input, title: '엄마 모임 (취소)' });
+    expect(eventById('e-mom')!.title).toBe('엄마 모임 (취소)');
+    await backend.deleteEvent(FAMILY, 'e-mom');
+    await expect(backend.deleteEvent(FAMILY, 'e-mom')).rejects.toThrow('찾을 수 없어요');
   });
 });

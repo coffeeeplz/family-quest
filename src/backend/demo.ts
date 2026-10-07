@@ -3,6 +3,7 @@
  * 데이터는 이 기기의 브라우저에만 저장되고, 실제 서버와 같은 권한 규칙을 흉내 낸다.
  */
 import { INVITE_TTL_MS, isInviteCodeShape, newInviteCode, normalizeInviteCode } from '../domain/invites';
+import { MAX_EVENTS, canEditEvent, cleanEventInput } from '../domain/calendar';
 import { MAX_FOODS, canEditFood, cleanFoodInput, cleanStars, findSameName, withEaten } from '../domain/foods';
 import { MAX_PLACES, cleanFix, cleanPlaceInput, planCheckin } from '../domain/location';
 import { cleanFamilyName, cleanProfile } from '../domain/profile';
@@ -23,6 +24,7 @@ import {
   AppError,
   type AuthUser,
   type Backend,
+  type CalendarEvent,
   type DemoPersona,
   type Family,
   type Food,
@@ -50,7 +52,7 @@ interface DemoUser {
 }
 
 interface DemoState {
-  v: 6;
+  v: 7;
   currentUid: string | null;
   users: Record<string, DemoUser>;
   families: Record<string, Family>;
@@ -65,6 +67,7 @@ interface DemoState {
   foods: Record<string, Record<string, Food>>;
   locations: Record<string, LocationRecord[]>;
   places: Record<string, Record<string, Place>>;
+  events: Record<string, Record<string, CalendarEvent>>;
   invites: Record<string, Invite>;
 }
 
@@ -73,7 +76,7 @@ export interface KeyValueStore {
   setItem(key: string, value: string): void;
 }
 
-const STORAGE_KEY = 'family-quest-demo-v6';
+const STORAGE_KEY = 'family-quest-demo-v7';
 const FAMILY = 'demo-family';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -146,6 +149,26 @@ function seed(now: number = Date.now()): DemoState {
     checkin: null,
   });
 
+  const event = (id: string, title: string, startDay: string, over: Partial<CalendarEvent> = {}): CalendarEvent => ({
+    id,
+    title,
+    memo: '',
+    startDay,
+    endDay: startDay,
+    allDay: false,
+    startTime: '',
+    endTime: '',
+    who: [],
+    repeat: 'none',
+    repeatUntil: '',
+    createdBy: 'demo-mom',
+    createdAt: startedAt,
+    ...over,
+  });
+  // 작년 이맘때(닷새 뒤 날짜)부터 매년 돌아오는 생신
+  const birthday = addDays(today, 5);
+  const birthdayLastYear = `${Number(birthday.slice(0, 4)) - 1}${birthday.slice(4)}`;
+
   const place = (id: string, name: string, lat: number, lng: number): Place => ({
     id,
     name,
@@ -200,7 +223,7 @@ function seed(now: number = Date.now()): DemoState {
   });
 
   return {
-    v: 6,
+    v: 7,
     currentUid: null,
     users: {
       'demo-dad': { uid: 'demo-dad', email: 'dad@example.com', label: '아빠', hint: '퀘스트를 만들고 승인해요', familyId: FAMILY },
@@ -296,6 +319,17 @@ function seed(now: number = Date.now()): DemoState {
         'f-tteok': food('f-tteok', '떡볶이', 'korean', [], [15, 30], { 'demo-kid': 5 }),
       },
     },
+    events: {
+      [FAMILY]: {
+        'e-dentist': event('e-dentist', '치과', today, { startTime: '15:30', who: ['demo-kid'], memo: '칫솔 챙기기' }),
+        'e-piano': event('e-piano', '피아노 학원', addDays(today, -13), { startTime: '16:00', endTime: '17:00', who: ['demo-kid'], repeat: 'weekly' }),
+        'e-mom': event('e-mom', '엄마 모임', addDays(today, 1), { startTime: '19:30', who: ['demo-mom'] }),
+        'e-dinner': event('e-dinner', '가족 외식', addDays(today, 3), { startTime: '18:30', createdBy: 'demo-dad' }),
+        'e-birthday': event('e-birthday', '할머니 생신', birthdayLastYear, { allDay: true, repeat: 'yearly' }),
+        'e-trip': event('e-trip', '가족 여행', addDays(today, 9), { endDay: addDays(today, 11), allDay: true, createdBy: 'demo-dad' }),
+        'e-kid': event('e-kid', '친구 생일 파티', addDays(today, 6), { startTime: '14:00', who: ['demo-kid'], createdBy: 'demo-kid' }),
+      },
+    },
     // 체험용 장소와 위치는 지어낸 좌표다.
     places: {
       [FAMILY]: {
@@ -328,7 +362,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       const raw = store?.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as DemoState;
-        if (parsed.v === 6) return parsed;
+        if (parsed.v === 7) return parsed;
       }
     } catch {
       // 저장소를 못 읽으면 새로 시작한다.
@@ -409,6 +443,12 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
     return proposal;
   }
 
+  function requireEvent(familyId: string, eventId: string): CalendarEvent {
+    const found = state.events[familyId]?.[eventId];
+    if (!found) throw new AppError('일정을 찾을 수 없어요. 이미 지워졌을 수 있어요.');
+    return found;
+  }
+
   function requireFood(familyId: string, foodId: string): Food {
     const food = state.foods[familyId]?.[foodId];
     if (!food || !food.active) throw new AppError('메뉴를 찾을 수 없어요. 이미 지워졌을 수 있어요.');
@@ -481,6 +521,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       state.foods[id] = {};
       state.locations[id] = [];
       state.places[id] = {};
+      state.events[id] = {};
       state.users[uid].familyId = id;
       commit();
       return id;
@@ -1177,6 +1218,37 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
     async deletePlace(familyId, placeId) {
       requireParent(familyId);
       delete state.places[familyId][placeId];
+      commit();
+    },
+
+    watchEvents(familyId, cb) {
+      return watch(() => Object.values(state.events[familyId] ?? {}).map((e) => ({ ...e, who: [...e.who] })), cb);
+    },
+
+    async createEvent(familyId, input, byUid) {
+      requireSelf(byUid);
+      requireMember(familyId);
+      const clean = cleanEventInput(input);
+      if (Object.keys(state.events[familyId]).length >= MAX_EVENTS) throw new AppError(`일정은 ${MAX_EVENTS}개까지 올릴 수 있어요.`);
+      const id = newId('e');
+      state.events[familyId][id] = { id, ...clean, createdBy: byUid, createdAt: Date.now() };
+      commit();
+      return id;
+    },
+
+    async updateEvent(familyId, eventId, input) {
+      const member = requireMember(familyId);
+      const stored = requireEvent(familyId, eventId);
+      if (!canEditEvent(stored, member.uid, member.role === 'parent')) throw new AppError('올린 사람과 부모만 고칠 수 있어요.');
+      state.events[familyId][eventId] = { ...stored, ...cleanEventInput(input) };
+      commit();
+    },
+
+    async deleteEvent(familyId, eventId) {
+      const member = requireMember(familyId);
+      const stored = requireEvent(familyId, eventId);
+      if (!canEditEvent(stored, member.uid, member.role === 'parent')) throw new AppError('올린 사람과 부모만 지울 수 있어요.');
+      delete state.events[familyId][eventId];
       commit();
     },
 

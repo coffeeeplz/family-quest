@@ -40,7 +40,7 @@ export function FoodCategoriesPage() {
       const pending = newName.trim() && !full ? [{ id: newCategoryId(), name: newName.trim(), icon: 'food' }] : [];
       await backend.updateSettings(family.id, { ...family.settings, foodCategories: [...list, ...pending, etc] });
       notify('분류를 저장했어요.');
-      navigate('/food');
+      navigate(-1);
     } catch (e) {
       setError(errorText(e));
       setBusy(false);
@@ -114,7 +114,7 @@ export function FoodCategoriesPage() {
       <Button big block disabled={busy} onClick={() => void save()}>
         분류 저장하기
       </Button>
-      <Button tone="plain" big block onClick={() => navigate('/food')}>
+      <Button tone="plain" big block onClick={() => navigate(-1)}>
         저장하지 않고 돌아가기
       </Button>
 

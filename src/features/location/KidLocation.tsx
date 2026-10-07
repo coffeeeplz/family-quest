@@ -25,11 +25,15 @@ import { useLocations } from './useLocation';
 const HISTORY_PREVIEW = 4;
 const QUICK_NAMES = ['집', '학교', '학원', '할머니 댁'];
 
-/** 부모가 보는 자녀의 위치: 마지막으로 전해진 곳, 지난 기록, 패밀리 링크 바로가기 */
+/**
+ * 부모가 보는 자녀의 위치. 화면에는 마지막 위치 한 줄만 두고,
+ * 지도 링크, 지난 기록, 장소 이름 붙이기, 패밀리 링크는 눌러서 나오는 창 안에 있다.
+ */
 export function KidLocation({ kid }: { kid: Member }) {
   const { today } = useFamilyData();
   const { isParent } = useSession();
   const { records, places, failed } = useLocations();
+  const [open, setOpen] = useState(false);
   const [naming, setNaming] = useState<LocationRecord | null>(null);
   const [showAll, setShowAll] = useState(false);
 
@@ -39,90 +43,116 @@ export function KidLocation({ kid }: { kid: Member }) {
   const when = (record: LocationRecord) => timeAgo(record.at) ?? formatWhen(record.at, today);
   const latestLabel = latest ? placeLabel(places, latest) : null;
   const latestLinks = latest ? mapLinks(latest, kid.displayName) : null;
+  const summary = failed ? '불러오지 못했어요' : latest ? `${latestLabel ?? '등록한 장소가 아니에요'} · ${when(latest)}` : '아직 기록이 없어요';
+
+  function close() {
+    setOpen(false);
+    setNaming(null);
+    setShowAll(false);
+  }
 
   return (
-    <section className="stack" aria-label="위치">
-      <div className="section-head">
-        <h2 className="t-title">위치</h2>
-        <span className="t-cap">최근 {LOCATION_KEEP_DAYS}일</span>
-      </div>
+    <>
+      <button type="button" className="px today-line" aria-label={`${kid.displayName}의 위치: ${summary}. 자세히 보기`} onClick={() => setOpen(true)}>
+        <Icon name="pin" size={24} />
+        <span className="t-capb">위치</span>
+        <span className="t-cap grow">{summary}</span>
+        <span className="t-capb" aria-hidden="true">
+          ›
+        </span>
+      </button>
 
-      {failed && (
-        <p className="px note t-capb" role="alert" style={{ lineHeight: '18px' }}>
-          위치 기록을 불러오지 못했어요. Firebase 규칙을 새로 게시했는지 확인해 주세요.
-        </p>
-      )}
+      {open && naming && <PlaceForm record={naming} onDone={() => setNaming(null)} onClose={close} />}
 
-      {latest && latestLinks ? (
-        <article className="card">
-          <div className="card-row">
-            <Icon name="pin" size={36} />
-            <div className="card-main">
-              <h3 className="t-body item-title">{latestLabel ?? '등록한 장소가 아니에요'}</h3>
-              <p className="t-cap">
-                {when(latest)} · {TRIGGER_LABEL[latest.trigger]}
+      {open && !naming && (
+        <Sheet title={`${kid.displayName}의 위치`} onClose={close}>
+          {failed && (
+            <p className="px note t-capb" role="alert" style={{ lineHeight: '18px' }}>
+              위치 기록을 불러오지 못했어요. Firebase 규칙을 새로 게시했는지 확인해 주세요.
+            </p>
+          )}
+
+          {latest && latestLinks ? (
+            <section className="stack" aria-label="마지막 위치" style={{ gap: 12 }}>
+              <div className="card-row">
+                <Icon name="pin" size={36} />
+                <div className="card-main">
+                  <h3 className="t-body item-title">{latestLabel ?? '등록한 장소가 아니에요'}</h3>
+                  <p className="t-cap">
+                    {when(latest)} · {TRIGGER_LABEL[latest.trigger]}
+                    {accuracyLabel(latest.accuracy) ? ` · ${accuracyLabel(latest.accuracy)}` : ''}
+                  </p>
+                </div>
+              </div>
+              <div className="chips">
+                <a className="chip" href={latestLinks.google} target="_blank" rel="noopener noreferrer">
+                  구글 지도
+                </a>
+                <a className="chip" href={latestLinks.kakao} target="_blank" rel="noopener noreferrer">
+                  카카오맵
+                </a>
+                {isParent && !latestLabel && places.length < MAX_PLACES && (
+                  <button type="button" className="chip" onClick={() => setNaming(latest)}>
+                    이름 붙이기
+                  </button>
+                )}
+              </div>
+            </section>
+          ) : (
+            !failed && (
+              <p className="t-body">
+                아직 위치 기록이 없어요. {kid.displayName}의 앱에서 "지금 여기예요"를 누르면 나타나요.
               </p>
-              {accuracyLabel(latest.accuracy) && <p className="t-cap">{accuracyLabel(latest.accuracy)}</p>}
-            </div>
-          </div>
-          <div className="chips card-foot">
-            <a className="chip" href={latestLinks.google} target="_blank" rel="noopener noreferrer">
-              구글 지도
-            </a>
-            <a className="chip" href={latestLinks.kakao} target="_blank" rel="noopener noreferrer">
-              카카오맵
-            </a>
-            {isParent && !latestLabel && places.length < MAX_PLACES && (
-              <button type="button" className="chip" onClick={() => setNaming(latest)}>
-                이름 붙이기
-              </button>
-            )}
-          </div>
-        </article>
-      ) : (
-        !failed && (
-          <p className="t-cap" style={{ lineHeight: '18px' }}>
-            아직 위치 기록이 없어요. {kid.displayName}의 앱에서 "지금 여기예요"를 누르면 나타나요.
-          </p>
-        )
-      )}
+            )
+          )}
 
-      {history.map((record) => (
-        <div key={record.id} className="px history-row">
-          <div className="grow stack" style={{ gap: 4 }}>
-            <span className="t-body item-title">{placeLabel(places, record) ?? '등록한 장소가 아니에요'}</span>
-            <span className="t-cap">
-              {when(record)} · {TRIGGER_LABEL[record.trigger]}
-            </span>
-          </div>
-          <a
-            className="link"
-            href={mapLinks(record, kid.displayName).google}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={`${when(record)} 위치를 지도에서 보기`}
-          >
-            지도
+          {history.length > 0 && (
+            <section className="stack" aria-label="지난 위치" style={{ gap: 10 }}>
+              <div className="section-head">
+                <h3 className="t-capb">지난 위치</h3>
+                <span className="t-cap">최근 {LOCATION_KEEP_DAYS}일</span>
+              </div>
+              {history.map((record) => (
+                <div key={record.id} className="px history-row">
+                  <div className="grow stack" style={{ gap: 4 }}>
+                    <span className="t-body item-title">{placeLabel(places, record) ?? '등록한 장소가 아니에요'}</span>
+                    <span className="t-cap">
+                      {when(record)} · {TRIGGER_LABEL[record.trigger]}
+                    </span>
+                  </div>
+                  <a
+                    className="link"
+                    href={mapLinks(record, kid.displayName).google}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`${when(record)} 위치를 지도에서 보기`}
+                  >
+                    지도
+                  </a>
+                </div>
+              ))}
+              {mine.length > 1 + HISTORY_PREVIEW && (
+                <Button tone="plain" block onClick={() => setShowAll(!showAll)}>
+                  {showAll ? '지난 위치 접기' : `지난 위치 ${mine.length - 1}개 모두 보기`}
+                </Button>
+              )}
+            </section>
+          )}
+
+          <a className="btn plain big block" href={FAMILY_LINK_URL} target="_blank" rel="noopener noreferrer">
+            패밀리 링크로 실시간 위치 보기
           </a>
-        </div>
-      ))}
-      {mine.length > 1 + HISTORY_PREVIEW && (
-        <Button tone="plain" block onClick={() => setShowAll(!showAll)}>
-          {showAll ? '지난 기록 접기' : `지난 기록 ${mine.length - 1}개 모두 보기`}
-        </Button>
+          <Button tone="plain" big block onClick={close}>
+            닫기
+          </Button>
+        </Sheet>
       )}
-
-      <a className="btn plain big block" href={FAMILY_LINK_URL} target="_blank" rel="noopener noreferrer">
-        패밀리 링크로 실시간 위치 보기
-      </a>
-
-      {naming && <PlaceSheet record={naming} onClose={() => setNaming(null)} />}
-    </section>
+    </>
   );
 }
 
 /** 위치 기록에 이름을 붙여 장소로 등록한다. 다음부터는 그 근처에서 온 기록에 이름이 보인다. */
-function PlaceSheet({ record, onClose }: { record: LocationRecord; onClose: () => void }) {
+function PlaceForm({ record, onDone, onClose }: { record: LocationRecord; onDone: () => void; onClose: () => void }) {
   const backend = useBackend();
   const { family, me } = useSession();
   const { busy, run } = useAction();
@@ -134,7 +164,7 @@ function PlaceSheet({ record, onClose }: { record: LocationRecord; onClose: () =
       () => backend.createPlace(family.id, { name, lat: record.lat, lng: record.lng, radius }, me.uid),
       '장소를 등록했어요.',
     );
-    if (ok) onClose();
+    if (ok) onDone();
   }
 
   return (
@@ -167,8 +197,8 @@ function PlaceSheet({ record, onClose }: { record: LocationRecord; onClose: () =
       <Button big block disabled={busy} onClick={() => void save()}>
         장소 등록하기
       </Button>
-      <Button tone="plain" big block onClick={onClose}>
-        닫기
+      <Button tone="plain" big block onClick={onDone}>
+        돌아가기
       </Button>
     </Sheet>
   );

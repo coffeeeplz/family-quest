@@ -63,15 +63,45 @@ const more = async (page, item) => {
   await page.getByRole('navigation', { name: '더보기 메뉴' }).getByRole('link', { name: new RegExp('^' + item) }).click();
 };
 // 손가락으로 미는 동작을 흉내 낸다(화면 가운데에서 dx 만큼).
-const swipe = (page, dx, dy = 0) =>
-  page.evaluate(([dx, dy]) => {
-    const el = document.querySelector('.pager-panel');
+const swipe = (page, dx, dy = 0, target = '.pager-panel') =>
+  page.evaluate(([dx, dy, target]) => {
+    const el = document.querySelector(target);
     const x = window.innerWidth / 2 - dx / 2;
     const y = 420;
     const at = (cx, cy) => ({ bubbles: true, pointerId: 7, pointerType: 'touch', isPrimary: true, clientX: cx, clientY: cy });
     el.dispatchEvent(new PointerEvent('pointerdown', at(x, y)));
     el.dispatchEvent(new PointerEvent('pointerup', at(x + dx, y + dy)));
-  }, [dx, dy]);
+  }, [dx, dy, target]);
+// 접어 둔 구역을 펼친다(이미 펼쳐져 있으면 그대로 둔다).
+const unfold = async (page, title) => {
+  const head = region(page, title).locator('.fold-head');
+  if ((await head.getAttribute('aria-expanded')) !== 'true') await head.click();
+};
+// 서울 시간으로 오늘에서 n일 뒤의 날짜와 달력 칸 이름
+const WEEK = ['일', '월', '화', '수', '목', '금', '토'];
+const dayAt = (n) => {
+  const [y, m, d] = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10).split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d + n));
+  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, label: `${date.getUTCMonth() + 1}월 ${date.getUTCDate()}일 (${WEEK[date.getUTCDay()]})` };
+};
+// 달력을 그 달로 넘긴다.
+const gotoMonth = async (page, year, month) => {
+  for (let i = 0; i < 30; i += 1) {
+    const [, y, m] = (await page.locator('.cal-head h1').innerText()).match(/(\d+)년 (\d+)월/);
+    const diff = (year - Number(y)) * 12 + (month - Number(m));
+    if (diff === 0) return;
+    await page.getByRole('button', { name: diff > 0 ? '다음 달' : '이전 달' }).click();
+  }
+};
+// 달력에서 오늘에서 n일 뒤의 날을 고른다.
+const pickDay = async (page, n) => {
+  const day = dayAt(n);
+  await gotoMonth(page, day.year, day.month);
+  await page.locator('.cal-day:not(.other)').and(page.getByRole('gridcell', { name: new RegExp('^' + day.label.replace(/[()]/g, '\\$&')) })).click();
+  return day;
+};
+const dayList = (page) => region(page, '고른 날의 일정');
+const tabNames = async (page) => (await page.locator('.tabbar a').allInnerTexts()).map((t) => t.replace(/\d+/g, '').trim()).join();
 const selectedTab = (page) => page.getByRole('tab', { selected: true }).getAttribute('aria-label');
 
 try {
@@ -88,8 +118,12 @@ try {
   check('놓친 일 1개(그저께 책 읽기, 절반)', (await missed.locator('article').count()) === 1 && (await missed.getByText('그저께 못 한 일 · 늦어서 절반').isVisible()));
   check('놓친 일 코인은 절반(+5)', await missed.locator('.coin-inline', { hasText: '+5' }).isVisible());
   check('꼭 표시가 맨 위', (await region(kid, '오늘 할 일').locator('article').first().innerText()).includes('피아노 연습'));
-  check('다가오는 일에 내 메모', await region(kid, '다가오는 일').getByText('준비물 챙기기').isVisible());
-  check('목표 저금통: 게임 30분까지 20코인', await region(kid, '목표 저금통').getByText('앞으로 20코인').isVisible());
+  check('아래 탭: 퀘스트 상점 캘린더 뭐먹지 더보기', (await tabNames(kid)) === '퀘스트,상점,캘린더,뭐먹지,더보기', await tabNames(kid));
+  check('다가오는 일은 접혀 있음', (await region(kid, '다가오는 일').getByText('준비물 챙기기').count()) === 0);
+  await unfold(kid, '다가오는 일');
+  check('펼치면 다가오는 일에 내 메모', await region(kid, '다가오는 일').getByText('준비물 챙기기').isVisible());
+  check('홈에는 목표 저금통이 없음(상점에 있음)', (await region(kid, '목표 저금통').count()) === 0);
+  check('홈에 오늘 일정 한 줄', await kid.getByRole('link', { name: '오늘 일정: 오후 3:30 치과. 캘린더 열기' }).isVisible());
   check('협상 카드: 답을 기다리는 중', await region(kid, '코인 협상').getByText('부모님의 답을 기다리는 중이에요').isVisible());
   await shot(kid, '01-kid-home', true);
 
@@ -141,7 +175,10 @@ try {
   await enter(dad, '아빠');
   await dad.getByRole('heading', { name: '승인 대기' }).waitFor();
   check('탭 배지 = 승인 3 + 제안 2', (await dad.locator('.tab-count').innerText()) === '5', await dad.locator('.tab-count').innerText());
-  check('자녀 요약에 놓친 일 표시 없음(모두 제출됨)', (await dad.locator('.member-strip').getByText(/놓친 일/).count()) === 0);
+  check('아래 탭: 승인 퀘스트 캘린더 뭐먹지 더보기', (await tabNames(dad)) === '승인,퀘스트,캘린더,뭐먹지,더보기', await tabNames(dad));
+  check('승인 화면 머리말: 답할 일 5개, 작은 + 버튼', (await dad.getByText('답할 일 5개').isVisible()) && (await dad.getByRole('link', { name: '새 퀘스트 만들기', exact: true }).isVisible()));
+  check('가족 칸과 큰 버튼은 첫 화면에 없음', (await dad.locator('.member-strip').count()) === 0 && (await dad.getByRole('main').getByRole('button', { name: '칭찬 코인 주기' }).count()) === 0);
+  check('부모 홈에도 오늘 일정 한 줄', await dad.getByRole('link', { name: /오늘 일정: 오후 3:30 치과/ }).isVisible());
   await shot(dad, '04-parent-home', true);
 
   // ── 3-1. 자녀 현황: 왼쪽으로 밀어서 보기 ─────────────────────────────────
@@ -157,6 +194,10 @@ try {
   const status = dad.getByRole('tabpanel');
   check('자녀 현황: 코인 30, 연속 2일', (await status.locator('.coin-pill span').innerText()) === '30' && (await status.getByText('2일 연속 달성 중').isVisible()));
   check('자녀 현황: 오늘 할 일에 확인 중 표시', await region(dad, '오늘 할 일').locator('article', { hasText: '수학 문제집 2쪽' }).getByText('확인 중').isVisible());
+  check('자녀 현황: 접어 둔 구역은 닫혀 있음', (await region(dad, '최근 코인 기록').locator('.history-row').count()) === 0);
+  await unfold(dad, '다가오는 일');
+  await unfold(dad, '목표 저금통');
+  await unfold(dad, '최근 코인 기록');
   check('자녀 현황: 놓친 일과 다가오는 일', (await region(dad, '놓친 일').locator('article').count()) === 1 && (await region(dad, '다가오는 일').getByText('준비물 챙기기').isVisible()));
   check('자녀 현황: 목표 저금통과 최근 기록', (await region(dad, '목표 저금통').getByText('앞으로 20코인').isVisible()) && (await region(dad, '최근 코인 기록').locator('.history-row').count()) === 3);
   check('자녀 현황은 읽기 전용(완료 버튼 없음)', (await status.getByRole('button', { name: /했어요/ }).count()) === 0);
@@ -171,9 +212,9 @@ try {
   await dad.getByRole('heading', { name: '새 퀘스트' }).waitFor();
   check('자녀 현황에서 퀘스트 추가로 이동', await dad.getByRole('radio', { name: '딸' }).isChecked());
   await dad.getByRole('link', { name: '승인' }).click();
-  await dad.getByRole('button', { name: '딸 현황 보기' }).click();
+  await dad.getByRole('tab', { name: '딸 현황' }).click();
   await dad.getByRole('tab', { name: '딸 현황', selected: true }).waitFor();
-  check('가족 칸의 자녀를 눌러도 현황으로', true);
+  check('위의 버튼을 눌러도 현황으로', true);
   await swipe(dad, 160);
   await dad.getByRole('heading', { name: '승인 대기' }).waitFor();
   check('오른쪽으로 밀면 승인으로 돌아옴', (await selectedTab(dad)) === '승인');
@@ -185,7 +226,8 @@ try {
   await dad.getByRole('dialog').getByLabel('한마디 (안 적어도 돼요)').fill('10이면 어때?');
   await shot(dad, '05-parent-counter');
   await dad.getByRole('dialog').getByRole('button', { name: '이 금액으로 제안하기' }).click();
-  await offers.locator('article', { hasText: '신발장 정리하기' }).getByText('딸의 답을 기다리는 중').waitFor();
+  await dad.getByText('자녀의 답을 기다리는 코인 제안 1개: 신발장 정리하기').waitFor();
+  check('자녀의 답을 기다리는 제안은 한 줄 안내로만', (await offers.locator('article', { hasText: '신발장 정리하기' }).count()) === 0);
 
   const kidShoes = region(kid, '코인 협상').locator('article', { hasText: '신발장 정리하기' });
   await kidShoes.getByText('부모님이 10코인을 제안했어요. "10이면 어때?"').waitFor();
@@ -239,7 +281,10 @@ try {
   check('놓친 일 구역이 사라짐', (await region(kid, '놓친 일').count()) === 0);
 
   // ── 5. 칭찬 코인 ─────────────────────────────────────────────────────────
-  await dad.getByRole('button', { name: '칭찬 코인 주기' }).click();
+  await dad.getByRole('button', { name: /^더 보기/ }).click();
+  check('승인 메뉴: 칭찬 코인, 상점 관리, 가족 설정', (await dad.getByRole('dialog').getByRole('link', { name: '상점 관리' }).isVisible()) && (await dad.getByRole('dialog').getByRole('link', { name: '가족 설정' }).isVisible()));
+  await shot(dad, '46-parent-menu');
+  await dad.getByRole('dialog').getByRole('button', { name: '칭찬 코인 주기' }).click();
   await dad.getByRole('dialog').getByRole('button', { name: '고마워!' }).click();
   await shot(dad, '10-parent-gift');
   await dad.getByRole('dialog').getByRole('button', { name: '딸에게 코인 주기' }).click();
@@ -247,8 +292,9 @@ try {
   await expectCoins(kid, afterBonus + 10, '칭찬 코인 +5');
 
   // ── 6. 새 퀘스트: 자주 쓰는 버튼, 꼭 표시 ─────────────────────────────────
-  await dad.getByRole('link', { name: '+ 새 퀘스트 만들기' }).click();
+  await dad.getByRole('link', { name: '새 퀘스트 만들기', exact: true }).click();
   await dad.getByRole('heading', { name: '새 퀘스트' }).waitFor();
+  check('작은 + 버튼으로 새 퀘스트 화면', true);
   await shot(dad, '11-quest-form', true);
   await dad.getByRole('button', { name: /심부름/ }).click();
   await dad.getByRole('heading', { name: '퀘스트 관리' }).waitFor();
@@ -284,16 +330,28 @@ try {
   await dad.getByRole('heading', { name: '가족 설정' }).waitFor();
   check('안쪽 화면에서도 더보기 탭이 켜져 있음', (await dad.locator('.tab.active').innerText()).includes('더보기'));
   await shot(dad, '13-settings', true);
-  await region(dad, '코인 협상').getByRole('radio', { name: '1번' }).click();
-  await dad.getByLabel('새 한마디').fill('스스로 해서 멋져!');
-  await dad.getByRole('button', { name: '추가', exact: true }).click();
-  await dad.getByRole('button', { name: '참 잘했어요! 지우기' }).click();
+  const setMenu = dad.getByRole('navigation', { name: '설정 항목' });
+  const openSetting = (title) => setMenu.getByRole('link', { name: new RegExp('^' + title) }).click();
+  check('설정 첫 화면은 항목과 지금 값만', (await setMenu.getByRole('link').count()) === 7 && (await dad.getByRole('main').locator('input').count()) === 0 && (await setMenu.getByText('제안 3번까지 · 한 번에 50코인까지').isVisible()));
+  await openSetting('코인 협상');
+  await dad.getByRole('heading', { name: '코인 협상' }).waitFor();
+  await dad.getByRole('radio', { name: '1번' }).click();
   await dad.getByLabel('자녀가 한 번에 제안할 수 있는 코인').fill('0');
   await dad.getByRole('button', { name: '설정 저장하기' }).click();
   check('잘못된 설정은 오류', await dad.getByRole('alert').getByText(/1부터 1000 사이/).isVisible());
   await dad.getByLabel('자녀가 한 번에 제안할 수 있는 코인').fill('20');
+  await shot(dad, '47-settings-section');
   await dad.getByRole('button', { name: '설정 저장하기' }).click();
   await toast(dad, '설정을 저장했어요');
+  await setMenu.getByText('제안 1번까지 · 한 번에 20코인까지').waitFor();
+  check('저장하면 목록으로 돌아와 바뀐 값이 보임', true);
+  await openSetting('칭찬 한마디');
+  await dad.getByLabel('새 한마디').fill('스스로 해서 멋져!');
+  await dad.getByRole('button', { name: '추가', exact: true }).click();
+  await dad.getByRole('button', { name: '참 잘했어요! 지우기' }).click();
+  await dad.getByRole('button', { name: '설정 저장하기' }).click();
+  await setMenu.waitFor();
+  await openSetting('자주 쓰는 퀘스트 버튼');
   await dad.getByLabel('새 버튼: 퀘스트 이름').fill('빨래 개기');
   await dad.getByRole('button', { name: '버튼 추가' }).click();
   await dad.locator('article', { hasText: '빨래 개기' }).waitFor();
@@ -342,19 +400,26 @@ try {
   await kid.getByRole('link', { name: '상점' }).click();
   await kid.getByRole('heading', { name: '보상 목록' }).waitFor();
   const list = region(kid, '보상 목록');
+  const myOrders = (text) => kid.getByRole('button', { name: `내 신청 보기: ${text}`, exact: true });
+  check('상점에 목표 저금통: 게임 30분까지', await region(kid, '목표 저금통').getByText(/앞으로 \d+코인|다 모았어요/).isVisible());
+  check('신청이 없으면 내 신청 줄도 없음', (await kid.getByRole('button', { name: /내 신청 보기/ }).count()) === 0);
   check('보상 5개', (await list.locator('article').count()) === 5);
   check('살 수 있는 보상은 바꾸기, 비싼 보상은 부족분 표시', (await list.locator('article', { hasText: '게임 30분' }).getByRole('button', { name: /바꾸기/ }).isVisible()) && (await list.locator('article', { hasText: '주말 영화 보기' }).getByText(`${150 - base}코인 더!`).isVisible()));
   await shot(kid, '19-kid-shop', false);
   await list.locator('article', { hasText: '게임 30분' }).getByRole('button').click();
   await shot(kid, '20-kid-shop-sheet');
   await kid.getByRole('dialog').getByRole('button', { name: '50코인으로 바꾸기 신청' }).click();
-  await region(kid, '신청한 보상').locator('article', { hasText: '게임 30분' }).waitFor();
+  await myOrders('승인 대기 1개').waitFor();
   check('신청만으로는 코인이 안 빠짐', (await coins(kid)) === base, String(await coins(kid)));
-  check('묶인 코인 안내', await kid.getByText(`신청한 보상에 50코인이 묶여 있어요. 지금 쓸 수 있는 코인은 ${base - 50}개예요.`).isVisible());
+  check('신청 내용은 첫 화면에 한 줄만', (await kid.getByRole('main').getByText('승인을 기다리는 중').count()) === 0);
+  await myOrders('승인 대기 1개').click();
+  check('내 신청 창: 묶인 코인 안내와 취소 버튼', (await kid.getByRole('dialog').getByText(`신청한 보상에 50코인이 묶여 있어요. 지금 쓸 수 있는 코인은 ${base - 50}개예요.`).isVisible()) && (await region(kid, '신청한 보상').locator('article', { hasText: '게임 30분' }).getByRole('button', { name: '취소' }).isVisible()));
+  await shot(kid, '48-kid-my-orders');
+  await kid.getByRole('dialog').getByRole('button', { name: '닫기' }).click();
   check('하루 1번 보상은 오늘은 끝', await list.locator('article', { hasText: '게임 30분' }).getByText('오늘은 끝').isVisible());
   await list.locator('article', { hasText: '먹고 싶은 간식' }).getByRole('button').click();
   await kid.getByRole('dialog').getByRole('button', { name: '30코인으로 바꾸기 신청' }).click();
-  await region(kid, '신청한 보상').locator('article', { hasText: '먹고 싶은 간식' }).waitFor();
+  await myOrders('승인 대기 2개').waitFor();
   check('남은 코인으로 못 사는 보상은 부족분 표시', await list.locator('article', { hasText: '30분 늦게 자기' }).getByText(`${80 - (base - 80)}코인 더!`).isVisible());
 
   await dad.getByRole('link', { name: '승인' }).click();
@@ -365,15 +430,19 @@ try {
   await kid.locator('.celebrate').getByText('보상 획득!').waitFor({ timeout: 5000 });
   await shot(kid, '22-kid-reward-won');
   await expectCoins(kid, base - 50, '승인되면 50코인 차감');
-  check('받을 보상에 들어옴', await region(kid, '받을 보상').getByText('게임 30분').isVisible());
+  await myOrders('받을 보상 1개 · 승인 대기 1개').waitFor();
+  check('받을 보상이 한 줄 요약에 들어옴', true);
   await asks.locator('article', { hasText: '먹고 싶은 간식' }).getByRole('button', { name: '거절' }).click();
   await dad.getByRole('dialog').getByLabel('한마디 (안 적어도 돼요)').fill('저녁 먹고 나서');
   await dad.getByRole('dialog').getByRole('button', { name: '거절하기' }).click();
-  await kid.getByText('이번에는 안 된대요. "저녁 먹고 나서" 코인은 그대로예요.').waitFor();
-  await expectCoins(kid, base - 50, '거절되면 코인 그대로');
+  await myOrders('받을 보상 1개 · 거절 1개').click();
+  await kid.getByRole('dialog').getByText('이번에는 안 된대요. "저녁 먹고 나서" 코인은 그대로예요.').waitFor();
+  check('내 신청 창: 받을 보상과 거절 이유', await region(kid, '받을 보상').getByText('게임 30분').isVisible());
   check('묶인 코인 안내가 사라짐', (await kid.getByText(/묶여 있어요/).count()) === 0);
+  await kid.getByRole('dialog').getByRole('button', { name: '닫기' }).click();
+  await expectCoins(kid, base - 50, '거절되면 코인 그대로');
   await region(dad, '줄 보상').getByRole('button', { name: '게임 30분 줬어요' }).click();
-  await region(kid, '받을 보상').waitFor({ state: 'detached' });
+  await myOrders('거절 1개').waitFor();
   check('줬어요 하면 받을 보상에서 빠짐', true);
   await shot(kid, '23-kid-shop-after', false);
 
@@ -384,8 +453,10 @@ try {
   check('목표를 영화로 바꿈', true);
 
   // 부모: 보상 올리기(예시), 고치기, 내리기
-  await dad.getByRole('link', { name: '상점' }).click();
+  await dad.getByRole('button', { name: /^더 보기/ }).click();
+  await dad.getByRole('dialog').getByRole('link', { name: '상점 관리' }).click();
   await dad.getByRole('heading', { name: '상점 관리' }).waitFor();
+  check('부모의 상점 관리는 더보기 탭 아래', (await dad.locator('.tab.active').innerText()).includes('더보기'));
   await dad.getByRole('link', { name: '+ 새 보상 올리기' }).click();
   await dad.getByRole('button', { name: '상점에 올리기' }).click();
   check('이름 없는 보상은 오류', await dad.getByRole('alert').getByText('보상 이름을 적어 주세요.').isVisible());
@@ -602,39 +673,44 @@ try {
 
   // ── 8-3. 위치: 지금 여기예요, 코인 한도, 자녀 현황, 장소 이름, 설정 ─────────
   await kid.getByRole('link', { name: '퀘스트' }).click();
-  const checkin = region(kid, '위치 알리기');
-  await checkin.waitFor();
+  const here = kid.getByRole('button', { name: /^지금 여기예요/ });
+  await here.waitFor();
   await kid.locator('.toast').waitFor({ state: 'detached', timeout: 6000 }).catch(() => {});
   const startCoins = await coins(kid);
-  check('알리기 카드: +1코인, 오늘 0/3번', await checkin.getByText('누르면 +1코인 · 오늘 0/3번 받음').isVisible());
-  check('권한을 허용한 기기에는 위치 공유 켜짐 표시', await checkin.getByText('위치 공유 켜짐', { exact: false }).isVisible());
-  check('앱을 열 때 자동으로 남은 기록이 보임', await checkin.getByText(/마지막으로 알린 때: .*학교 근처/).isVisible());
+  check('알리기 버튼에 +1 표시', (await here.locator('.corner-badge').innerText()) === '+1');
   await shot(kid, '37-kid-checkin', false);
-  await checkin.getByRole('button', { name: '알리기' }).click();
-  await toast(kid, '위치를 알렸어요!');
+  await here.click();
+  await toast(kid, '위치를 알렸어요! 오늘 1/3번째 코인');
   await kid.locator('.celebrate').getByText('위치 공유 +1').waitFor({ timeout: 5000 });
   await expectCoins(kid, startCoins + 1, '위치를 알리면 바로 +1코인');
-  await checkin.getByText('오늘 1/3번 받음', { exact: false }).waitFor();
+  check('처음 알렸을 때 한 번 안내', await kid.getByRole('dialog').getByRole('heading', { name: '위치 공유가 켜졌어요' }).isVisible());
+  await kid.getByRole('dialog').getByRole('button', { name: '알겠어요' }).click();
   for (const n of [2, 3]) {
-    await checkin.getByRole('button', { name: '알리기' }).click();
+    await here.click();
     await expectCoins(kid, startCoins + n, `${n}번째 공유 +1`);
   }
-  await checkin.getByText('오늘 코인 3번을 다 받았어요').waitFor();
+  check('안내는 다시 나오지 않음', (await kid.getByRole('dialog').count()) === 0);
+  await here.locator('.corner-badge').waitFor({ state: 'detached' });
+  check('하루 3번을 다 받으면 + 표시가 사라짐', true);
   await kid.locator('.toast').waitFor({ state: 'detached', timeout: 6000 }).catch(() => {});
   await context.setGeolocation(ELSEWHERE);
-  await checkin.getByRole('button', { name: '알리기' }).click();
+  await here.click();
   await toast(kid, '오늘 코인은 다 받았어요');
   await expectCoins(kid, startCoins + 3, '하루 3번을 넘기면 코인은 그대로');
 
-  // 부모: 자녀 현황의 위치
+  // 부모: 자녀 현황의 위치는 한 줄, 누르면 자세히
   await dad.getByRole('link', { name: '승인' }).click();
   await dad.getByRole('tab', { name: '딸 현황' }).click();
-  const where = region(dad, '위치');
-  await where.locator('article').getByText('등록한 장소가 아니에요').waitFor();
-  check('등록하지 않은 곳은 이름 없이 보이고 직접 알림으로 표시', await where.locator('article').getByText('방금 · 직접 알림').isVisible());
-  check('지도 링크에 좌표가 들어감', (await where.locator('article').getByRole('link', { name: '구글 지도' }).getAttribute('href')) === 'https://www.google.com/maps/search/?api=1&query=35.262,129.241');
+  const whereLine = dad.getByRole('button', { name: /^딸의 위치/ });
+  await whereLine.getByText('등록한 장소가 아니에요 · 방금').waitFor();
+  check('자녀 현황에는 위치가 한 줄로', (await dad.getByRole('tabpanel').getByRole('link', { name: '구글 지도' }).count()) === 0);
+  await whereLine.click();
+  const where = dad.getByRole('dialog');
+  check('등록하지 않은 곳은 이름 없이 보이고 직접 알림으로 표시', await region(dad, '마지막 위치').getByText(/^방금 · 직접 알림/).isVisible());
+  check('지도 링크에 좌표가 들어감', (await where.getByRole('link', { name: '구글 지도' }).getAttribute('href')) === 'https://www.google.com/maps/search/?api=1&query=35.262,129.241');
   check('패밀리 링크 바로가기', (await where.getByRole('link', { name: '패밀리 링크로 실시간 위치 보기' }).getAttribute('href')) === 'https://familylink.google.com/');
-  check('지난 기록에 장소 이름', await where.locator('.history-row').first().getByText('학교 근처').isVisible());
+  check('지난 위치에 장소 이름', await region(dad, '지난 위치').locator('.history-row').first().getByText('학교 근처').isVisible());
+  check('앱을 열 때 남은 자동 기록도 보임', (await region(dad, '지난 위치').getByText(/앱을 열 때|앱 열 때|자동/).count()) > 0);
   await where.getByRole('button', { name: '이름 붙이기' }).click();
   await dad.getByRole('dialog').getByRole('button', { name: '장소 등록하기' }).click();
   await toast(dad, '장소 이름을 적어 주세요');
@@ -642,41 +718,167 @@ try {
   await dad.getByRole('dialog').getByRole('radio', { name: '300m' }).click();
   await shot(dad, '38-place-sheet');
   await dad.getByRole('dialog').getByRole('button', { name: '장소 등록하기' }).click();
-  await where.locator('article').getByText('할머니 댁 근처').waitFor();
+  await region(dad, '마지막 위치').getByText('할머니 댁 근처').waitFor();
   check('이름을 붙이면 그 이름으로 보이고 버튼은 사라짐', (await where.getByRole('button', { name: '이름 붙이기' }).count()) === 0);
-  await kid.getByText(/마지막으로 알린 때: .*할머니 댁 근처/).waitFor();
-  check('자녀 화면에도 장소 이름이 보임', true);
   await dad.locator('.toast').waitFor({ state: 'detached', timeout: 6000 }).catch(() => {});
-  await where.scrollIntoViewIfNeeded();
-  await dad.evaluate(() => document.querySelector('.screen').scrollBy(0, -20));
   await shot(dad, '39-parent-location');
+  await where.getByRole('button', { name: '닫기' }).click();
+  check('닫으면 한 줄에도 장소 이름', await whereLine.getByText(/할머니 댁 근처/).isVisible());
+  await unfold(dad, '최근 코인 기록');
   check('위치 공유 코인이 자녀 현황의 최근 기록에', await region(dad, '최근 코인 기록').getByText('위치 공유').first().isVisible());
 
   // 설정: 코인과 하루 횟수, 장소 관리
   await more(dad, '가족 설정');
-  const checkinSet = region(dad, '위치 공유 코인');
-  await checkinSet.getByRole('button', { name: '5', exact: true }).click();
-  await checkinSet.getByRole('radio', { name: '5번' }).click();
+  await setMenu.getByRole('link', { name: /^위치 공유 코인/ }).click();
+  await dad.getByRole('button', { name: '5', exact: true }).click();
+  await dad.getByRole('radio', { name: '5번' }).click();
+  await shot(dad, '40-settings-location');
   await dad.getByRole('button', { name: '설정 저장하기' }).click();
   await toast(dad, '설정을 저장했어요');
-  await checkin.getByText('누르면 +5코인 · 오늘 3/5번 받음').waitFor();
-  await checkin.getByRole('button', { name: '알리기' }).click();
+  await setMenu.getByText('5코인 · 하루 5번').waitFor();
+  await here.locator('.corner-badge', { hasText: '+5' }).waitFor();
+  await here.click();
   await expectCoins(kid, startCoins + 8, '설정을 바꾸면 +5코인, 하루 5번까지');
-  const placeBox = region(dad, '장소');
-  check('설정의 장소 목록 4곳', (await placeBox.locator('.history-row').count()) === 4);
-  await placeBox.getByRole('button', { name: '할머니 댁 장소 지우기' }).click();
-  await placeBox.locator('.history-row', { hasText: '할머니 댁' }).waitFor({ state: 'detached' });
+  check('장소 항목에 등록한 이름이 보임', await setMenu.getByRole('link', { name: /^장소/ }).getByText(/할머니 댁/).isVisible());
+  await setMenu.getByRole('link', { name: /^장소/ }).click();
+  await dad.getByRole('heading', { name: '장소' }).waitFor();
+  const placeRows = dad.getByRole('main').locator('.history-row');
+  check('설정의 장소 목록 4곳', (await placeRows.count()) === 4);
+  await dad.getByRole('button', { name: '할머니 댁 장소 지우기' }).click();
+  await dad.getByRole('main').locator('.history-row', { hasText: '할머니 댁' }).waitFor({ state: 'detached' });
   await dad.getByLabel('지금 내가 있는 곳을 등록하기').fill('공원');
-  await placeBox.getByRole('button', { name: '등록', exact: true }).click();
-  await placeBox.locator('.history-row', { hasText: '공원' }).waitFor();
-  check('장소 지우기와 지금 위치 등록', (await placeBox.locator('.history-row').count()) === 4);
-  await kid.getByText(/마지막으로 알린 때: .*공원 근처/).waitFor();
-  check('새로 등록한 장소가 바로 반영', true);
-  await checkinSet.scrollIntoViewIfNeeded();
-  await shot(dad, '40-settings-location');
-  await placeBox.scrollIntoViewIfNeeded();
+  await dad.getByRole('button', { name: '등록', exact: true }).click();
+  await dad.getByRole('main').locator('.history-row', { hasText: '공원' }).waitFor();
+  check('장소 지우기와 지금 위치 등록', (await placeRows.count()) === 4);
   await shot(dad, '41-settings-places');
+  await dad.getByRole('link', { name: '승인' }).click();
+  await dad.getByRole('tab', { name: '딸 현황' }).click();
+  await dad.getByRole('button', { name: /^딸의 위치/ }).getByText(/공원 근처/).waitFor();
+  check('새로 등록한 장소가 자녀 현황에 바로 반영', true);
+  await dad.getByRole('tab', { name: '승인' }).click();
   await context.setGeolocation(SCHOOL);
+
+  // 자녀: 위치 공유 설명은 더보기 안에
+  await kid.locator('.tabbar').getByRole('link', { name: '더보기' }).click();
+  await kid.getByRole('button', { name: /^위치 공유/ }).getByText('켜짐').waitFor();
+  await kid.getByRole('button', { name: /^위치 공유/ }).click();
+  check('더보기의 위치 공유: 켜짐과 설명', await kid.getByRole('dialog').getByText('위치 공유가 켜져 있어요.', { exact: false }).isVisible());
+  await kid.getByRole('dialog').getByRole('button', { name: '닫기' }).click();
+
+  // ── 8-4. 가족 캘린더 ─────────────────────────────────────────────────────
+  await kid.locator('.tabbar').getByRole('link', { name: '캘린더' }).click();
+  const now0 = dayAt(0);
+  await kid.getByRole('heading', { name: `${now0.year}년 ${now0.month}월` }).waitFor();
+  check('캘린더: 오늘이 골라져 있고 오늘 일정이 아래에', (await kid.locator('.cal-day.today').getAttribute('aria-selected')) === 'true' && (await dayList(kid).getByRole('button', { name: '치과, 오후 3:30' }).isVisible()));
+  check('달력은 6주 이하, 한 주에 7칸', (await kid.locator('.cal-week').nth(1).locator('.cal-day').count()) === 7);
+  await kid.locator('.toast').waitFor({ state: 'detached', timeout: 6000 }).catch(() => {});
+  await shot(kid, '49-calendar', true);
+
+  // 공휴일: 해마다 같은 날과 음력 명절
+  await gotoMonth(kid, now0.year, 12);
+  const xmas = kid.getByRole('gridcell', { name: /^12월 25일 \(.\), 성탄절/ });
+  check('공휴일은 빨간 날로 표시', (await xmas.getAttribute('class')).includes('sun'));
+  await xmas.click();
+  check('공휴일을 고르면 이름이 보임', await dayList(kid).locator('.holiday', { hasText: '성탄절' }).isVisible());
+  if (now0.year <= 2026) {
+    await gotoMonth(kid, 2027, 2);
+    check('음력 명절(2027년 설날 2월 7일)과 대체공휴일', (await kid.getByRole('gridcell', { name: /^2월 7일 \(일\), 설날/ }).count()) === 1 && (await kid.getByRole('gridcell', { name: /^2월 9일 \(화\), 대체공휴일/ }).count()) === 1);
+    await shot(kid, '50-calendar-holiday');
+  }
+  await kid.getByRole('button', { name: '오늘', exact: true }).click();
+  await kid.getByRole('heading', { name: `${now0.year}년 ${now0.month}월` }).waitFor();
+  check('오늘 버튼으로 돌아옴', (await kid.locator('.cal-day.today').getAttribute('aria-selected')) === 'true');
+
+  // 되풀이, 여러 날
+  await pickDay(kid, 1);
+  check('매주 되풀이되는 일정', await dayList(kid).getByRole('button', { name: '피아노 학원, 오후 4:00~오후 5:00' }).isVisible());
+  await pickDay(kid, 10);
+  check('여러 날 일정은 가운데 날에도 보임', await dayList(kid).getByRole('button', { name: /^가족 여행, / }).isVisible());
+  await pickDay(kid, 5);
+  check('해마다 되풀이되는 일정', await dayList(kid).getByRole('button', { name: '할머니 생신, 하루 종일' }).isVisible());
+
+  // 자녀: 일정 올리기, 내 일정 고치기, 남의 일정은 보기만
+  const added = await pickDay(kid, 2);
+  check('일정이 없는 날', await dayList(kid).getByText('일정이 없어요.').isVisible());
+  await kid.getByRole('button', { name: '+ 일정' }).click();
+  const eventForm = kid.getByRole('dialog');
+  await eventForm.getByRole('button', { name: '일정 올리기' }).click();
+  await toast(kid, '일정 이름을 적어 주세요');
+  check('이름 없는 일정은 막음', true);
+  await kid.getByLabel('일정 이름').fill('도서관 가기');
+  await eventForm.getByRole('radio', { name: '시간 정하기' }).click();
+  await eventForm.getByRole('button', { name: '일정 올리기' }).click();
+  await toast(kid, '시작 시각을 정해 주세요');
+  await kid.getByLabel('시작 시각').fill('10:00');
+  await eventForm.getByRole('button', { name: '딸' }).click();
+  await kid.locator('.toast').waitFor({ state: 'detached', timeout: 6000 }).catch(() => {});
+  await shot(kid, '51-event-form');
+  await eventForm.getByRole('button', { name: '일정 올리기' }).click();
+  await dayList(kid).getByRole('button', { name: '도서관 가기, 오전 10:00' }).waitFor();
+  check('자녀가 올린 일정이 고른 날에 보임', (await kid.getByRole('gridcell', { name: new RegExp(', 일정 1개$'), selected: true }).count()) === 1);
+  await dayList(kid).getByRole('button', { name: /^도서관 가기/ }).click();
+  await kid.getByRole('dialog').getByRole('heading', { name: '일정 고치기' }).waitFor();
+  await kid.getByLabel('일정 이름').fill('도서관에서 책 빌리기');
+  await kid.getByRole('dialog').getByRole('button', { name: '고친 내용 저장하기' }).click();
+  await dayList(kid).getByRole('button', { name: /^도서관에서 책 빌리기/ }).waitFor();
+  check('자녀는 자기가 올린 일정을 고칠 수 있음', true);
+  await pickDay(kid, 0);
+  await dayList(kid).getByRole('button', { name: /^치과/ }).click();
+  check('남이 올린 일정은 보기만(메모는 보임)', (await kid.getByRole('dialog').getByText('이 일정은 올린 사람과 부모님만 고칠 수 있어요.').isVisible()) && (await kid.getByRole('dialog').getByText('칫솔 챙기기').isVisible()) && (await kid.getByRole('dialog').getByRole('button', { name: '고친 내용 저장하기' }).count()) === 0);
+  await kid.getByRole('dialog').getByRole('button', { name: '닫기' }).click();
+
+  // 부모: 자녀가 올린 일정을 보고 고친다, 사람으로 거르기, 퀘스트 기한
+  await dad.locator('.tabbar').getByRole('link', { name: '캘린더' }).click();
+  await pickDay(dad, 2);
+  await dayList(dad).getByRole('button', { name: /^도서관에서 책 빌리기/ }).click();
+  await dad.getByLabel('메모 (안 적어도 돼요)').fill('도서관 카드 챙기기');
+  await dad.getByRole('dialog').getByRole('button', { name: '고친 내용 저장하기' }).click();
+  await toast(dad, '일정을 고쳤어요');
+  check('부모는 자녀가 올린 일정도 고칠 수 있음', true);
+  await pickDay(dad, 0);
+  check('오늘 칸: 일정과 퀘스트 기한', (await dayList(dad).getByRole('button', { name: /^치과/ }).isVisible()) && (await dayList(dad).getByText('퀘스트 기한 · 딸').first().isVisible()));
+  await dad.getByRole('button', { name: /^더 보기/ }).click();
+  await shot(dad, '52-calendar-menu');
+  await dad.getByRole('dialog').getByRole('radio', { name: '숨기기' }).click();
+  await dad.getByRole('dialog').getByRole('radio', { name: '엄마' }).click();
+  await dad.getByRole('button', { name: /엄마 일정만 보는 중/ }).waitFor();
+  check('퀘스트 기한을 숨기고 엄마 일정만: 오늘은 비어 있음', await dayList(dad).getByText('일정이 없어요.').isVisible());
+  await pickDay(dad, 1);
+  check('엄마 일정만 보면 딸의 피아노는 빠짐', (await dayList(dad).getByRole('button', { name: /^엄마 모임/ }).isVisible()) && (await dayList(dad).getByRole('button', { name: /^피아노 학원/ }).count()) === 0);
+  await pickDay(dad, 3);
+  check('가족 모두의 일정은 누구를 골라도 보임', await dayList(dad).getByText('오후 6:30 · 가족 모두').isVisible());
+  await dad.getByRole('button', { name: /엄마 일정만 보는 중/ }).click();
+  await dad.getByRole('button', { name: /^더 보기/ }).click();
+  await dad.getByRole('dialog').getByRole('radio', { name: '보기', exact: true }).click();
+  await dad.getByRole('dialog').getByRole('button', { name: '닫기' }).click();
+
+  // 좌우로 밀어 달 넘기기
+  await pickDay(dad, 0);
+  await swipe(dad, -160, 0, '.cal');
+  const nextMonth = now0.month === 12 ? { year: now0.year + 1, month: 1 } : { year: now0.year, month: now0.month + 1 };
+  await dad.getByRole('heading', { name: `${nextMonth.year}년 ${nextMonth.month}월` }).waitFor();
+  check('달력을 왼쪽으로 밀면 다음 달', true);
+  await swipe(dad, 160, 0, '.cal');
+  await dad.getByRole('heading', { name: `${now0.year}년 ${now0.month}월` }).waitFor();
+  check('오른쪽으로 밀면 이전 달', true);
+
+  // 자녀: 내 일정 지우기 → 부모 화면에서도 사라짐
+  await pickDay(dad, 2);
+  await pickDay(kid, 2);
+  await dayList(kid).getByRole('button', { name: /^도서관에서 책 빌리기/ }).click();
+  check('부모가 적은 메모가 자녀에게도 보임', (await kid.getByLabel('메모 (안 적어도 돼요)').inputValue()) === '도서관 카드 챙기기');
+  await kid.getByRole('dialog').getByRole('button', { name: '이 일정 지우기' }).click();
+  await kid.getByRole('dialog').getByRole('button', { name: /정말 지울까요/ }).click();
+  await toast(kid, '일정을 지웠어요');
+  await dayList(dad).getByRole('button', { name: /^도서관에서 책 빌리기/ }).waitFor({ state: 'detached' });
+  check('자녀가 자기 일정을 지우면 모두의 달력에서 사라짐', added.label.length > 0);
+
+  // 홈의 오늘 일정 한 줄을 누르면 캘린더로
+  await kid.getByRole('link', { name: '퀘스트' }).click();
+  await kid.getByRole('link', { name: /^오늘 일정/ }).click();
+  await kid.getByRole('grid').waitFor();
+  check('홈의 오늘 일정을 누르면 캘린더로', (await kid.locator('.tab.active').innerText()).includes('캘린더'));
+  await dad.getByRole('link', { name: '승인' }).click();
 
   // ── 9. 초대코드로 새 자녀 가입 ───────────────────────────────────────────
   await more(dad, '가족 구성원');
@@ -699,7 +901,8 @@ try {
   check('새 자녀는 빈 홈으로 들어옴', await fresh.getByText('오늘 할 일이 없어요').isVisible());
   await dad.getByText('가족 4명').waitFor({ timeout: 5000 });
   await dad.getByRole('link', { name: '승인' }).click();
-  await dad.getByRole('button', { name: '칭찬 코인 주기' }).click();
+  await dad.getByRole('button', { name: /^더 보기/ }).click();
+  await dad.getByRole('dialog').getByRole('button', { name: '칭찬 코인 주기' }).click();
   check('자녀가 둘이면 받을 사람을 고름', await dad.getByRole('dialog').getByRole('radio', { name: '동생' }).isVisible());
   await dad.getByRole('dialog').getByRole('button', { name: '닫기' }).click();
   check('자녀가 둘이면 현황도 두 쪽', (await dad.getByRole('tab').count()) === 3);
@@ -725,9 +928,8 @@ try {
   await sp.screenshot({ path: `${OUT}/16-small-kid.png`, fullPage: true });
   const inner = () => sp.evaluate(() => { const s = document.querySelector('.screen'); return s.scrollWidth - s.clientWidth; });
   check('320px 자녀 홈 가로 넘침 없음', (await overflow(sp)) <= 0 && (await inner()) <= 0);
-  // 위치 권한이 없는 기기: 자동 기록은 없고, 누르면 안내가 나온다.
-  check('권한이 없으면 자동 기록 없음', (await sp.getByText(/마지막으로 알린 때: 방금/).count()) === 0);
-  await region(sp, '위치 알리기').getByRole('button', { name: '알리기' }).click();
+  // 위치 권한이 없는 기기: 누르면 안내가 나온다.
+  await sp.getByRole('button', { name: /^지금 여기예요/ }).click();
   await sp.locator('.toast', { hasText: '위치 권한이 꺼져 있어요' }).waitFor({ timeout: 20000 });
   check('위치 권한이 없으면 안내', (await sp.locator('.coin-pill span').innerText()) === '30');
   await sp.locator('.toast').waitFor({ state: 'detached', timeout: 6000 }).catch(() => {});
@@ -741,6 +943,19 @@ try {
   await sp.getByRole('heading', { name: '보상 목록' }).waitFor();
   await sp.screenshot({ path: `${OUT}/26-small-shop.png` });
   check('320px 상점 가로 넘침 없음', (await overflow(sp)) <= 0 && (await inner()) <= 0);
+  await sp.locator('.tabbar').getByRole('link', { name: '캘린더' }).click();
+  await sp.getByRole('grid').waitFor();
+  await sp.screenshot({ path: `${OUT}/53-small-calendar.png`, fullPage: true });
+  check('320px 캘린더 가로 넘침 없음', (await overflow(sp)) <= 0 && (await inner()) <= 0);
+  await sp.getByRole('button', { name: '+ 일정' }).click();
+  await sp.getByRole('dialog').getByRole('radio', { name: '시간 정하기' }).click();
+  await sp.screenshot({ path: `${OUT}/54-small-event-form.png` });
+  const eventOver = await sp.evaluate(() => { const s = document.querySelector('.sheet'); return s.scrollWidth - s.clientWidth; });
+  check('320px 일정 창 가로 넘침 없음', eventOver <= 0, String(eventOver));
+  await sp.getByRole('dialog').getByRole('button', { name: '닫기' }).click();
+  await sp.locator('.tabbar').getByRole('link', { name: '더보기' }).click();
+  await sp.getByRole('navigation', { name: '더보기 메뉴' }).waitFor();
+  await sp.screenshot({ path: `${OUT}/55-small-kid-more.png`, fullPage: true });
   await switchUser(sp, '아빠');
   await sp.getByRole('heading', { name: '승인 대기' }).waitFor();
   await sp.screenshot({ path: `${OUT}/18-small-parent.png`, fullPage: true });
@@ -773,7 +988,11 @@ try {
   await sp.getByRole('dialog').getByRole('button', { name: '닫기' }).click();
   await more(sp, '가족 설정');
   await sp.getByRole('heading', { name: '가족 설정' }).waitFor();
+  await sp.screenshot({ path: `${OUT}/56-small-settings.png`, fullPage: true });
   check('320px 설정 가로 넘침 없음', (await overflow(sp)) <= 0 && (await inner()) <= 0);
+  await sp.getByRole('navigation', { name: '설정 항목' }).getByRole('link', { name: /^위치 공유 코인/ }).click();
+  await sp.getByRole('heading', { name: '위치 공유 코인' }).waitFor();
+  check('320px 설정 안쪽 화면 가로 넘침 없음', (await overflow(sp)) <= 0 && (await inner()) <= 0);
 
   // ── 11. 진짜 터치로 밀기(브라우저가 위아래 스크롤과 좌우 밀기를 구분하는지) ──
   const touch = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, locale: 'ko-KR', timezoneId: 'Asia/Seoul', serviceWorkers: 'block' });
