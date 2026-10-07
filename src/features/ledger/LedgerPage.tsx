@@ -5,7 +5,7 @@ import type { LedgerEntry } from '../../backend/types';
 import { formatWhen } from '../../lib/dates';
 import type { IconName } from '../../lib/sprites';
 import { Avatar, Icon } from '../../ui/Sprite';
-import { CoinInline, CoinPill, Empty } from '../../ui/kit';
+import { BackLink, CoinInline, CoinPill, Empty } from '../../ui/kit';
 
 const TYPE_ICON: Record<LedgerEntry['type'], IconName> = {
   quest: 'coin',
@@ -26,6 +26,7 @@ export function LedgerPage() {
 
   return (
     <main className="screen">
+      <BackLink />
       <header className="screen-head">
         <div className="grow">
           <h1 className="t-title">코인 기록</h1>

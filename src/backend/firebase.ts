@@ -14,6 +14,7 @@
  *   families/{fid}/proposals/{id}        자녀가 직접 추가한 할 일과 코인 협상
  *   families/{fid}/rewards/{id}          상점의 보상
  *   families/{fid}/orders/{id}           보상 신청
+ *   families/{fid}/foods/{id}            뭐먹지의 메뉴
  */
 import { FirebaseError, initializeApp } from 'firebase/app';
 import {
@@ -26,6 +27,8 @@ import {
   signOut as fbSignOut,
 } from 'firebase/auth';
 import {
+  arrayRemove,
+  arrayUnion,
   collection,
   deleteDoc,
   doc,
@@ -50,6 +53,7 @@ import {
 } from 'firebase/firestore';
 import { firebaseConfig } from '../config/firebase';
 import { INVITE_TTL_MS, isInviteCodeShape, newInviteCode, normalizeInviteCode } from '../domain/invites';
+import { MAX_EATEN, categoryOf, cleanFoodInput, withEaten } from '../domain/foods';
 import { cleanFamilyName, cleanProfile } from '../domain/profile';
 import { MAX_OFFER_NOTE, canCounter, cleanOfferAmount, cleanProposalInput, turnOf } from '../domain/proposals';
 import { cleanPresetInput, cleanQuestInput, runId } from '../domain/quests';
@@ -68,6 +72,7 @@ import {
   type Backend,
   type Family,
   type FamilySettings,
+  type Food,
   type Invite,
   type LedgerEntry,
   type Member,
@@ -170,6 +175,7 @@ export function createFirebaseBackend(): Backend {
   const proposalsCol = (fid: string) => collection(db, 'families', fid, 'proposals');
   const rewardsCol = (fid: string) => collection(db, 'families', fid, 'rewards');
   const ordersCol = (fid: string) => collection(db, 'families', fid, 'orders');
+  const foodsCol = (fid: string) => collection(db, 'families', fid, 'foods');
 
   const onListenError = (what: string) => (error: Error) => console.error(`[${what}]`, error);
 
@@ -230,6 +236,19 @@ export function createFirebaseBackend(): Backend {
     active: d.active === true,
     createdBy: d.createdBy,
     createdAt: d.createdAt ?? 0,
+  });
+
+  const toFood = (id: string, d: DocumentData): Food => ({
+    id,
+    name: d.name,
+    category: categoryOf(d.category).id,
+    link: d.link ?? '',
+    memo: d.memo ?? '',
+    addedBy: d.addedBy,
+    createdAt: d.createdAt ?? 0,
+    wantedBy: [...((d.wantedBy as string[] | undefined) ?? [])],
+    eaten: [...((d.eaten as string[] | undefined) ?? [])].sort(),
+    active: d.active === true,
   });
 
   const toOrder = (id: string, d: DocumentData): Order => ({
@@ -855,6 +874,64 @@ export function createFirebaseBackend(): Backend {
     setGoal: (familyId, uid, rewardId) =>
       guard(async () => {
         await updateDoc(memberRef(familyId, uid), { goalRewardId: rewardId });
+      }),
+
+    watchFoods(familyId, cb, onError) {
+      return onSnapshot(
+        query(foodsCol(familyId), where('active', '==', true)),
+        (snap) => cb(snap.docs.map((s) => toFood(s.id, s.data()))),
+        (error) => {
+          console.error('[foods]', error);
+          onError?.();
+        },
+      );
+    },
+
+    // 같은 이름이 이미 있는지는 목록을 들고 있는 화면이 먼저 확인한다.
+    createFood: (familyId, input, byUid) =>
+      guard(async () => {
+        const ref = doc(foodsCol(familyId));
+        await setDoc(ref, {
+          ...cleanFoodInput(input),
+          addedBy: byUid,
+          createdAt: Date.now(),
+          wantedBy: [byUid],
+          eaten: [],
+          active: true,
+        });
+        return ref.id;
+      }),
+
+    updateFood: (familyId, foodId, input) =>
+      guard(async () => {
+        await updateDoc(doc(foodsCol(familyId), foodId), { ...cleanFoodInput(input) });
+      }),
+
+    archiveFood: (familyId, foodId) =>
+      guard(async () => {
+        await updateDoc(doc(foodsCol(familyId), foodId), { active: false });
+      }),
+
+    setFoodWant: (familyId, foodId, uid, want) =>
+      guard(async () => {
+        await updateDoc(doc(foodsCol(familyId), foodId), { wantedBy: want ? arrayUnion(uid) : arrayRemove(uid) });
+      }),
+
+    addFoodEaten: (familyId, foodId, day) =>
+      guard(async () => {
+        const ref = doc(foodsCol(familyId), foodId);
+        const snap = await getDoc(ref);
+        if (!snap.exists()) throw new AppError('메뉴를 찾을 수 없어요. 이미 지워졌을 수 있어요.');
+        const current = toFood(snap.id, snap.data()).eaten;
+        const next = withEaten(current, day, dateKey());
+        // 기록이 가득 차서 오래된 날을 덜어 내야 할 때만 목록을 통째로 바꾼다.
+        const eaten = current.length >= MAX_EATEN ? next : arrayUnion(day);
+        await updateDoc(ref, { eaten, wantedBy: [] });
+      }),
+
+    removeFoodEaten: (familyId, foodId, day) =>
+      guard(async () => {
+        await updateDoc(doc(foodsCol(familyId), foodId), { eaten: arrayRemove(day) });
       }),
 
     giveCoins: (familyId, toUid, amount, note, byUid) =>

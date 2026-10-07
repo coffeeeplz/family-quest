@@ -11,13 +11,18 @@ import { formatWhen } from '../../lib/dates';
 import type { IconName } from '../../lib/sprites';
 import { CoinInput, parseCoins } from '../../ui/CoinInput';
 import { Avatar, AvatarFrame, Icon } from '../../ui/Sprite';
+import { SwipePages, type SwipePage } from '../../ui/SwipePages';
 import { Button, CoinInline, Empty, Field, FieldGroup, Sheet } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
 import { OfferSheet } from '../negotiation/OfferSheet';
+import { KidStatus } from './KidStatus';
 
 const QUICK_REASONS = ['조금만 더 해 보자', '다시 확인해 줘', '끝까지 해 보자'];
 
-/** 부모의 첫 화면: 완료 요청과 코인 제안에 답한다. 부모 중 한 명만 답하면 된다. */
+/**
+ * 부모의 첫 화면: 완료 요청과 코인 제안에 답한다. 부모 중 한 명만 답하면 된다.
+ * 왼쪽으로 밀면(또는 위의 버튼을 누르면) 자녀별 현황이 나온다.
+ */
 export function ApprovalsPage() {
   const backend = useBackend();
   const { me, family, members, kids } = useSession();
@@ -27,7 +32,10 @@ export function ApprovalsPage() {
   const [rejectTarget, setRejectTarget] = useState<Run | null>(null);
   const [reason, setReason] = useState('');
   const [counterTarget, setCounterTarget] = useState<Proposal | null>(null);
-  const [gifting, setGifting] = useState(false);
+  /** 칭찬 코인을 받을 자녀. null 이면 창이 닫혀 있다. */
+  const [giftKidUid, setGiftKidUid] = useState<string | null>(null);
+  /** 0 = 승인, 1부터는 자녀 현황 */
+  const [page, setPage] = useState(0);
   const [orderRejectTarget, setOrderRejectTarget] = useState<Order | null>(null);
 
   const settings = family.settings;
@@ -61,28 +69,21 @@ export function ApprovalsPage() {
 
   const upcomingBonus = approveTarget ? streakFor(approveTarget) : null;
 
-  return (
-    <main className="screen">
-      <header className="screen-head">
-        <AvatarFrame avatar={me.avatar} size={64} background="var(--coin-bg)" />
-        <div className="grow">
-          <h1 className="t-title">{me.displayName}</h1>
-          <p className="t-cap">{waitingCount > 0 ? `답을 기다리는 일 ${waitingCount}개` : '답할 일이 없어요'}</p>
-        </div>
-      </header>
-
+  const approvals = (
+    <div className="stack" style={{ gap: 22 }}>
       <section className="px member-strip" aria-label="가족">
         {members.map((member) => (
           <MemberChip
             key={member.uid}
             member={member}
             summary={member.role === 'child' ? summaryOf(buildBoard(quests, runs, proposals, member.uid, today)) : null}
+            onOpen={member.role === 'child' ? () => setPage(kids.findIndex((kid) => kid.uid === member.uid) + 1) : undefined}
           />
         ))}
       </section>
 
       {kids.length > 0 && (
-        <Button tone="mint" big block onClick={() => setGifting(true)}>
+        <Button tone="mint" big block onClick={() => setGiftKidUid(kids[0].uid)}>
           칭찬 코인 주기
         </Button>
       )}
@@ -267,6 +268,50 @@ export function ApprovalsPage() {
       <Link className="btn big block" to="/quests/new">
         + 새 퀘스트 만들기
       </Link>
+    </div>
+  );
+
+  const pages: SwipePage[] = [
+    {
+      id: 'approve',
+      label: '승인',
+      tab: waitingCount > 0 ? `승인 ${waitingCount}` : '승인',
+      content: approvals,
+    },
+    ...kids.map((kid) => ({
+      id: kid.uid,
+      label: `${kid.displayName} 현황`,
+      tab: (
+        <>
+          <Avatar avatar={kid.avatar} size={24} />
+          <span className="pager-name">{kid.displayName}</span>
+        </>
+      ),
+      content: <KidStatus kid={kid} onGift={() => setGiftKidUid(kid.uid)} />,
+    })),
+  ];
+
+  return (
+    <main className="screen">
+      <header className="screen-head">
+        <AvatarFrame avatar={me.avatar} size={64} background="var(--coin-bg)" />
+        <div className="grow">
+          <h1 className="t-title">{me.displayName}</h1>
+          <p className="t-cap">{waitingCount > 0 ? `답을 기다리는 일 ${waitingCount}개` : '답할 일이 없어요'}</p>
+        </div>
+      </header>
+
+      {kids.length > 0 ? (
+        <SwipePages
+          label="승인과 자녀 현황"
+          pages={pages}
+          index={page}
+          onChange={setPage}
+          hint="옆으로 밀거나 위의 버튼을 누르면 자녀 현황을 볼 수 있어요."
+        />
+      ) : (
+        approvals
+      )}
 
       {approveTarget && (
         <Sheet title="승인하고 한마디" onClose={() => setApproveTarget(null)}>
@@ -288,7 +333,7 @@ export function ApprovalsPage() {
           <Button tone="plain" big block onClick={() => approve(approveTarget, '')}>
             한마디 없이 승인
           </Button>
-          <p className="t-cap center">한마디는 가족 탭의 가족 설정에서 바꿀 수 있어요.</p>
+          <p className="t-cap center">한마디는 더보기의 가족 설정에서 바꿀 수 있어요.</p>
         </Sheet>
       )}
 
@@ -360,17 +405,18 @@ export function ApprovalsPage() {
         />
       )}
 
-      {gifting && (
+      {giftKidUid !== null && (
         <GiftSheet
           kids={kids}
+          initialKidUid={giftKidUid}
           praises={settings.praises}
           busy={busy}
-          onClose={() => setGifting(false)}
+          onClose={() => setGiftKidUid(null)}
           onGive={(kid, amount, note) =>
             void run(
               () => backend.giveCoins(family.id, kid.uid, amount, note, me.uid),
               `${kid.displayName}에게 칭찬 코인 ${amount}개를 줬어요.`,
-            ).then((ok) => ok && setGifting(false))
+            ).then((ok) => ok && setGiftKidUid(null))
           }
         />
       )}
@@ -387,9 +433,14 @@ function summaryOf(board: ReturnType<typeof buildBoard>): string[] {
   return lines;
 }
 
-function MemberChip({ member, summary }: { member: Member; summary: string[] | null }) {
+function MemberChip({ member, summary, onOpen }: { member: Member; summary: string[] | null; onOpen?: () => void }) {
+  // 자녀는 누르면 그 자녀의 현황으로 넘어간다.
+  const Tag = onOpen ? 'button' : 'div';
   return (
-    <div className="member-chip">
+    <Tag
+      className="member-chip"
+      {...(onOpen ? { type: 'button' as const, onClick: onOpen, 'aria-label': `${member.displayName} 현황 보기` } : {})}
+    >
       <Avatar avatar={member.avatar} size={48} />
       <span className="t-cap name">{member.displayName}</span>
       {summary ? (
@@ -404,12 +455,14 @@ function MemberChip({ member, summary }: { member: Member; summary: string[] | n
       ) : (
         <span className="t-cap">부모</span>
       )}
-    </div>
+    </Tag>
   );
 }
 
 interface GiftProps {
   kids: Member[];
+  /** 처음에 골라 둘 자녀 */
+  initialKidUid: string;
   praises: string[];
   busy: boolean;
   onGive: (kid: Member, amount: number, note: string) => void;
@@ -417,8 +470,8 @@ interface GiftProps {
 }
 
 /** 칭찬 코인: 퀘스트와 상관없이 한마디와 함께 코인을 바로 준다. */
-function GiftSheet({ kids, praises, busy, onGive, onClose }: GiftProps) {
-  const [kidUid, setKidUid] = useState(kids[0]?.uid ?? '');
+function GiftSheet({ kids, initialKidUid, praises, busy, onGive, onClose }: GiftProps) {
+  const [kidUid, setKidUid] = useState(kids.some((k) => k.uid === initialKidUid) ? initialKidUid : (kids[0]?.uid ?? ''));
   const [amount, setAmount] = useState('5');
   const [note, setNote] = useState(praises[0] ?? '');
   const kid = kids.find((k) => k.uid === kidUid);

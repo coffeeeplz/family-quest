@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useFamilyData } from '../../app/familyData';
 import { useBackend, useSession } from '../../app/session';
 import type { Preset, Quest, QuestInput, Repeat } from '../../backend/types';
@@ -39,7 +39,10 @@ function QuestForm({ quest }: { quest: Quest | undefined }) {
 
   const [title, setTitle] = useState(quest?.title ?? '');
   const [note, setNote] = useState(quest?.note ?? '');
-  const [assigneeUid, setAssigneeUid] = useState(quest?.assigneeUid ?? kids[0]?.uid ?? '');
+  // 자녀 현황에서 "퀘스트 추가"로 넘어오면 그 자녀가 미리 골라져 있다.
+  const [search] = useSearchParams();
+  const preselected = kids.find((kid) => kid.uid === search.get('for'))?.uid;
+  const [assigneeUid, setAssigneeUid] = useState(quest?.assigneeUid ?? preselected ?? kids[0]?.uid ?? '');
   const [reward, setReward] = useState(String(quest?.reward ?? 10));
   const [repeatType, setRepeatType] = useState<Repeat['type']>(quest?.repeat.type ?? 'none');
   const [days, setDays] = useState<number[]>(quest?.repeat.type === 'weekly' ? quest.repeat.days : []);
@@ -95,9 +98,9 @@ function QuestForm({ quest }: { quest: Quest | undefined }) {
     return (
       <main className="screen">
         <h1 className="t-title">새 퀘스트</h1>
-        <p className="t-body">퀘스트를 받을 자녀가 아직 없어요. 가족 탭에서 초대코드를 만들어 자녀를 먼저 불러 주세요.</p>
+        <p className="t-body">퀘스트를 받을 자녀가 아직 없어요. 가족 화면에서 초대코드를 만들어 자녀를 먼저 불러 주세요.</p>
         <Button tone="plain" big block onClick={() => navigate('/family')}>
-          가족 탭으로 가기
+          가족 화면으로 가기
         </Button>
       </main>
     );

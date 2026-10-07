@@ -85,6 +85,7 @@ svg.sprite {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: calc(24px + var(--safe-top)) var(--gutter) 32px;
   display: flex;
   flex-direction: column;
@@ -720,4 +721,209 @@ textarea.input {
 }
 .progress.small {
   gap: 4px;
+}
+
+/* 좌우로 넘기는 화면 묶음 */
+.pager {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.pager-tabs {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.pager-tab {
+  margin: var(--px);
+  min-height: var(--tap);
+  min-width: 0;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 0;
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: var(--px-shadow);
+  font-family: var(--font-title);
+  font-size: 12px;
+  line-height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.pager-tab[aria-selected='true'] {
+  background: var(--pink);
+  font-weight: 700;
+}
+.pager-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pager-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+.pager-dots > span {
+  width: 8px;
+  height: 8px;
+  background: var(--shade);
+}
+.pager-dots > span.on {
+  background: var(--ink);
+}
+.pager-panel {
+  flex: 1 0 auto;
+  /* 위아래 스크롤은 브라우저에 맡기고, 좌우로 미는 동작만 직접 받는다 */
+  touch-action: pan-y;
+  margin-top: 8px;
+  /* 넘어오는 동안 옆으로 삐져나온 부분이 가로 스크롤을 만들지 않게 한다 */
+  overflow-x: clip;
+}
+.pager-page {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.pager-page.next {
+  animation: page-from-right 0.18s steps(6);
+}
+.pager-page.prev {
+  animation: page-from-left 0.18s steps(6);
+}
+@keyframes page-from-right {
+  from {
+    transform: translateX(36px);
+    opacity: 0;
+  }
+}
+@keyframes page-from-left {
+  from {
+    transform: translateX(-36px);
+    opacity: 0;
+  }
+}
+
+/* 자녀 현황 */
+button.member-chip {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+.kid-head {
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--sky-soft);
+}
+.badge.small {
+  min-width: 0;
+  min-height: 32px;
+  flex-shrink: 0;
+}
+.history-row {
+  padding: 8px 12px;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* 더보기 */
+.menu-row {
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  text-decoration: none;
+}
+.back-link {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  margin: -8px 0 -10px -8px;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+/* 뭐먹지 */
+.food-open {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  min-height: var(--tap);
+  justify-content: center;
+}
+.food-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.who {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  flex-wrap: wrap;
+  max-width: 80px;
+  flex-shrink: 0;
+}
+.food-foot .row {
+  gap: 12px;
+  flex-shrink: 0;
+}
+a.chip {
+  color: var(--ink);
+  text-decoration: none;
+}
+.chip:disabled {
+  color: var(--ink-soft);
+}
+.draw-box {
+  min-height: 176px;
+  padding: 18px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  background: var(--yellow-soft);
+}
+.draw-name {
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 24px;
+  line-height: 30px;
+  overflow-wrap: anywhere;
+}
+.dice-roll {
+  animation: dice-roll 0.36s steps(4) infinite;
+}
+@keyframes dice-roll {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pager-page.next,
+  .pager-page.prev,
+  .dice-roll {
+    animation: none;
+  }
 }

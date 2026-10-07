@@ -1,6 +1,19 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createDemoBackend } from '../src/backend/demo';
-import type { ApproveOptions, Backend, Family, LedgerEntry, Member, Order, Preset, Proposal, Quest, Reward, Run } from '../src/backend/types';
+import type {
+  ApproveOptions,
+  Backend,
+  Family,
+  Food,
+  LedgerEntry,
+  Member,
+  Order,
+  Preset,
+  Proposal,
+  Quest,
+  Reward,
+  Run,
+} from '../src/backend/types';
 import { DEFAULT_SETTINGS } from '../src/domain/settings';
 import { planStreak } from '../src/domain/streak';
 import { addDays, dateKey } from '../src/lib/dates';
@@ -28,6 +41,8 @@ const kid = () => members().find((m) => m.uid === 'demo-kid')!;
 const rewards = () => snapshot<Reward[]>((cb) => backend.watchRewards(FAMILY, cb));
 const orders = () => snapshot<Order[]>((cb) => backend.watchOrders(FAMILY, addDays(today, -7), cb));
 const rewardById = (id: string) => rewards().find((r) => r.id === id)!;
+const foods = () => snapshot<Food[]>((cb) => backend.watchFoods(FAMILY, cb));
+const foodById = (id: string) => foods().find((f) => f.id === id);
 const questById = (id: string) => quests().find((q) => q.id === id)!;
 const runById = (id: string) => runs().find((r) => r.id === id)!;
 const proposalById = (id: string) => proposals().find((p) => p.id === id)!;
@@ -472,5 +487,75 @@ describe('상점', () => {
     await backend.setGoal(FAMILY, 'demo-kid', null);
     expect(kid().goalRewardId).toBeNull();
     await expect(backend.setGoal(FAMILY, 'demo-kid', '없는보상')).rejects.toThrow('찾을 수 없어요');
+  });
+});
+
+describe('뭐먹지', () => {
+  const pizza = { name: '피자', category: 'delivery' as const, link: 'pizza.example.com/menu', memo: '' };
+
+  it('가족 누구나 메뉴를 올리고, 올린 사람이 먹고 싶은 것으로 시작한다', async () => {
+    as('demo-kid');
+    const id = await backend.createFood(FAMILY, pizza, 'demo-kid');
+    const created = foodById(id)!;
+    expect(created).toMatchObject({ name: '피자', addedBy: 'demo-kid', wantedBy: ['demo-kid'], eaten: [] });
+    expect(created.link).toBe('https://pizza.example.com/menu');
+    await expect(backend.createFood(FAMILY, { ...pizza, name: ' 피자 ' }, 'demo-kid')).rejects.toThrow('이미 올라와');
+    await expect(backend.createFood(FAMILY, { ...pizza, name: '' }, 'demo-kid')).rejects.toThrow('메뉴 이름');
+    await expect(backend.createFood(FAMILY, { ...pizza, name: '탕수육' }, 'demo-dad')).rejects.toThrow('본인만');
+  });
+
+  it('"나도!"는 누구나 켜고 끌 수 있다', async () => {
+    as('demo-mom');
+    await backend.setFoodWant(FAMILY, 'f-chicken', 'demo-mom', true);
+    expect(foodById('f-chicken')!.wantedBy.sort()).toEqual(['demo-dad', 'demo-kid', 'demo-mom']);
+    await backend.setFoodWant(FAMILY, 'f-chicken', 'demo-mom', true); // 두 번 눌러도 한 번만
+    expect(foodById('f-chicken')!.wantedBy).toHaveLength(3);
+    await backend.setFoodWant(FAMILY, 'f-chicken', 'demo-mom', false);
+    expect(foodById('f-chicken')!.wantedBy.sort()).toEqual(['demo-dad', 'demo-kid']);
+    await expect(backend.setFoodWant(FAMILY, 'f-chicken', 'demo-kid', false)).rejects.toThrow('본인만');
+  });
+
+  it('먹으면 횟수와 날짜가 남고 보관함으로 간다. 보관함에서 다시 올릴 수 있다', async () => {
+    as('demo-kid');
+    await backend.addFoodEaten(FAMILY, 'f-chicken', today);
+    const eaten = foodById('f-chicken')!;
+    expect(eaten.wantedBy).toEqual([]);
+    expect(eaten.eaten).toEqual([addDays(today, -9), today]);
+    await expect(backend.addFoodEaten(FAMILY, 'f-chicken', today)).rejects.toThrow('이미 기록');
+    await expect(backend.addFoodEaten(FAMILY, 'f-chicken', addDays(today, 1))).rejects.toThrow('아직 오지 않은');
+
+    await backend.addFoodEaten(FAMILY, 'f-chicken', addDays(today, -3)); // 지난 날도 기록
+    expect(foodById('f-chicken')!.eaten).toEqual([addDays(today, -9), addDays(today, -3), today]);
+    await backend.removeFoodEaten(FAMILY, 'f-chicken', addDays(today, -3)); // 잘못 누른 기록 지우기
+    expect(foodById('f-chicken')!.eaten).toEqual([addDays(today, -9), today]);
+
+    await backend.setFoodWant(FAMILY, 'f-chicken', 'demo-kid', true); // 또 먹고 싶어
+    expect(foodById('f-chicken')!.wantedBy).toEqual(['demo-kid']);
+    expect(foodById('f-chicken')!.eaten).toHaveLength(2); // 기록은 그대로
+  });
+
+  it('고치기와 지우기는 올린 사람과 부모만 할 수 있다', async () => {
+    const edit = { name: '크림 파스타', category: 'out' as const, link: '', memo: '바꿈' };
+    as('demo-kid'); // 엄마가 올린 메뉴
+    await expect(backend.updateFood(FAMILY, 'f-pasta', edit)).rejects.toThrow('올린 사람과 부모만');
+    await expect(backend.archiveFood(FAMILY, 'f-pasta')).rejects.toThrow('올린 사람과 부모만');
+    await backend.updateFood(FAMILY, 'f-icecream', { name: '바닐라 아이스크림', category: 'snack', link: '', memo: '' }); // 내가 올린 메뉴
+    expect(foodById('f-icecream')!.name).toBe('바닐라 아이스크림');
+    await expect(backend.updateFood(FAMILY, 'f-icecream', { name: '치킨', category: 'snack', link: '', memo: '' })).rejects.toThrow('같은 이름');
+
+    as('demo-dad'); // 부모는 남이 올린 것도
+    await backend.updateFood(FAMILY, 'f-pasta', edit);
+    expect(foodById('f-pasta')!.memo).toBe('바꿈');
+    await backend.archiveFood(FAMILY, 'f-icecream');
+    expect(foodById('f-icecream')).toBeUndefined();
+    await expect(backend.addFoodEaten(FAMILY, 'f-icecream', today)).rejects.toThrow('찾을 수 없어요');
+    // 지운 메뉴와 같은 이름은 다시 올릴 수 있다
+    await backend.createFood(FAMILY, { name: '바닐라 아이스크림', category: 'snack', link: '', memo: '' }, 'demo-dad');
+  });
+
+  it('가족이 아닌 사람은 아무것도 못 한다', async () => {
+    as('demo-new');
+    await expect(backend.createFood(FAMILY, pizza, 'demo-new')).rejects.toThrow('구성원이 아니에요');
+    await expect(backend.addFoodEaten(FAMILY, 'f-chicken', today)).rejects.toThrow('구성원이 아니에요');
   });
 });

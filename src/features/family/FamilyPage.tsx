@@ -1,13 +1,12 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useBackend, useSession } from '../../app/session';
 import type { Invite, ProfileInput, Role } from '../../backend/types';
 import { Avatar } from '../../ui/Sprite';
-import { Button, CoinInline, Sheet } from '../../ui/kit';
+import { BackLink, Button, CoinInline, Sheet } from '../../ui/kit';
 import { errorText, useToast } from '../../ui/toast';
 import { ProfileForm } from '../avatar/ProfileForm';
 
-/** 가족 구성원, 내 캐릭터 바꾸기, 초대코드, 로그아웃 */
+/** 가족 구성원, 내 캐릭터 바꾸기, 초대코드 */
 export function FamilyPage() {
   const backend = useBackend();
   const { family, members, me, isParent } = useSession();
@@ -15,13 +14,9 @@ export function FamilyPage() {
   const [editing, setEditing] = useState(false);
   const [inviting, setInviting] = useState(false);
 
-  function leaveSession() {
-    window.location.hash = '/';
-    void backend.signOut();
-  }
-
   return (
     <main className="screen">
+      <BackLink />
       <header className="screen-head">
         <div className="grow">
           <h1 className="t-title">{family.name}</h1>
@@ -49,37 +44,8 @@ export function FamilyPage() {
         내 캐릭터와 이름 바꾸기
       </Button>
       {isParent && (
-        <>
-          <Button tone="mint" big block onClick={() => setInviting(true)}>
-            가족 초대하기
-          </Button>
-          <Link className="btn plain big block" to="/settings">
-            가족 설정
-          </Link>
-        </>
-      )}
-
-      <div className="hr" />
-
-      {backend.demo ? (
-        <>
-          <Button tone="plain" big block onClick={leaveSession}>
-            다른 사람으로 들어가 보기
-          </Button>
-          <button
-            type="button"
-            className="link"
-            onClick={() => {
-              window.location.hash = '/';
-              backend.demo?.reset();
-            }}
-          >
-            체험 내용을 처음 상태로 되돌리기
-          </button>
-        </>
-      ) : (
-        <Button tone="plain" big block onClick={leaveSession}>
-          로그아웃
+        <Button tone="mint" big block onClick={() => setInviting(true)}>
+          가족 초대하기
         </Button>
       )}
 

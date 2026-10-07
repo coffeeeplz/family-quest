@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import type { Member, Order, Proposal, Quest, Reward, Run } from '../src/backend/types';
+import type { Food, Member, Order, Proposal, Quest, Reward, Run } from '../src/backend/types';
+import {
+  MAX_EATEN,
+  canEditFood,
+  cleanFoodInput,
+  cleanLink,
+  drawPool,
+  eatenLabel,
+  findSameName,
+  pickRandom,
+  splitFoods,
+  withEaten,
+} from '../src/domain/foods';
 import { isInviteCodeShape, newInviteCode, normalizeInviteCode } from '../src/domain/invites';
 import { canCounter, cleanProposalInput, turnOf } from '../src/domain/proposals';
 import { buildBoard, cleanQuestInput, relativeDay, repeatLabel, scheduledOn, todayProgress } from '../src/domain/quests';
@@ -414,5 +426,100 @@ describe('shop', () => {
     expect(() => cleanRewardInput({ ...base, title: '' })).toThrow('보상 이름');
     expect(() => cleanRewardInput({ ...base, price: 0 })).toThrow('가격');
     expect(() => cleanRewardInput({ ...base, limit: { period: 'day', count: 0 } })).toThrow('횟수');
+  });
+});
+
+describe('뭐먹지', () => {
+  const food = (over: Partial<Food>): Food => ({
+    id: 'f1',
+    name: '떡볶이',
+    category: 'snack',
+    link: '',
+    memo: '',
+    addedBy: 'kid',
+    createdAt: 0,
+    wantedBy: [],
+    eaten: [],
+    active: true,
+    ...over,
+  });
+
+  it('cleans links: adds https, keeps ports, blocks non-web addresses', () => {
+    expect(cleanLink('  ')).toBe('');
+    expect(cleanLink('naver.com/맛집')).toBe('https://naver.com/%EB%A7%9B%EC%A7%91');
+    expect(cleanLink('http://example.com/a?b=1')).toBe('http://example.com/a?b=1');
+    expect(cleanLink('example.com:8080/menu')).toBe('https://example.com:8080/menu');
+    expect(() => cleanLink('javascript:alert(1)')).toThrow('웹 주소');
+    expect(() => cleanLink('data:text/html,hi')).toThrow('웹 주소');
+    expect(() => cleanLink('그냥 글자')).toThrow('링크 주소');
+    expect(() => cleanLink('https://a.com/' + 'x'.repeat(400))).toThrow('300자');
+  });
+
+  it('validates food input', () => {
+    const base = { name: '  크림   파스타 ', category: 'out' as const, link: '', memo: ' 순한맛 ' };
+    expect(cleanFoodInput(base)).toEqual({ name: '크림 파스타', category: 'out', link: '', memo: '순한맛' });
+    expect(() => cleanFoodInput({ ...base, name: ' ' })).toThrow('메뉴 이름');
+    expect(() => cleanFoodInput({ ...base, name: '가'.repeat(31) })).toThrow('30자');
+    expect(() => cleanFoodInput({ ...base, category: '없음' as never })).toThrow('분류');
+  });
+
+  it('finds the same name ignoring spacing and case', () => {
+    const foods = [food({ id: 'a', name: 'BBQ 치킨' }), food({ id: 'b', name: '김밥' })];
+    expect(findSameName(foods, ' bbq  치킨 ')?.id).toBe('a');
+    expect(findSameName(foods, 'BBQ 치킨', 'a')).toBeNull();
+    expect(findSameName(foods, '라면')).toBeNull();
+    expect(findSameName(foods, '')).toBeNull();
+  });
+
+  it('records eaten days once per day, sorted, never in the future', () => {
+    expect(withEaten(['2026-10-01', '2026-10-05'], '2026-10-03', TODAY)).toEqual(['2026-10-01', '2026-10-03', '2026-10-05']);
+    expect(() => withEaten(['2026-10-05'], '2026-10-05', TODAY)).toThrow('이미 기록');
+    expect(() => withEaten([], addDays(TODAY, 1), TODAY)).toThrow('아직 오지 않은');
+    expect(() => withEaten([], '2026-13-40', TODAY)).toThrow('날짜');
+    const many = Array.from({ length: MAX_EATEN }, (_, i) => addDays('2020-01-01', i));
+    const next = withEaten(many, TODAY, TODAY);
+    expect(next).toHaveLength(MAX_EATEN);
+    expect(next[0]).toBe('2020-01-02');
+    expect(next[next.length - 1]).toBe(TODAY);
+  });
+
+  it('splits into wanted (most wanted first) and saved (recently eaten first)', () => {
+    const foods = [
+      food({ id: 'one', name: '치킨', category: 'delivery', wantedBy: ['kid'], createdAt: 5 }),
+      food({ id: 'two', name: '피자', category: 'delivery', wantedBy: ['kid', 'dad'], createdAt: 1 }),
+      food({ id: 'old', name: '김밥', category: 'home', eaten: ['2026-09-01'] }),
+      food({ id: 'new', name: '찌개', category: 'home', eaten: ['2026-09-01', '2026-10-04'] }),
+      food({ id: 'never', name: '라면', category: 'home' }),
+      food({ id: 'gone', name: '지운 것', active: false, wantedBy: ['kid'] }),
+    ];
+    const lists = splitFoods(foods);
+    expect(lists.wanted.map((f) => f.id)).toEqual(['two', 'one']);
+    expect(lists.saved.map((f) => f.id)).toEqual(['new', 'old', 'never']);
+    expect(splitFoods(foods, 'home').wanted).toEqual([]);
+    expect(splitFoods(foods, 'home').saved).toHaveLength(3);
+    expect(drawPool(foods, 'wanted', 'all').map((f) => f.id)).toEqual(['two', 'one']);
+    expect(drawPool(foods, 'all', 'all')).toHaveLength(5);
+    expect(drawPool(foods, 'all', 'delivery')).toHaveLength(2);
+  });
+
+  it('draws at random and avoids repeating the last pick', () => {
+    const pool = [food({ id: 'a' }), food({ id: 'b' }), food({ id: 'c' })];
+    expect(pickRandom([], null)).toBeNull();
+    expect(pickRandom(pool, null, () => 0)?.id).toBe('a');
+    expect(pickRandom(pool, null, () => 0.999)?.id).toBe('c');
+    expect(pickRandom(pool, 'a', () => 0)?.id).toBe('b');
+    expect(pickRandom([pool[0]], 'a', () => 0)?.id).toBe('a'); // 하나뿐이면 같은 것이 나온다
+    for (let i = 0; i < 50; i += 1) expect(pickRandom(pool, 'b')?.id).not.toBe('b');
+  });
+
+  it('labels eat history and edit rights', () => {
+    expect(eatenLabel(food({}), TODAY)).toBe('아직 안 먹어 봤어요');
+    expect(eatenLabel(food({ eaten: ['2026-09-30', '2026-10-03'] }), TODAY)).toBe('2번 먹음 · 마지막 10월 3일');
+    expect(eatenLabel(food({ eaten: [TODAY] }), TODAY)).toBe('1번 먹음 · 마지막 오늘');
+    expect(eatenLabel(food({ eaten: [addDays(TODAY, -1)] }), TODAY)).toBe('1번 먹음 · 마지막 어제');
+    expect(eatenLabel(food({ eaten: ['2025-12-31'] }), TODAY)).toBe('1번 먹음 · 마지막 2025년 12월 31일');
+    expect(canEditFood(food({ addedBy: 'kid' }), 'kid', false)).toBe(true);
+    expect(canEditFood(food({ addedBy: 'kid' }), 'other', false)).toBe(false);
+    expect(canEditFood(food({ addedBy: 'kid' }), 'dad', true)).toBe(true);
   });
 });

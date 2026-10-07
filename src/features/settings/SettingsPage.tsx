@@ -14,7 +14,7 @@ import {
 } from '../../domain/settings';
 import { CoinInput, parseCoins } from '../../ui/CoinInput';
 import { Icon } from '../../ui/Sprite';
-import { Button, CoinInline, Field, FieldGroup } from '../../ui/kit';
+import { BackLink, Button, CoinInline, Field, FieldGroup } from '../../ui/kit';
 import { errorText, useAction, useToast } from '../../ui/toast';
 
 /** 부모용 가족 설정: 코인 협상, 연속 달성 보너스, 칭찬 한마디, 자주 쓰는 퀘스트 버튼 */
@@ -81,6 +81,7 @@ export function SettingsPage() {
 
   return (
     <main className="screen">
+      <BackLink />
       <header className="screen-head">
         <div className="grow">
           <h1 className="t-title">가족 설정</h1>
@@ -246,8 +247,8 @@ export function SettingsPage() {
         )}
       </section>
 
-      <Button tone="plain" big block onClick={() => navigate('/family')}>
-        가족 탭으로 돌아가기
+      <Button tone="plain" big block onClick={() => navigate('/more')}>
+        더보기로 돌아가기
       </Button>
     </main>
   );

@@ -40,6 +40,13 @@ export function formatDay(key: string): string {
   return `${d.getMonth() + 1}월 ${d.getDate()}일 (${WEEKDAYS[d.getDay()]})`;
 }
 
+/** 10월 6일. 올해가 아니면 2025년 10월 6일 */
+export function formatShortDay(key: string, today: string = dateKey()): string {
+  const d = parseDateKey(key);
+  const text = `${d.getMonth() + 1}월 ${d.getDate()}일`;
+  return key.slice(0, 4) === today.slice(0, 4) ? text : `${d.getFullYear()}년 ${text}`;
+}
+
 /** 오후 3:10 */
 export function formatTime(ms: number): string {
   const d = new Date(ms);

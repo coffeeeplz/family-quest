@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { Icon } from './Sprite';
 
 type ButtonTone = 'pink' | 'mint' | 'plain';
@@ -15,6 +16,15 @@ export function Button({ tone = 'pink', big, block, fixed, className, type, ...r
     .filter(Boolean)
     .join(' ');
   return <button type={type ?? 'button'} className={classes} {...rest} />;
+}
+
+/** 더보기 안쪽 화면에서 돌아가는 링크 */
+export function BackLink({ to = '/more', label = '더보기' }: { to?: string; label?: string }) {
+  return (
+    <Link className="link back-link" to={to}>
+      ‹ {label}
+    </Link>
+  );
 }
 
 export function CoinPill({ amount }: { amount: number }) {

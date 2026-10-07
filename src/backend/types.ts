@@ -239,6 +239,32 @@ export interface Order {
   deliveredAt: number | null;
 }
 
+/** 뭐먹지의 분류: 집밥, 외식, 배달, 간식 */
+export type FoodCategory = 'home' | 'out' | 'delivery' | 'snack';
+
+export interface FoodInput {
+  name: string;
+  category: FoodCategory;
+  /** 맛집, 레시피, 배달 페이지 주소. 없으면 빈 문자열 */
+  link: string;
+  memo: string;
+}
+
+/**
+ * 뭐먹지에 올린 메뉴. 한 번 올리면 지우기 전까지 보관함에 남는다.
+ * wantedBy 가 비어 있지 않으면 "먹고 싶어요" 목록에, 비어 있으면 보관함에 보인다.
+ */
+export interface Food extends FoodInput {
+  id: string;
+  addedBy: string;
+  createdAt: number;
+  /** 지금 먹고 싶어 하는 사람들 */
+  wantedBy: string[];
+  /** 먹은 날(YYYY-MM-DD), 오래된 날부터. 하루에 한 번만 기록한다 */
+  eaten: string[];
+  active: boolean;
+}
+
 /** 승인과 함께 반영할 연속 달성 변화 */
 export interface StreakUpdate {
   count: number;
@@ -336,6 +362,19 @@ export interface Backend {
   deliverOrder(familyId: string, orderId: string, byUid: string): Promise<void>;
   /** 목표 저금통으로 삼을 보상을 정한다(null 이면 없앰). */
   setGoal(familyId: string, uid: string, rewardId: string | null): Promise<void>;
+
+  // 뭐먹지
+  /** onError 는 목록을 읽지 못했을 때(권한 없음 등) 불린다. */
+  watchFoods(familyId: string, cb: (foods: Food[]) => void, onError?: () => void): Unsub;
+  /** 새 메뉴를 올린다. 올린 사람이 먹고 싶어 하는 것으로 시작한다. */
+  createFood(familyId: string, input: FoodInput, byUid: string): Promise<string>;
+  updateFood(familyId: string, foodId: string, input: FoodInput): Promise<void>;
+  archiveFood(familyId: string, foodId: string): Promise<void>;
+  /** "먹고 싶어요"를 켜거나 끈다. 보관함의 메뉴를 다시 올릴 때도 쓴다. */
+  setFoodWant(familyId: string, foodId: string, uid: string, want: boolean): Promise<void>;
+  /** 먹은 날을 기록한다. 먹었으니 "먹고 싶어요"는 모두 풀리고 보관함으로 간다. */
+  addFoodEaten(familyId: string, foodId: string, day: string): Promise<void>;
+  removeFoodEaten(familyId: string, foodId: string, day: string): Promise<void>;
 
   /** 체험 모드에서만 제공 */
   demo?: {

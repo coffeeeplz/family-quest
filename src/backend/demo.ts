@@ -3,6 +3,7 @@
  * 데이터는 이 기기의 브라우저에만 저장되고, 실제 서버와 같은 권한 규칙을 흉내 낸다.
  */
 import { INVITE_TTL_MS, isInviteCodeShape, newInviteCode, normalizeInviteCode } from '../domain/invites';
+import { MAX_FOODS, canEditFood, cleanFoodInput, findSameName, withEaten } from '../domain/foods';
 import { cleanFamilyName, cleanProfile } from '../domain/profile';
 import { MAX_OFFER_NOTE, canCounter, cleanOfferAmount, cleanProposalInput, turnOf } from '../domain/proposals';
 import { cleanPresetInput, cleanQuestInput, runId } from '../domain/quests';
@@ -15,6 +16,7 @@ import {
   type Backend,
   type DemoPersona,
   type Family,
+  type Food,
   type Invite,
   type LedgerEntry,
   type Member,
@@ -37,7 +39,7 @@ interface DemoUser {
 }
 
 interface DemoState {
-  v: 3;
+  v: 4;
   currentUid: string | null;
   users: Record<string, DemoUser>;
   families: Record<string, Family>;
@@ -49,6 +51,7 @@ interface DemoState {
   proposals: Record<string, Record<string, Proposal>>;
   rewards: Record<string, Record<string, Reward>>;
   orders: Record<string, Record<string, Order>>;
+  foods: Record<string, Record<string, Food>>;
   invites: Record<string, Invite>;
 }
 
@@ -57,7 +60,7 @@ export interface KeyValueStore {
   setItem(key: string, value: string): void;
 }
 
-const STORAGE_KEY = 'family-quest-demo-v3';
+const STORAGE_KEY = 'family-quest-demo-v4';
 const FAMILY = 'demo-family';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -149,8 +152,29 @@ function seed(now: number = Date.now()): DemoState {
     createdAt: startedAt,
   });
 
+  const food = (
+    id: string,
+    name: string,
+    category: Food['category'],
+    wantedBy: string[],
+    eatenDaysAgo: number[],
+    link = '',
+    memo = '',
+  ): Food => ({
+    id,
+    name,
+    category,
+    link,
+    memo,
+    addedBy: wantedBy[0] ?? 'demo-mom',
+    createdAt: startedAt + eatenDaysAgo.length,
+    wantedBy,
+    eaten: eatenDaysAgo.map((n) => addDays(today, -n)).sort(),
+    active: true,
+  });
+
   return {
-    v: 3,
+    v: 4,
     currentUid: null,
     users: {
       'demo-dad': { uid: 'demo-dad', email: 'dad@example.com', label: '아빠', hint: '퀘스트를 만들고 승인해요', familyId: FAMILY },
@@ -236,6 +260,16 @@ function seed(now: number = Date.now()): DemoState {
       },
     },
     orders: { [FAMILY]: {} },
+    foods: {
+      [FAMILY]: {
+        'f-chicken': food('f-chicken', '치킨', 'delivery', ['demo-kid', 'demo-dad'], [9]),
+        'f-pasta': food('f-pasta', '크림 파스타', 'out', ['demo-mom'], [], 'https://www.google.com/maps/search/?api=1&query=%ED%8C%8C%EC%8A%A4%ED%83%80', '역 앞 새로 생긴 집'),
+        'f-icecream': food('f-icecream', '아이스크림', 'snack', ['demo-kid'], [12]),
+        'f-kimchi': food('f-kimchi', '김치찌개', 'home', [], [2, 9, 20]),
+        'f-gimbap': food('f-gimbap', '김밥', 'home', [], [5]),
+        'f-tteok': food('f-tteok', '떡볶이', 'snack', [], [15, 30]),
+      },
+    },
     invites: {},
   };
 }
@@ -254,7 +288,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       const raw = store?.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as DemoState;
-        if (parsed.v === 3) return parsed;
+        if (parsed.v === 4) return parsed;
       }
     } catch {
       // 저장소를 못 읽으면 새로 시작한다.
@@ -335,6 +369,12 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
     return proposal;
   }
 
+  function requireFood(familyId: string, foodId: string): Food {
+    const food = state.foods[familyId]?.[foodId];
+    if (!food || !food.active) throw new AppError('메뉴를 찾을 수 없어요. 이미 지워졌을 수 있어요.');
+    return food;
+  }
+
   /** 협상에서 지금 답할 차례인 사람만 통과시킨다. */
   function requireTurn(familyId: string, proposal: Proposal): Member {
     const member = requireMember(familyId);
@@ -398,6 +438,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       state.proposals[id] = {};
       state.rewards[id] = {};
       state.orders[id] = {};
+      state.foods[id] = {};
       state.users[uid].familyId = id;
       commit();
       return id;
@@ -941,6 +982,71 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       const member = requireMember(familyId);
       if (rewardId !== null && !state.rewards[familyId]?.[rewardId]?.active) throw new AppError('보상을 찾을 수 없어요.');
       state.members[familyId][uid] = { ...member, goalRewardId: rewardId };
+      commit();
+    },
+
+    watchFoods(familyId, cb) {
+      return watch(
+        () =>
+          Object.values(state.foods[familyId] ?? {})
+            .filter((f) => f.active)
+            .map((f) => ({ ...f, wantedBy: [...f.wantedBy], eaten: [...f.eaten] })),
+        cb,
+      );
+    },
+
+    async createFood(familyId, input, byUid) {
+      requireSelf(byUid);
+      requireMember(familyId);
+      const clean = cleanFoodInput(input);
+      const active = Object.values(state.foods[familyId]).filter((f) => f.active);
+      if (findSameName(active, clean.name)) throw new AppError('이미 올라와 있는 메뉴예요.');
+      if (active.length >= MAX_FOODS) throw new AppError(`메뉴는 ${MAX_FOODS}개까지 올릴 수 있어요.`);
+      const id = newId('f');
+      state.foods[familyId][id] = { id, ...clean, addedBy: byUid, createdAt: Date.now(), wantedBy: [byUid], eaten: [], active: true };
+      commit();
+      return id;
+    },
+
+    async updateFood(familyId, foodId, input) {
+      const member = requireMember(familyId);
+      const stored = requireFood(familyId, foodId);
+      if (!canEditFood(stored, member.uid, member.role === 'parent')) throw new AppError('올린 사람과 부모만 고칠 수 있어요.');
+      const clean = cleanFoodInput(input);
+      const active = Object.values(state.foods[familyId]).filter((f) => f.active);
+      if (findSameName(active, clean.name, foodId)) throw new AppError('같은 이름의 메뉴가 이미 있어요.');
+      state.foods[familyId][foodId] = { ...stored, ...clean };
+      commit();
+    },
+
+    async archiveFood(familyId, foodId) {
+      const member = requireMember(familyId);
+      const stored = requireFood(familyId, foodId);
+      if (!canEditFood(stored, member.uid, member.role === 'parent')) throw new AppError('올린 사람과 부모만 지울 수 있어요.');
+      state.foods[familyId][foodId] = { ...stored, active: false };
+      commit();
+    },
+
+    async setFoodWant(familyId, foodId, uid, want) {
+      requireSelf(uid);
+      requireMember(familyId);
+      const stored = requireFood(familyId, foodId);
+      const others = stored.wantedBy.filter((id) => id !== uid);
+      state.foods[familyId][foodId] = { ...stored, wantedBy: want ? [...others, uid] : others };
+      commit();
+    },
+
+    async addFoodEaten(familyId, foodId, day) {
+      requireMember(familyId);
+      const stored = requireFood(familyId, foodId);
+      state.foods[familyId][foodId] = { ...stored, eaten: withEaten(stored.eaten, day, dateKey()), wantedBy: [] };
+      commit();
+    },
+
+    async removeFoodEaten(familyId, foodId, day) {
+      requireMember(familyId);
+      const stored = requireFood(familyId, foodId);
+      state.foods[familyId][foodId] = { ...stored, eaten: stored.eaten.filter((d) => d !== day) };
       commit();
     },
 

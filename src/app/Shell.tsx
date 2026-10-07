@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { HashRouter, MemoryRouter, NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { HashRouter, Link, MemoryRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { ApprovalsPage } from '../features/approvals/ApprovalsPage';
 import { FamilyPage } from '../features/family/FamilyPage';
+import { FoodPage } from '../features/food/FoodPage';
 import { LedgerPage } from '../features/ledger/LedgerPage';
+import { MorePage } from '../features/more/MorePage';
 import { QuestFormPage } from '../features/quests/QuestFormPage';
 import { QuestListPage } from '../features/quests/QuestListPage';
 import { TodayPage } from '../features/quests/TodayPage';
@@ -24,11 +26,17 @@ interface TabDef {
   label: string;
   icon: IconName;
   count?: number;
+  /** 이 탭에 딸린 다른 화면의 주소(그 화면에 있을 때도 탭이 켜진다) */
+  also?: string[];
 }
+
+/** 더보기 탭 안쪽에 있는 화면들 */
+const MORE_PATHS = ['/family', '/log', '/settings'];
 
 /**
  * 로그인 뒤의 화면 틀: 주소에 따라 화면을 바꾸고 아래에 탭을 둔다.
- * 새 기능(상점, 일정 등)은 여기에 Route 와 탭을 한 줄씩 추가하면 된다.
+ * 새 기능은 여기에 Route 를 추가하고, 자주 쓰면 탭에, 아니면 더보기(MorePage)에 한 줄을 더한다.
+ * 탭은 휴대폰에서 다섯 개까지만 둔다.
  */
 export function Shell() {
   const { isParent } = useSession();
@@ -39,14 +47,14 @@ export function Shell() {
         { to: '/approve', label: '승인', icon: 'check_inbox', count: pending.length + offersForParent.length + ordersForParent.length },
         { to: '/quests', label: '퀘스트', icon: 'quest' },
         { to: '/shop', label: '상점', icon: 'shop' },
-        { to: '/log', label: '기록', icon: 'log' },
-        { to: '/family', label: '가족', icon: 'home' },
+        { to: '/food', label: '뭐먹지', icon: 'food' },
+        { to: '/more', label: '더보기', icon: 'more', also: MORE_PATHS },
       ]
     : [
         { to: '/quests', label: '퀘스트', icon: 'quest' },
         { to: '/shop', label: '상점', icon: 'shop' },
-        { to: '/log', label: '기록', icon: 'log' },
-        { to: '/family', label: '가족', icon: 'home' },
+        { to: '/food', label: '뭐먹지', icon: 'food' },
+        { to: '/more', label: '더보기', icon: 'more', also: MORE_PATHS },
       ];
 
   return (
@@ -69,14 +77,30 @@ export function Shell() {
             <Route path="/shop" element={<ShopPage />} />
           </>
         )}
+        <Route path="/food" element={<FoodPage />} />
+        <Route path="/more" element={<MorePage />} />
         <Route path="/log" element={<LedgerPage />} />
         <Route path="/family" element={<FamilyPage />} />
         <Route path="*" element={<Navigate to={tabs[0].to} replace />} />
       </Routes>
 
-      <nav className="tabbar" aria-label="주요 메뉴">
-        {tabs.map((tab) => (
-          <NavLink key={tab.to} to={tab.to} className={({ isActive }) => (isActive ? 'tab active' : 'tab')}>
+      <TabBar tabs={tabs} />
+
+      <CoinCelebration />
+      <RewardCelebration />
+    </Router>
+  );
+}
+
+function TabBar({ tabs }: { tabs: TabDef[] }) {
+  const { pathname } = useLocation();
+  const under = (base: string) => pathname === base || pathname.startsWith(`${base}/`);
+  return (
+    <nav className="tabbar" aria-label="주요 메뉴">
+      {tabs.map((tab) => {
+        const active = under(tab.to) || (tab.also ?? []).some(under);
+        return (
+          <Link key={tab.to} to={tab.to} className={active ? 'tab active' : 'tab'} aria-current={active ? 'page' : undefined}>
             <Icon name={tab.icon} size={24} />
             <span>{tab.label}</span>
             {tab.count ? (
@@ -84,13 +108,10 @@ export function Shell() {
                 {tab.count}
               </span>
             ) : null}
-          </NavLink>
-        ))}
-      </nav>
-
-      <CoinCelebration />
-      <RewardCelebration />
-    </Router>
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
 

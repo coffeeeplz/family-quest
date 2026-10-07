@@ -542,6 +542,76 @@
    ".KYYYYYYYYK.",
    "..KKYYYYKK..",
    "....KKKK...."
+  ],
+  "food": [
+   "...K...K....",
+   "....K...K...",
+   "...K...K....",
+   "..KKKKKKKK..",
+   ".KWWWWWWWWK.",
+   "KKKKKKKKKKKK",
+   "KPPPPPPPPPPK",
+   "KPPWPPPPPPPK",
+   ".KPPPPPPPPK.",
+   "..KPPPPPPK..",
+   "...KKKKKK...",
+   "............"
+  ],
+  "fork": [
+   ".K.K.K...KK.",
+   ".K.K.K..KGK.",
+   ".K.K.K..KGK.",
+   ".KKKKK..KGK.",
+   "..KGK...KGK.",
+   "..KGK...KGK.",
+   "..KGK...KKK.",
+   "..KGK....K..",
+   "..KGK...KNK.",
+   "..KGK...KNK.",
+   "..KKK...KKK.",
+   "............"
+  ],
+  "delivery": [
+   "....KKKK....",
+   "...K....K...",
+   "..KKKKKKKK..",
+   ".KOOOOOOOOK.",
+   ".KOOOOOOOOK.",
+   ".KOOYYYYOOK.",
+   ".KOOYOOYOOK.",
+   ".KOOYYYYOOK.",
+   ".KOOOOOOOOK.",
+   ".KOOOOOOOOK.",
+   ".KKKKKKKKKK.",
+   "............"
+  ],
+  "dice": [
+   "............",
+   ".KKKKKKKKKK.",
+   ".KWWWWWWWWK.",
+   ".KWKKWWWWWK.",
+   ".KWKKWWWWWK.",
+   ".KWWWKKWWWK.",
+   ".KWWWKKWWWK.",
+   ".KWWWWWKKWK.",
+   ".KWWWWWKKWK.",
+   ".KWWWWWWWWK.",
+   ".KKKKKKKKKK.",
+   "............"
+  ],
+  "more": [
+   "............",
+   ".KKKK..KKKK.",
+   ".KPPK..KMMK.",
+   ".KPPK..KMMK.",
+   ".KKKK..KKKK.",
+   "............",
+   "............",
+   ".KKKK..KKKK.",
+   ".KYYK..KBBK.",
+   ".KYYK..KBBK.",
+   ".KKKK..KKKK.",
+   "............"
   ]
  }
 }
