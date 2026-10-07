@@ -1,0 +1,66 @@
+/* 색, 글꼴, 치수는 모두 여기서 관리한다. 분위기를 바꾸려면 이 파일만 고치면 된다. */
+
+@font-face {
+  font-family: 'Galmuri11';
+  src: url('../assets/fonts/Galmuri11.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Galmuri11';
+  src: url('../assets/fonts/Galmuri11-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Galmuri14';
+  src: url('../assets/fonts/Galmuri14.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+
+:root {
+  /* 이 앱은 밝은 파스텔 한 가지 분위기만 쓴다(기기가 어두운 모드여도 밝게). */
+  color-scheme: light;
+
+  /* 아이폰 노치와 홈 막대를 피하는 여백 */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* 바탕과 글자 */
+  --bg: #f6f0ff;
+  --bg-outer: #e9defa;
+  --ink: #4b3b66;
+  --ink-soft: #6b5b8c;
+  --card: #ffffff;
+  --shade: #e2d6f7;
+
+  /* 파스텔 색 */
+  --pink: #ffb3d1;
+  --pink-deep: #f28db6;
+  --pink-strong: #ff8fb1;
+  --pink-soft: #ffe0ee;
+  --mint: #a6e8d0;
+  --mint-deep: #7fd4b6;
+  --mint-soft: #e3f8f0;
+  --yellow: #ffe38a;
+  --yellow-soft: #fffbea;
+  --coin-bg: #fff3c4;
+  --sky: #a9d4ff;
+  --sky-soft: #e6f1ff;
+  --gray: #ede6f7;
+  --red-soft: #ffe3e6;
+  --focus: #7a5cfa;
+
+  /* 도트 한 칸의 두께 */
+  --px: 3px;
+  --px-shadow: 0 calc(var(--px) * -1) 0 0 var(--ink), 0 var(--px) 0 0 var(--ink),
+    calc(var(--px) * -1) 0 0 0 var(--ink), var(--px) 0 0 0 var(--ink);
+
+  /* 글꼴: 제목과 작은 글씨는 Galmuri11(12px 배수), 본문은 Galmuri14(15px) */
+  --font-title: 'Galmuri11', 'Galmuri14', system-ui, sans-serif;
+  --font-body: 'Galmuri14', 'Galmuri11', system-ui, sans-serif;
+
+  --gutter: 20px;
+  --tap: 44px;
+}
