@@ -8,6 +8,8 @@ import type { IconName } from '../../lib/sprites';
 import { AvatarFrame, Icon } from '../../ui/Sprite';
 import { Button, CoinInline, CoinPill, Empty, Sheet } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
+import { CheckinCard } from '../location/CheckinCard';
+import { recordAuto } from '../location/auto';
 import { MyOfferCard } from '../negotiation/MyOfferCard';
 import { GoalCard } from '../shop/GoalCard';
 import { AddTaskSheet } from './AddTaskSheet';
@@ -47,7 +49,10 @@ export function TodayPage() {
     void run(
       () => backend.submitRun(family.id, quest, item.runDay, me.uid, item.late),
       '완료를 알렸어요. 확인을 기다려요!',
-    );
+    ).then((ok) => {
+      // 퀘스트를 끝낸 곳도 함께 남긴다(위치 권한을 허용해 둔 경우에만).
+      if (ok) void recordAuto(backend, family.id, me.uid, 'quest');
+    });
   }
 
   function cancel(item: BoardItem) {
@@ -167,6 +172,8 @@ export function TodayPage() {
       )}
 
       <GoalCard />
+
+      <CheckinCard />
 
       <Button tone="plain" big block onClick={() => setAdding(true)}>
         + 내 할 일 추가

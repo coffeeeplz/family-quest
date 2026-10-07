@@ -15,6 +15,8 @@
  *   families/{fid}/rewards/{id}          상점의 보상
  *   families/{fid}/orders/{id}           보상 신청
  *   families/{fid}/foods/{id}            뭐먹지의 메뉴
+ *   families/{fid}/locations/{id}        위치 기록(최근 며칠 치)
+ *   families/{fid}/places/{id}           이름을 붙여 둔 장소
  */
 import { FirebaseError, initializeApp } from 'firebase/app';
 import {
@@ -54,6 +56,7 @@ import {
 import { firebaseConfig } from '../config/firebase';
 import { INVITE_TTL_MS, isInviteCodeShape, newInviteCode, normalizeInviteCode } from '../domain/invites';
 import { MAX_EATEN, categoryOf, cleanFoodInput, withEaten } from '../domain/foods';
+import { cleanFix, cleanPlaceInput, planCheckin } from '../domain/location';
 import { cleanFamilyName, cleanProfile } from '../domain/profile';
 import { MAX_OFFER_NOTE, canCounter, cleanOfferAmount, cleanProposalInput, turnOf } from '../domain/proposals';
 import { cleanPresetInput, cleanQuestInput, runId } from '../domain/quests';
@@ -66,7 +69,7 @@ import {
   normalizeSettings,
 } from '../domain/settings';
 import { buyBlockReason, cleanRewardInput } from '../domain/shop';
-import { dateKey, weekStart } from '../lib/dates';
+import { dateKey, dayNumber, weekStart } from '../lib/dates';
 import {
   AppError,
   type Backend,
@@ -75,9 +78,11 @@ import {
   type Food,
   type Invite,
   type LedgerEntry,
+  type LocationRecord,
   type Member,
   type Offer,
   type Order,
+  type Place,
   type Preset,
   type Proposal,
   type Quest,
@@ -176,6 +181,8 @@ export function createFirebaseBackend(): Backend {
   const rewardsCol = (fid: string) => collection(db, 'families', fid, 'rewards');
   const ordersCol = (fid: string) => collection(db, 'families', fid, 'orders');
   const foodsCol = (fid: string) => collection(db, 'families', fid, 'foods');
+  const locationsCol = (fid: string) => collection(db, 'families', fid, 'locations');
+  const placesCol = (fid: string) => collection(db, 'families', fid, 'places');
 
   const onListenError = (what: string) => (error: Error) => console.error(`[${what}]`, error);
 
@@ -277,6 +284,31 @@ export function createFirebaseBackend(): Backend {
     joinedAt: d.joinedAt ?? 0,
     streak: d.streak ?? null,
     goalRewardId: d.goalRewardId ?? null,
+    checkin:
+      d.checkin && Number.isInteger(d.checkin.dayNum) && Number.isInteger(d.checkin.count)
+        ? { dayNum: d.checkin.dayNum, count: d.checkin.count }
+        : null,
+  });
+
+  const toLocation = (id: string, d: DocumentData): LocationRecord => ({
+    id,
+    uid: d.uid,
+    lat: d.lat,
+    lng: d.lng,
+    accuracy: d.accuracy ?? 0,
+    at: d.at ?? 0,
+    trigger: d.trigger === 'open' || d.trigger === 'quest' ? d.trigger : 'button',
+    coins: d.coins ?? 0,
+  });
+
+  const toPlace = (id: string, d: DocumentData): Place => ({
+    id,
+    name: d.name,
+    lat: d.lat,
+    lng: d.lng,
+    radius: d.radius ?? 150,
+    createdBy: d.createdBy,
+    createdAt: d.createdAt ?? 0,
   });
 
   const toFamily = (id: string, d: DocumentData): Family => ({
@@ -932,6 +964,98 @@ export function createFirebaseBackend(): Backend {
     removeFoodEaten: (familyId, foodId, day) =>
       guard(async () => {
         await updateDoc(doc(foodsCol(familyId), foodId), { eaten: arrayRemove(day) });
+      }),
+
+    watchLocations(familyId, sinceMs, cb, onError) {
+      return onSnapshot(
+        query(locationsCol(familyId), where('at', '>=', sinceMs), orderBy('at', 'desc'), limit(200)),
+        (snap) => cb(snap.docs.map((s) => toLocation(s.id, s.data()))),
+        (error) => {
+          console.error('[locations]', error);
+          onError?.();
+        },
+      );
+    },
+
+    shareLocation: (familyId, uid, fix, trigger) =>
+      guard(async () => {
+        const clean = cleanFix(fix);
+        const locRef = doc(locationsCol(familyId));
+        const record = { uid, ...clean, at: Date.now(), trigger };
+        if (trigger === 'button') {
+          try {
+            // 위치 기록, 장부, 잔액을 한 묶음으로 쓴다. 금액과 하루 횟수는 서버 규칙이 다시 검사한다.
+            return await runTransaction(db, async (tx) => {
+              const family = await tx.get(familyRef(familyId));
+              const member = await tx.get(memberRef(familyId, uid));
+              if (!member.exists()) throw new AppError('이 가족의 구성원이 아니에요.');
+              const settings = normalizeSettings(family.data()?.settings);
+              const plan = planCheckin(uid, toMember(uid, member.data()).checkin, settings, dayNumber());
+              tx.set(locRef, { ...record, coins: plan?.coins ?? 0 });
+              if (plan) {
+                const entry: Omit<LedgerEntry, 'id'> = {
+                  uid,
+                  amount: plan.coins,
+                  type: 'checkin',
+                  refId: locRef.id,
+                  memo: '위치 공유',
+                  note: '',
+                  by: uid,
+                  at: record.at,
+                };
+                tx.set(doc(ledgerCol(familyId), plan.ledgerId), entry);
+                tx.update(memberRef(familyId, uid), {
+                  coins: increment(plan.coins),
+                  checkin: { dayNum: plan.dayNum, count: plan.count },
+                });
+              }
+              return { coins: plan?.coins ?? 0 };
+            });
+          } catch (error) {
+            // 코인 규칙에서 막혔다면(설정이 방금 바뀌었거나 규칙이 아직 옛것) 위치만이라도 남긴다.
+            if (!isDenied(error)) throw error;
+          }
+        }
+        try {
+          await setDoc(locRef, { ...record, coins: 0 });
+        } catch (error) {
+          if (isDenied(error)) throw new AppError('위치를 저장하지 못했어요. 부모님께 Firebase 규칙을 새로 게시했는지 물어봐 주세요.');
+          throw error;
+        }
+        return { coins: 0 };
+      }),
+
+    pruneLocations: (familyId, beforeMs) =>
+      guard(async () => {
+        const old = await getDocs(query(locationsCol(familyId), where('at', '<', beforeMs), limit(200)));
+        if (old.empty) return;
+        const batch = writeBatch(db);
+        old.docs.forEach((s) => batch.delete(s.ref));
+        await batch.commit();
+      }),
+
+    watchPlaces(familyId, cb, onError) {
+      return onSnapshot(
+        placesCol(familyId),
+        (snap) => cb(snap.docs.map((s) => toPlace(s.id, s.data())).sort((a, b) => a.name.localeCompare(b.name, 'ko'))),
+        (error) => {
+          console.error('[places]', error);
+          onError?.();
+        },
+      );
+    },
+
+    // 장소 수의 상한은 목록을 들고 있는 화면이 먼저 확인한다.
+    createPlace: (familyId, input, byUid) =>
+      guard(async () => {
+        const ref = doc(placesCol(familyId));
+        await setDoc(ref, { ...cleanPlaceInput(input), createdBy: byUid, createdAt: Date.now() });
+        return ref.id;
+      }),
+
+    deletePlace: (familyId, placeId) =>
+      guard(async () => {
+        await deleteDoc(doc(placesCol(familyId), placeId));
       }),
 
     giveCoins: (familyId, toUid, amount, note, byUid) =>

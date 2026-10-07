@@ -7,6 +7,8 @@ rules_version = '2';
 // - 보상을 사는 코인은 부모가 승인할 때만 빠지고, 잔액은 0 아래로 내려갈 수 없다.
 // - 뭐먹지의 메뉴는 가족 누구나 올리고, 먹고 싶다는 표시와 먹은 날 기록도 누구나 할 수 있다.
 //   내용을 고치거나 지우는 것은 올린 사람과 부모만 할 수 있다.
+// - 위치 기록은 본인 것만 남길 수 있고 가족만 볼 수 있다. 장소 이름은 부모가 관리한다.
+// - 위치 공유 코인은 예외적으로 본인이 직접 받지만, 가족 설정에 정해진 금액만, 하루에 정해진 횟수까지만 받을 수 있다.
 // - 자녀가 퀘스트를 만들 수 있는 경우는 두 가지뿐이다:
 //     부모가 낸 금액을 수락했을 때, 부모가 허용한 "자주 쓰는 퀘스트" 버튼을 눌렀을 때.
 service cloud.firestore {
@@ -166,6 +168,57 @@ service cloud.firestore {
         );
     }
 
+    function familyPath(fid) {
+      return /databases/$(database)/documents/families/$(fid);
+    }
+
+    // 위치 공유 코인의 장부 기록 id: 같은 날 같은 순번으로는 한 번만 만들 수 있다.
+    function checkinLedgerId(checkin) {
+      return 'checkin_' + request.auth.uid + '_' + string(checkin.dayNum) + '_' + string(checkin.count);
+    }
+
+    // 위치 공유 코인을 받을 때 내 구성원 정보의 변화:
+    // 코인은 설정된 금액만큼만 늘고, 오늘의 횟수가 1 늘며, 하루 한도를 넘지 못한다.
+    // 날짜 번호는 서버 시각의 날짜와 하루 넘게 차이 날 수 없고, 지난 날짜로 되돌릴 수 없다.
+    // (설정을 한 번도 저장하지 않은 가족의 기본값은 1코인, 하루 3번이다.)
+    function validCheckinUpdate(fid) {
+      let before = resource.data;
+      let after = request.resource.data;
+      let settings = get(familyPath(fid)).data.settings;
+      let amount = settings.get('checkinCoins', 1);
+      let perDay = settings.get('checkinPerDay', 3);
+      let today = request.time.toMillis() / 86400000;
+      let prev = before.get('checkin', {'dayNum': 0, 'count': 0});
+      let lid = checkinLedgerId(after.checkin);
+      return after.diff(before).affectedKeys().hasOnly(['coins', 'checkin'])
+        && amount is int && amount > 0
+        && after.checkin.dayNum is int
+        && after.checkin.dayNum >= today - 1
+        && after.checkin.dayNum <= today + 1
+        && after.checkin.dayNum >= prev.dayNum
+        && after.checkin.count == (after.checkin.dayNum == prev.dayNum ? prev.count + 1 : 1)
+        && after.checkin.count <= perDay
+        && after.coins == before.coins + amount
+        && existsAfter(/databases/$(database)/documents/families/$(fid)/ledger/$(lid));
+    }
+
+    // 위치 공유 코인의 장부 기록: 같은 묶음에서 바뀐 내 구성원 정보와 금액, 순번이 맞아야 한다.
+    function validCheckinPayout(fid, lid) {
+      let d = request.resource.data;
+      let me = getAfter(memberPath(fid, request.auth.uid)).data;
+      let settings = get(familyPath(fid)).data.settings;
+      return d.type == 'checkin'
+        && d.uid == request.auth.uid
+        && d.by == request.auth.uid
+        && d.amount == settings.get('checkinCoins', 1)
+        && lid == checkinLedgerId(me.checkin);
+    }
+
+    function validPoint(d) {
+      return d.lat is number && d.lat >= -90 && d.lat <= 90
+        && d.lng is number && d.lng >= -180 && d.lng <= 180;
+    }
+
     // 뭐먹지 메뉴의 모양
     function validFood() {
       let d = request.resource.data;
@@ -215,10 +268,11 @@ service cloud.firestore {
           );
 
         // 본인은 이름, 캐릭터, 목표 보상만. 부모는 코인과 연속 달성 기록만 바꿀 수 있다.
-        // 코인은 0 아래로 내려갈 수 없다.
+        // 코인은 0 아래로 내려갈 수 없다. 본인이 코인을 늘릴 수 있는 경우는 위치 공유 코인뿐이다.
         allow update: if isMember(fid) && (
           (uid == request.auth.uid
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatar', 'goalRewardId']))
+          || (uid == request.auth.uid && validCheckinUpdate(fid))
           || (isParent(fid)
             && request.resource.data.coins >= 0
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['coins', 'streak']))
@@ -288,6 +342,29 @@ service cloud.firestore {
           );
       }
 
+      match /locations/{locId} {
+        allow read: if isMember(fid);
+        // 자기 위치만 남길 수 있다.
+        allow create: if isMember(fid)
+          && request.resource.data.uid == request.auth.uid
+          && validPoint(request.resource.data)
+          && request.resource.data.at is int
+          && request.resource.data.trigger in ['button', 'open', 'quest'];
+        // 오래된 기록 정리는 부모가, 자기 기록은 본인도 지울 수 있다.
+        allow delete: if isMember(fid) && (resource.data.uid == request.auth.uid || isParent(fid));
+      }
+
+      match /places/{placeId} {
+        allow read: if isMember(fid);
+        allow create, update: if isParent(fid)
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 20
+          && validPoint(request.resource.data)
+          && request.resource.data.radius is int
+          && request.resource.data.radius >= 50 && request.resource.data.radius <= 1000;
+        allow delete: if isParent(fid);
+      }
+
       match /proposals/{pid} {
         allow read: if isMember(fid);
         allow create: if isMember(fid) && validNewProposal();
@@ -321,11 +398,15 @@ service cloud.firestore {
       match /ledger/{lid} {
         allow read: if isMember(fid);
         // 장부는 추가만 가능하다(수정, 삭제 불가). 같은 수행 기록으로 두 번 지급할 수 없다.
-        allow create: if isParent(fid)
-          && request.resource.data.by == request.auth.uid
-          && request.resource.data.amount is int
-          && (request.resource.data.type != 'quest' || validQuestPayout(fid, lid))
-          && (request.resource.data.type != 'reward' || validRewardPayout(fid, lid));
+        // 부모가 아닌 사람이 남길 수 있는 기록은 위치 공유 코인뿐이다.
+        allow create: if request.resource.data.amount is int && (
+          (isParent(fid)
+            && request.resource.data.by == request.auth.uid
+            && request.resource.data.type != 'checkin'
+            && (request.resource.data.type != 'quest' || validQuestPayout(fid, lid))
+            && (request.resource.data.type != 'reward' || validRewardPayout(fid, lid)))
+          || (isMember(fid) && validCheckinPayout(fid, lid))
+        );
       }
     }
   }

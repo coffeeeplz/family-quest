@@ -26,7 +26,10 @@ const check = (name, ok, detail = '') => {
 };
 
 const browser = await chromium.launch();
-const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, locale: 'ko-KR', timezoneId: 'Asia/Seoul', serviceWorkers: 'block' });
+// 위치 권한을 허용한 기기로 시작한다(체험 데이터의 '학교' 근처).
+const SCHOOL = { latitude: 35.2476, longitude: 129.2192 };
+const ELSEWHERE = { latitude: 35.262, longitude: 129.241 };
+const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, locale: 'ko-KR', timezoneId: 'Asia/Seoul', serviceWorkers: 'block', geolocation: SCHOOL, permissions: ['geolocation'] });
 const watch = (page, tag) => {
   page.on('console', (m) => m.type() === 'error' && problems.push(`[${tag}] console: ${m.text()}`));
   page.on('pageerror', (e) => problems.push(`[${tag}] pageerror: ${e.message}`));
@@ -34,7 +37,7 @@ const watch = (page, tag) => {
 const shot = (page, name, fullPage = false) => page.screenshot({ path: `${OUT}/${name}.png`, fullPage });
 const loginAs = (page, label) => page.getByRole('button', { name: new RegExp('^' + label) }).click();
 const switchUser = async (page, label) => {
-  await page.getByRole('link', { name: '더보기' }).click();
+  await page.locator('.tabbar').getByRole('link', { name: '더보기' }).click();
   await page.getByRole('button', { name: '다른 사람으로 들어가 보기' }).click();
   await loginAs(page, label);
 };
@@ -56,7 +59,7 @@ const toast = (page, text) => page.locator('.toast', { hasText: text }).waitFor(
 const overflow = (page) => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 // 더보기 탭 안쪽 화면으로 가기
 const more = async (page, item) => {
-  await page.getByRole('link', { name: '더보기' }).click();
+  await page.locator('.tabbar').getByRole('link', { name: '더보기' }).click();
   await page.getByRole('navigation', { name: '더보기 메뉴' }).getByRole('link', { name: new RegExp('^' + item) }).click();
 };
 // 손가락으로 미는 동작을 흉내 낸다(화면 가운데에서 dx 만큼).
@@ -281,7 +284,7 @@ try {
   await dad.getByRole('heading', { name: '가족 설정' }).waitFor();
   check('안쪽 화면에서도 더보기 탭이 켜져 있음', (await dad.locator('.tab.active').innerText()).includes('더보기'));
   await shot(dad, '13-settings', true);
-  await dad.getByRole('radio', { name: '1번' }).click();
+  await region(dad, '코인 협상').getByRole('radio', { name: '1번' }).click();
   await dad.getByLabel('새 한마디').fill('스스로 해서 멋져!');
   await dad.getByRole('button', { name: '추가', exact: true }).click();
   await dad.getByRole('button', { name: '참 잘했어요! 지우기' }).click();
@@ -528,6 +531,84 @@ try {
   check('지운 메뉴는 모두의 화면에서 사라짐', (await dad.getByRole('button', { name: '아이스크림 자세히' }).count()) === 0);
   await shot(dad, '33-food-parent', true);
 
+  // ── 8-3. 위치: 지금 여기예요, 코인 한도, 자녀 현황, 장소 이름, 설정 ─────────
+  await kid.getByRole('link', { name: '퀘스트' }).click();
+  const checkin = region(kid, '위치 알리기');
+  await checkin.waitFor();
+  await kid.locator('.toast').waitFor({ state: 'detached', timeout: 6000 }).catch(() => {});
+  const startCoins = await coins(kid);
+  check('알리기 카드: +1코인, 오늘 0/3번', await checkin.getByText('누르면 +1코인 · 오늘 0/3번 받음').isVisible());
+  check('권한을 허용한 기기에는 위치 공유 켜짐 표시', await checkin.getByText('위치 공유 켜짐', { exact: false }).isVisible());
+  check('앱을 열 때 자동으로 남은 기록이 보임', await checkin.getByText(/마지막으로 알린 때: .*학교 근처/).isVisible());
+  await shot(kid, '37-kid-checkin', false);
+  await checkin.getByRole('button', { name: '알리기' }).click();
+  await toast(kid, '위치를 알렸어요!');
+  await kid.locator('.celebrate').getByText('위치 공유 +1').waitFor({ timeout: 5000 });
+  await expectCoins(kid, startCoins + 1, '위치를 알리면 바로 +1코인');
+  await checkin.getByText('오늘 1/3번 받음', { exact: false }).waitFor();
+  for (const n of [2, 3]) {
+    await checkin.getByRole('button', { name: '알리기' }).click();
+    await expectCoins(kid, startCoins + n, `${n}번째 공유 +1`);
+  }
+  await checkin.getByText('오늘 코인 3번을 다 받았어요').waitFor();
+  await kid.locator('.toast').waitFor({ state: 'detached', timeout: 6000 }).catch(() => {});
+  await context.setGeolocation(ELSEWHERE);
+  await checkin.getByRole('button', { name: '알리기' }).click();
+  await toast(kid, '오늘 코인은 다 받았어요');
+  await expectCoins(kid, startCoins + 3, '하루 3번을 넘기면 코인은 그대로');
+
+  // 부모: 자녀 현황의 위치
+  await dad.getByRole('link', { name: '승인' }).click();
+  await dad.getByRole('tab', { name: '딸 현황' }).click();
+  const where = region(dad, '위치');
+  await where.locator('article').getByText('등록한 장소가 아니에요').waitFor();
+  check('등록하지 않은 곳은 이름 없이 보이고 직접 알림으로 표시', await where.locator('article').getByText('방금 · 직접 알림').isVisible());
+  check('지도 링크에 좌표가 들어감', (await where.locator('article').getByRole('link', { name: '구글 지도' }).getAttribute('href')) === 'https://www.google.com/maps/search/?api=1&query=35.262,129.241');
+  check('패밀리 링크 바로가기', (await where.getByRole('link', { name: '패밀리 링크로 실시간 위치 보기' }).getAttribute('href')) === 'https://familylink.google.com/');
+  check('지난 기록에 장소 이름', await where.locator('.history-row').first().getByText('학교 근처').isVisible());
+  await where.getByRole('button', { name: '이름 붙이기' }).click();
+  await dad.getByRole('dialog').getByRole('button', { name: '장소 등록하기' }).click();
+  await toast(dad, '장소 이름을 적어 주세요');
+  await dad.getByRole('dialog').getByRole('button', { name: '할머니 댁' }).click();
+  await dad.getByRole('dialog').getByRole('radio', { name: '300m' }).click();
+  await shot(dad, '38-place-sheet');
+  await dad.getByRole('dialog').getByRole('button', { name: '장소 등록하기' }).click();
+  await where.locator('article').getByText('할머니 댁 근처').waitFor();
+  check('이름을 붙이면 그 이름으로 보이고 버튼은 사라짐', (await where.getByRole('button', { name: '이름 붙이기' }).count()) === 0);
+  await kid.getByText(/마지막으로 알린 때: .*할머니 댁 근처/).waitFor();
+  check('자녀 화면에도 장소 이름이 보임', true);
+  await dad.locator('.toast').waitFor({ state: 'detached', timeout: 6000 }).catch(() => {});
+  await where.scrollIntoViewIfNeeded();
+  await dad.evaluate(() => document.querySelector('.screen').scrollBy(0, -20));
+  await shot(dad, '39-parent-location');
+  check('위치 공유 코인이 자녀 현황의 최근 기록에', await region(dad, '최근 코인 기록').getByText('위치 공유').first().isVisible());
+
+  // 설정: 코인과 하루 횟수, 장소 관리
+  await more(dad, '가족 설정');
+  const checkinSet = region(dad, '위치 공유 코인');
+  await checkinSet.getByRole('button', { name: '5', exact: true }).click();
+  await checkinSet.getByRole('radio', { name: '5번' }).click();
+  await dad.getByRole('button', { name: '설정 저장하기' }).click();
+  await toast(dad, '설정을 저장했어요');
+  await checkin.getByText('누르면 +5코인 · 오늘 3/5번 받음').waitFor();
+  await checkin.getByRole('button', { name: '알리기' }).click();
+  await expectCoins(kid, startCoins + 8, '설정을 바꾸면 +5코인, 하루 5번까지');
+  const placeBox = region(dad, '장소');
+  check('설정의 장소 목록 4곳', (await placeBox.locator('.history-row').count()) === 4);
+  await placeBox.getByRole('button', { name: '할머니 댁 장소 지우기' }).click();
+  await placeBox.locator('.history-row', { hasText: '할머니 댁' }).waitFor({ state: 'detached' });
+  await dad.getByLabel('지금 내가 있는 곳을 등록하기').fill('공원');
+  await placeBox.getByRole('button', { name: '등록', exact: true }).click();
+  await placeBox.locator('.history-row', { hasText: '공원' }).waitFor();
+  check('장소 지우기와 지금 위치 등록', (await placeBox.locator('.history-row').count()) === 4);
+  await kid.getByText(/마지막으로 알린 때: .*공원 근처/).waitFor();
+  check('새로 등록한 장소가 바로 반영', true);
+  await checkinSet.scrollIntoViewIfNeeded();
+  await shot(dad, '40-settings-location');
+  await placeBox.scrollIntoViewIfNeeded();
+  await shot(dad, '41-settings-places');
+  await context.setGeolocation(SCHOOL);
+
   // ── 9. 초대코드로 새 자녀 가입 ───────────────────────────────────────────
   await more(dad, '가족 구성원');
   await dad.getByRole('button', { name: '가족 초대하기' }).click();
@@ -575,6 +656,12 @@ try {
   await sp.screenshot({ path: `${OUT}/16-small-kid.png`, fullPage: true });
   const inner = () => sp.evaluate(() => { const s = document.querySelector('.screen'); return s.scrollWidth - s.clientWidth; });
   check('320px 자녀 홈 가로 넘침 없음', (await overflow(sp)) <= 0 && (await inner()) <= 0);
+  // 위치 권한이 없는 기기: 자동 기록은 없고, 누르면 안내가 나온다.
+  check('권한이 없으면 자동 기록 없음', (await sp.getByText(/마지막으로 알린 때: 방금/).count()) === 0);
+  await region(sp, '위치 알리기').getByRole('button', { name: '알리기' }).click();
+  await sp.locator('.toast', { hasText: '위치 권한이 꺼져 있어요' }).waitFor({ timeout: 20000 });
+  check('위치 권한이 없으면 안내', (await sp.locator('.coin-pill span').innerText()) === '30');
+  await sp.locator('.toast').waitFor({ state: 'detached', timeout: 6000 }).catch(() => {});
   await sp.getByRole('button', { name: '+ 내 할 일 추가' }).click();
   await sp.getByRole('radio', { name: '코인 제안하기' }).click();
   await sp.screenshot({ path: `${OUT}/17-small-add.png` });

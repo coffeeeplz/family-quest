@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Food, Member, Order, Proposal, Quest, Reward, Run } from '../src/backend/types';
+import type { Food, Member, Order, Place, Proposal, Quest, Reward, Run } from '../src/backend/types';
 import {
   MAX_EATEN,
   canEditFood,
@@ -13,12 +13,24 @@ import {
   withEaten,
 } from '../src/domain/foods';
 import { isInviteCodeShape, newInviteCode, normalizeInviteCode } from '../src/domain/invites';
+import {
+  accuracyLabel,
+  checkinCountToday,
+  cleanFix,
+  cleanPlaceInput,
+  distanceMeters,
+  mapLinks,
+  nearestPlace,
+  placeLabel,
+  planCheckin,
+  timeAgo,
+} from '../src/domain/location';
 import { canCounter, cleanProposalInput, turnOf } from '../src/domain/proposals';
 import { buildBoard, cleanQuestInput, relativeDay, repeatLabel, scheduledOn, todayProgress } from '../src/domain/quests';
 import { DEFAULT_SETTINGS, cleanSettings, halfReward, normalizeSettings } from '../src/domain/settings';
 import { currentStreak, planStreak } from '../src/domain/streak';
 import { availableCoins, buyBlockReason, buyState, cleanRewardInput, limitUsage, reservedCoins } from '../src/domain/shop';
-import { addDays, dateKey, formatDay, formatTime, isDateKey, parseDateKey, weekStart, weekdayOf } from '../src/lib/dates';
+import { addDays, dateKey, dayNumber, formatDay, formatTime, isDateKey, parseDateKey, weekStart, weekdayOf } from '../src/lib/dates';
 
 const TODAY = '2026-10-06'; // 화요일
 const at = (day: string) => parseDateKey(day).getTime() + 12 * 3_600_000;
@@ -82,6 +94,7 @@ const kid = (streak: Member['streak'] = null): Member => ({
   joinedAt: 0,
   streak,
   goalRewardId: null,
+  checkin: null,
 });
 
 describe('dates', () => {
@@ -521,5 +534,87 @@ describe('뭐먹지', () => {
     expect(canEditFood(food({ addedBy: 'kid' }), 'kid', false)).toBe(true);
     expect(canEditFood(food({ addedBy: 'kid' }), 'other', false)).toBe(false);
     expect(canEditFood(food({ addedBy: 'kid' }), 'dad', true)).toBe(true);
+  });
+});
+
+describe('위치', () => {
+  const place = (over: Partial<Place>): Place => ({ id: 'p1', name: '학교', lat: 35.2475, lng: 129.219, radius: 150, createdBy: 'dad', createdAt: 0, ...over });
+
+  it('numbers local days so the next local midnight is exactly one more', () => {
+    const noon = new Date(2026, 9, 6, 12, 0, 0);
+    expect(dayNumber(new Date(2026, 9, 6, 0, 0, 1))).toBe(dayNumber(noon));
+    expect(dayNumber(new Date(2026, 9, 6, 23, 59, 59))).toBe(dayNumber(noon));
+    expect(dayNumber(new Date(2026, 9, 7, 0, 0, 1))).toBe(dayNumber(noon) + 1);
+    // 서버(UTC) 날짜 번호와는 하루 넘게 차이 나지 않는다.
+    expect(Math.abs(dayNumber(noon) - Math.floor(noon.getTime() / 86_400_000))).toBeLessThanOrEqual(1);
+  });
+
+  it('validates and rounds a position', () => {
+    expect(cleanFix({ lat: 35.24751234567, lng: 129.21900000049, accuracy: 23.6 })).toEqual({ lat: 35.247512, lng: 129.219, accuracy: 24 });
+    expect(cleanFix({ lat: 0, lng: 0, accuracy: Number.NaN }).accuracy).toBe(0);
+    expect(() => cleanFix({ lat: 91, lng: 0, accuracy: 1 })).toThrow('위치를 알 수 없어요');
+    expect(() => cleanFix({ lat: Number.NaN, lng: 0, accuracy: 1 })).toThrow('위치를 알 수 없어요');
+  });
+
+  it('measures distance and finds the nearest registered place', () => {
+    const school = place({});
+    const academy = place({ id: 'p2', name: '학원', lat: 35.2402, lng: 129.2225 });
+    // 위도 0.001도는 약 111m
+    expect(distanceMeters({ lat: 35, lng: 129 }, { lat: 35.001, lng: 129 })).toBeGreaterThan(110);
+    expect(distanceMeters({ lat: 35, lng: 129 }, { lat: 35.001, lng: 129 })).toBeLessThan(112);
+    expect(distanceMeters(school, school)).toBe(0);
+    expect(nearestPlace([school, academy], { lat: 35.2476, lng: 129.2192 })?.name).toBe('학교');
+    expect(placeLabel([school, academy], { lat: 35.2403, lng: 129.2224 })).toBe('학원 근처');
+    expect(placeLabel([school, academy], { lat: 35.3, lng: 129.3 })).toBeNull();
+    // 범위가 겹치면 더 가까운 곳
+    const wide = place({ id: 'p3', name: '동네', lat: 35.248, lng: 129.2195, radius: 1000 });
+    expect(nearestPlace([wide, school], { lat: 35.2475, lng: 129.219 })?.name).toBe('학교');
+  });
+
+  it('plans check-in coins within the daily limit', () => {
+    const settings = { ...DEFAULT_SETTINGS };
+    expect(settings.checkinCoins).toBe(1);
+    expect(settings.checkinPerDay).toBe(3);
+    expect(planCheckin('kid', null, settings, 100)).toEqual({ coins: 1, dayNum: 100, count: 1, ledgerId: 'checkin_kid_100_1' });
+    expect(planCheckin('kid', { dayNum: 100, count: 2 }, settings, 100)).toMatchObject({ count: 3, ledgerId: 'checkin_kid_100_3' });
+    expect(planCheckin('kid', { dayNum: 100, count: 3 }, settings, 100)).toBeNull(); // 오늘 한도를 다 씀
+    expect(planCheckin('kid', { dayNum: 100, count: 3 }, settings, 101)).toMatchObject({ dayNum: 101, count: 1 }); // 다음 날은 다시 1번부터
+    expect(planCheckin('kid', { dayNum: 102, count: 1 }, settings, 101)).toBeNull(); // 시계가 뒤로 간 경우
+    expect(planCheckin('kid', null, { ...settings, checkinCoins: 0 }, 100)).toBeNull(); // 코인을 꺼 둔 경우
+    expect(planCheckin('kid', { dayNum: 100, count: 3 }, { ...settings, checkinCoins: 5, checkinPerDay: 5 }, 100)).toMatchObject({ coins: 5, count: 4 });
+    expect(checkinCountToday({ dayNum: 100, count: 2 }, 100)).toBe(2);
+    expect(checkinCountToday({ dayNum: 99, count: 2 }, 100)).toBe(0);
+    expect(checkinCountToday(null, 100)).toBe(0);
+  });
+
+  it('keeps check-in settings within range', () => {
+    expect(normalizeSettings({})).toMatchObject({ checkinCoins: 1, checkinPerDay: 3 });
+    expect(normalizeSettings({ checkinCoins: 0, checkinPerDay: 99 })).toMatchObject({ checkinCoins: 0, checkinPerDay: 10 });
+    expect(() => cleanSettings({ ...DEFAULT_SETTINGS, checkinCoins: -1 })).toThrow('위치 공유 코인');
+    expect(() => cleanSettings({ ...DEFAULT_SETTINGS, checkinPerDay: 0 })).toThrow('횟수');
+    expect(cleanSettings({ ...DEFAULT_SETTINGS, checkinCoins: 0, checkinPerDay: 5 })).toMatchObject({ checkinCoins: 0, checkinPerDay: 5 });
+  });
+
+  it('labels accuracy, elapsed time and map links', () => {
+    expect(accuracyLabel(0)).toBe('');
+    expect(accuracyLabel(4)).toBe('오차 약 10m');
+    expect(accuracyLabel(34)).toBe('오차 약 30m');
+    expect(accuracyLabel(1240)).toBe('오차 약 1.2km');
+    const now = 1_000_000_000;
+    expect(timeAgo(now - 20_000, now)).toBe('방금');
+    expect(timeAgo(now - 12 * 60_000, now)).toBe('12분 전');
+    expect(timeAgo(now - 3 * 3_600_000, now)).toBe('3시간 전');
+    expect(timeAgo(now - 25 * 3_600_000, now)).toBeNull();
+    const links = mapLinks({ lat: 35.24, lng: 129.21 }, '딸');
+    expect(links.google).toBe('https://www.google.com/maps/search/?api=1&query=35.24,129.21');
+    expect(links.kakao).toBe('https://map.kakao.com/link/map/%EB%94%B8,35.24,129.21');
+  });
+
+  it('validates place input', () => {
+    const base = { name: ' 할머니  댁 ', lat: 35.1, lng: 129.1, radius: 150 };
+    expect(cleanPlaceInput(base)).toEqual({ name: '할머니 댁', lat: 35.1, lng: 129.1, radius: 150 });
+    expect(() => cleanPlaceInput({ ...base, name: '' })).toThrow('장소 이름');
+    expect(() => cleanPlaceInput({ ...base, radius: 10 })).toThrow('범위');
+    expect(() => cleanPlaceInput({ ...base, lat: 200 })).toThrow('위치를 알 수 없어요');
   });
 });

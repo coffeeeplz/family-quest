@@ -2,9 +2,12 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useFamilyData } from '../../app/familyData';
 import { useBackend, useSession } from '../../app/session';
-import type { FamilySettings } from '../../backend/types';
+import { AppError, type FamilySettings } from '../../backend/types';
+import { MAX_PLACES, MAX_PLACE_NAME, DEFAULT_PLACE_RADIUS } from '../../domain/location';
 import { MAX_TITLE } from '../../domain/quests';
 import {
+  CHECKIN_PER_DAY_CHOICES,
+  MAX_CHECKIN_COINS,
   MAX_PRAISES,
   MAX_PRAISE_LENGTH,
   MAX_PRESETS,
@@ -12,15 +15,17 @@ import {
   ROUND_CHOICES,
   STREAK_DAY_CHOICES,
 } from '../../domain/settings';
+import { currentPosition } from '../../lib/geo';
 import { CoinInput, parseCoins } from '../../ui/CoinInput';
 import { Icon } from '../../ui/Sprite';
 import { BackLink, Button, CoinInline, Field, FieldGroup } from '../../ui/kit';
 import { errorText, useAction, useToast } from '../../ui/toast';
+import { useLocations } from '../location/useLocation';
 
 /** 부모용 가족 설정: 코인 협상, 연속 달성 보너스, 칭찬 한마디, 자주 쓰는 퀘스트 버튼 */
 export function SettingsPage() {
   const backend = useBackend();
-  const { family } = useSession();
+  const { family, me } = useSession();
   const { presets } = useFamilyData();
   const navigate = useNavigate();
   const notify = useToast();
@@ -32,6 +37,8 @@ export function SettingsPage() {
   const [streakOn, setStreakOn] = useState(initial.streakOn);
   const [streakDays, setStreakDays] = useState(initial.streakDays);
   const [streakBonus, setStreakBonus] = useState(String(initial.streakBonus));
+  const [checkinCoins, setCheckinCoins] = useState(String(initial.checkinCoins));
+  const [checkinPerDay, setCheckinPerDay] = useState(initial.checkinPerDay);
   const [praises, setPraises] = useState(initial.praises);
   const [newPraise, setNewPraise] = useState('');
   const [error, setError] = useState('');
@@ -39,6 +46,9 @@ export function SettingsPage() {
   const [presetTitle, setPresetTitle] = useState('');
   const [presetReward, setPresetReward] = useState('10');
   const [presetForKid, setPresetForKid] = useState(true);
+
+  const { places } = useLocations();
+  const [placeName, setPlaceName] = useState('');
 
   function addPraise() {
     const text = newPraise.trim();
@@ -58,6 +68,8 @@ export function SettingsPage() {
       streakOn,
       streakDays,
       streakBonus: parseCoins(streakBonus),
+      checkinCoins: parseCoins(checkinCoins),
+      checkinPerDay,
       // 입력칸에 적어 두고 추가를 안 누른 한마디도 함께 저장한다.
       praises: newPraise.trim() ? [...praises, newPraise.trim()] : praises,
     };
@@ -77,6 +89,16 @@ export function SettingsPage() {
       '버튼을 추가했어요.',
     );
     if (ok) setPresetTitle('');
+  }
+
+  /** 부모가 지금 서 있는 곳을 장소로 등록한다. */
+  async function addPlaceHere() {
+    const ok = await run(async () => {
+      if (!placeName.trim()) throw new AppError('장소 이름을 적어 주세요.');
+      const fix = await currentPosition(true);
+      await backend.createPlace(family.id, { name: placeName, lat: fix.lat, lng: fix.lng, radius: DEFAULT_PLACE_RADIUS }, me.uid);
+    }, '지금 위치를 장소로 등록했어요.');
+    if (ok) setPlaceName('');
   }
 
   return (
@@ -176,6 +198,25 @@ export function SettingsPage() {
         </Field>
       </section>
 
+      <section className="stack" aria-label="위치 공유 코인">
+        <h2 className="t-title">위치 공유 코인</h2>
+        <p className="t-cap" style={{ lineHeight: '18px' }}>
+          자녀가 "지금 여기예요"를 눌러 위치를 알리면 바로 받는 코인이에요. 하루 횟수를 넘겨도 위치는 계속 알릴 수 있어요.
+        </p>
+        <Field label="한 번 알릴 때 주는 코인" hint="0으로 두면 코인 없이 위치만 알려요.">
+          {(id) => <CoinInput id={id} value={checkinCoins} onChange={setCheckinCoins} presets={[0, 1, 2, 5]} max={MAX_CHECKIN_COINS} />}
+        </Field>
+        <FieldGroup label="하루에 코인을 주는 횟수">
+          <div className="chips six">
+            {CHECKIN_PER_DAY_CHOICES.map((n) => (
+              <button key={n} type="button" role="radio" className="chip" aria-checked={checkinPerDay === n} onClick={() => setCheckinPerDay(n)}>
+                {n}번
+              </button>
+            ))}
+          </div>
+        </FieldGroup>
+      </section>
+
       {error && (
         <p className="error" role="alert">
           {error}
@@ -244,6 +285,55 @@ export function SettingsPage() {
           </div>
         ) : (
           <p className="t-cap">버튼은 {MAX_PRESETS}개까지 만들 수 있어요.</p>
+        )}
+      </section>
+
+      <div className="hr" />
+
+      <section className="stack" aria-label="장소">
+        <h2 className="t-title">장소</h2>
+        <p className="t-cap" style={{ lineHeight: '18px' }}>
+          이름을 붙여 둔 장소 근처에서 온 위치는 "학원 근처"처럼 보여요. 자녀 현황의 위치 기록에서 "이름 붙이기"로도 등록할 수 있어요.
+        </p>
+        {places.length === 0 && <p className="t-cap">등록한 장소가 없어요.</p>}
+        {places.map((place) => (
+          <div key={place.id} className="px history-row">
+            <div className="grow stack" style={{ gap: 4 }}>
+              <span className="t-body item-title">{place.name}</span>
+              <span className="t-cap">반경 {place.radius}m</span>
+            </div>
+            <button
+              type="button"
+              className="link"
+              disabled={busy}
+              aria-label={`${place.name} 장소 지우기`}
+              onClick={() => void run(() => backend.deletePlace(family.id, place.id), '장소를 지웠어요.')}
+            >
+              지우기
+            </button>
+          </div>
+        ))}
+        {places.length < MAX_PLACES ? (
+          <Field label="지금 내가 있는 곳을 등록하기">
+            {(id) => (
+              <div className="row" style={{ gap: 12 }}>
+                <input
+                  id={id}
+                  className="input grow"
+                  type="text"
+                  value={placeName}
+                  maxLength={MAX_PLACE_NAME}
+                  placeholder="예: 집"
+                  onChange={(event) => setPlaceName(event.target.value)}
+                />
+                <Button tone="plain" disabled={busy} onClick={() => void addPlaceHere()}>
+                  등록
+                </Button>
+              </div>
+            )}
+          </Field>
+        ) : (
+          <p className="t-cap">장소는 {MAX_PLACES}곳까지 등록할 수 있어요.</p>
         )}
       </section>
 

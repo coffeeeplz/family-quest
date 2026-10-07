@@ -927,3 +927,12 @@ a.chip {
     animation: none;
   }
 }
+
+/* 위치 알리기 */
+.checkin {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--mint-soft);
+}

@@ -12,6 +12,7 @@ const TYPE_ICON: Record<LedgerEntry['type'], IconName> = {
   bonus: 'star',
   gift: 'heart',
   reward: 'shop',
+  checkin: 'pin',
   adjust: 'coin',
 };
 

@@ -4,12 +4,21 @@
  */
 import { INVITE_TTL_MS, isInviteCodeShape, newInviteCode, normalizeInviteCode } from '../domain/invites';
 import { MAX_FOODS, canEditFood, cleanFoodInput, findSameName, withEaten } from '../domain/foods';
+import { MAX_PLACES, cleanFix, cleanPlaceInput, planCheckin } from '../domain/location';
 import { cleanFamilyName, cleanProfile } from '../domain/profile';
 import { MAX_OFFER_NOTE, canCounter, cleanOfferAmount, cleanProposalInput, turnOf } from '../domain/proposals';
 import { cleanPresetInput, cleanQuestInput, runId } from '../domain/quests';
-import { DEFAULT_SETTINGS, MAX_PRAISE_LENGTH, MAX_PRESETS, MAX_REWARD, cleanSettings, halfReward } from '../domain/settings';
+import {
+  DEFAULT_SETTINGS,
+  MAX_PRAISE_LENGTH,
+  MAX_PRESETS,
+  MAX_REWARD,
+  cleanSettings,
+  halfReward,
+  normalizeSettings,
+} from '../domain/settings';
 import { MAX_REWARDS, buyBlockReason, cleanRewardInput } from '../domain/shop';
-import { addDays, dateKey } from '../lib/dates';
+import { addDays, dateKey, dayNumber } from '../lib/dates';
 import {
   AppError,
   type AuthUser,
@@ -19,8 +28,10 @@ import {
   type Food,
   type Invite,
   type LedgerEntry,
+  type LocationRecord,
   type Member,
   type Order,
+  type Place,
   type Preset,
   type Proposal,
   type Quest,
@@ -39,7 +50,7 @@ interface DemoUser {
 }
 
 interface DemoState {
-  v: 4;
+  v: 5;
   currentUid: string | null;
   users: Record<string, DemoUser>;
   families: Record<string, Family>;
@@ -52,6 +63,8 @@ interface DemoState {
   rewards: Record<string, Record<string, Reward>>;
   orders: Record<string, Record<string, Order>>;
   foods: Record<string, Record<string, Food>>;
+  locations: Record<string, LocationRecord[]>;
+  places: Record<string, Record<string, Place>>;
   invites: Record<string, Invite>;
 }
 
@@ -60,7 +73,7 @@ export interface KeyValueStore {
   setItem(key: string, value: string): void;
 }
 
-const STORAGE_KEY = 'family-quest-demo-v4';
+const STORAGE_KEY = 'family-quest-demo-v5';
 const FAMILY = 'demo-family';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -130,6 +143,17 @@ function seed(now: number = Date.now()): DemoState {
     joinedAt: startedAt,
     streak: null,
     goalRewardId: null,
+    checkin: null,
+  });
+
+  const place = (id: string, name: string, lat: number, lng: number): Place => ({
+    id,
+    name,
+    lat,
+    lng,
+    radius: 150,
+    createdBy: 'demo-dad',
+    createdAt: startedAt,
   });
 
   const preset = (id: string, title: string, reward: number, childCanAdd: boolean): Preset => ({
@@ -174,7 +198,7 @@ function seed(now: number = Date.now()): DemoState {
   });
 
   return {
-    v: 4,
+    v: 5,
     currentUid: null,
     users: {
       'demo-dad': { uid: 'demo-dad', email: 'dad@example.com', label: '아빠', hint: '퀘스트를 만들고 승인해요', familyId: FAMILY },
@@ -270,6 +294,20 @@ function seed(now: number = Date.now()): DemoState {
         'f-tteok': food('f-tteok', '떡볶이', 'snack', [], [15, 30]),
       },
     },
+    // 체험용 장소와 위치는 지어낸 좌표다.
+    places: {
+      [FAMILY]: {
+        'pl-home': place('pl-home', '집', 35.244, 129.213),
+        'pl-school': place('pl-school', '학교', 35.2475, 129.219),
+        'pl-academy': place('pl-academy', '학원', 35.2402, 129.2225),
+      },
+    },
+    locations: {
+      [FAMILY]: [
+        { id: 'loc-seed-1', uid: 'demo-kid', lat: 35.2476, lng: 129.2192, accuracy: 24, at: now - 3 * 3_600_000, trigger: 'quest', coins: 0 },
+        { id: 'loc-seed-2', uid: 'demo-kid', lat: 35.2403, lng: 129.2224, accuracy: 35, at: now - 40 * 60_000, trigger: 'open', coins: 0 },
+      ],
+    },
     invites: {},
   };
 }
@@ -288,7 +326,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       const raw = store?.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as DemoState;
-        if (parsed.v === 4) return parsed;
+        if (parsed.v === 5) return parsed;
       }
     } catch {
       // 저장소를 못 읽으면 새로 시작한다.
@@ -360,7 +398,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
   }
 
   function settingsOf(familyId: string) {
-    return state.families[familyId].settings;
+    return normalizeSettings(state.families[familyId].settings);
   }
 
   function requireProposal(familyId: string, proposalId: string): Proposal {
@@ -430,7 +468,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       const id = newId('fam');
       const now = Date.now();
       state.families[id] = { id, name, createdBy: uid, createdAt: now, settings: { ...DEFAULT_SETTINGS } };
-      state.members[id] = { [uid]: { uid, role: 'parent', ...clean, coins: 0, joinedAt: now, streak: null, goalRewardId: null } };
+      state.members[id] = { [uid]: { uid, role: 'parent', ...clean, coins: 0, joinedAt: now, streak: null, goalRewardId: null, checkin: null } };
       state.quests[id] = {};
       state.runs[id] = {};
       state.ledger[id] = [];
@@ -439,6 +477,8 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       state.rewards[id] = {};
       state.orders[id] = {};
       state.foods[id] = {};
+      state.locations[id] = [];
+      state.places[id] = {};
       state.users[uid].familyId = id;
       commit();
       return id;
@@ -461,6 +501,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
         joinedAt: Date.now(),
         streak: null,
         goalRewardId: null,
+        checkin: null,
       };
       state.users[uid].familyId = invite.familyId;
       commit();
@@ -1047,6 +1088,76 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       requireMember(familyId);
       const stored = requireFood(familyId, foodId);
       state.foods[familyId][foodId] = { ...stored, eaten: stored.eaten.filter((d) => d !== day) };
+      commit();
+    },
+
+    watchLocations(familyId, sinceMs, cb) {
+      return watch(
+        () =>
+          (state.locations[familyId] ?? [])
+            .filter((record) => record.at >= sinceMs)
+            .sort((a, b) => b.at - a.at)
+            .map((record) => ({ ...record })),
+        cb,
+      );
+    },
+
+    async shareLocation(familyId, uid, fix, trigger) {
+      requireSelf(uid);
+      const member = requireMember(familyId);
+      const clean = cleanFix(fix);
+      const now = Date.now();
+      // 코인은 직접 누른 공유에만, 설정된 하루 횟수까지만 준다.
+      const plan = trigger === 'button' ? planCheckin(uid, member.checkin, settingsOf(familyId), dayNumber()) : null;
+      const id = newId('loc');
+      state.locations[familyId].push({ id, uid, ...clean, at: now, trigger, coins: plan?.coins ?? 0 });
+      if (plan) {
+        state.members[familyId][uid] = { ...member, checkin: { dayNum: plan.dayNum, count: plan.count } };
+        addLedger(familyId, {
+          id: plan.ledgerId,
+          uid,
+          amount: plan.coins,
+          type: 'checkin',
+          refId: id,
+          memo: '위치 공유',
+          note: '',
+          by: uid,
+          at: now,
+        });
+      }
+      commit();
+      return { coins: plan?.coins ?? 0 };
+    },
+
+    async pruneLocations(familyId, beforeMs) {
+      requireParent(familyId);
+      const kept = (state.locations[familyId] ?? []).filter((record) => record.at >= beforeMs);
+      if (kept.length === (state.locations[familyId] ?? []).length) return;
+      state.locations[familyId] = kept;
+      commit();
+    },
+
+    watchPlaces(familyId, cb) {
+      return watch(
+        () => Object.values(state.places[familyId] ?? {}).sort((a, b) => a.name.localeCompare(b.name, 'ko')),
+        cb,
+      );
+    },
+
+    async createPlace(familyId, input, byUid) {
+      requireSelf(byUid);
+      requireParent(familyId);
+      const clean = cleanPlaceInput(input);
+      if (Object.keys(state.places[familyId]).length >= MAX_PLACES) throw new AppError(`장소는 ${MAX_PLACES}곳까지 등록할 수 있어요.`);
+      const id = newId('pl');
+      state.places[familyId][id] = { id, ...clean, createdBy: byUid, createdAt: Date.now() };
+      commit();
+      return id;
+    },
+
+    async deletePlace(familyId, placeId) {
+      requireParent(familyId);
+      delete state.places[familyId][placeId];
       commit();
     },
 

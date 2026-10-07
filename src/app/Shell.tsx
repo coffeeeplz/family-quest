@@ -4,6 +4,7 @@ import { ApprovalsPage } from '../features/approvals/ApprovalsPage';
 import { FamilyPage } from '../features/family/FamilyPage';
 import { FoodPage } from '../features/food/FoodPage';
 import { LedgerPage } from '../features/ledger/LedgerPage';
+import { LocationAuto } from '../features/location/LocationAuto';
 import { MorePage } from '../features/more/MorePage';
 import { QuestFormPage } from '../features/quests/QuestFormPage';
 import { QuestListPage } from '../features/quests/QuestListPage';
@@ -86,6 +87,7 @@ export function Shell() {
 
       <TabBar tabs={tabs} />
 
+      {!isParent && <LocationAuto />}
       <CoinCelebration />
       <RewardCelebration />
     </Router>

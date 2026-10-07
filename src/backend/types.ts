@@ -36,6 +36,10 @@ export interface FamilySettings {
   streakBonus: number;
   /** 승인할 때 누르는 칭찬 한마디 */
   praises: string[];
+  /** "지금 여기예요"로 위치를 알릴 때마다 받는 코인(0이면 코인 없이 공유만) */
+  checkinCoins: number;
+  /** 하루에 몇 번까지 위치 공유 코인을 줄지 */
+  checkinPerDay: number;
 }
 
 export interface Family {
@@ -44,6 +48,12 @@ export interface Family {
   createdBy: string;
   createdAt: number;
   settings: FamilySettings;
+}
+
+/** 위치 공유 코인을 받은 기록. dayNum = 그날의 날짜 번호, count = 그날 받은 횟수 */
+export interface Checkin {
+  dayNum: number;
+  count: number;
 }
 
 /** 연속 달성 기록. lastDate = 마지막으로 하루치를 다 끝낸 날 */
@@ -62,6 +72,7 @@ export interface Member {
   streak: Streak | null;
   /** 목표 저금통: 모으고 있는 보상의 id */
   goalRewardId: string | null;
+  checkin: Checkin | null;
 }
 
 export type Repeat =
@@ -109,8 +120,8 @@ export interface Run {
   praise: string;
 }
 
-/** quest=퀘스트 완료, bonus=연속 달성 보너스, gift=칭찬 코인, reward=상점 사용, adjust=조정 */
-export type LedgerType = 'quest' | 'bonus' | 'gift' | 'reward' | 'adjust';
+/** quest=퀘스트 완료, bonus=연속 달성 보너스, gift=칭찬 코인, reward=상점 사용, checkin=위치 공유, adjust=조정 */
+export type LedgerType = 'quest' | 'bonus' | 'gift' | 'reward' | 'checkin' | 'adjust';
 
 /** 코인 장부 한 줄. 잔액은 이 내역의 합과 같아야 한다. */
 export interface LedgerEntry {
@@ -265,6 +276,41 @@ export interface Food extends FoodInput {
   active: boolean;
 }
 
+/** 기기가 알려 준 위치. accuracy = 오차 범위(미터) */
+export interface LocationFix {
+  lat: number;
+  lng: number;
+  accuracy: number;
+}
+
+/** button=자녀가 "지금 여기예요"를 누름, open=앱을 열 때 자동, quest=퀘스트를 끝낼 때 자동 */
+export type LocationTrigger = 'button' | 'open' | 'quest';
+
+/** 위치 기록 한 건. 최근 며칠 치만 보관한다. */
+export interface LocationRecord extends LocationFix {
+  id: string;
+  uid: string;
+  at: number;
+  trigger: LocationTrigger;
+  /** 이 공유로 받은 코인(없으면 0) */
+  coins: number;
+}
+
+export interface PlaceInput {
+  name: string;
+  lat: number;
+  lng: number;
+  /** 이 거리(미터) 안이면 그 장소 근처로 본다 */
+  radius: number;
+}
+
+/** 부모가 이름을 붙여 둔 장소(집, 학교, 학원 등) */
+export interface Place extends PlaceInput {
+  id: string;
+  createdBy: string;
+  createdAt: number;
+}
+
 /** 승인과 함께 반영할 연속 달성 변화 */
 export interface StreakUpdate {
   count: number;
@@ -375,6 +421,20 @@ export interface Backend {
   /** 먹은 날을 기록한다. 먹었으니 "먹고 싶어요"는 모두 풀리고 보관함으로 간다. */
   addFoodEaten(familyId: string, foodId: string, day: string): Promise<void>;
   removeFoodEaten(familyId: string, foodId: string, day: string): Promise<void>;
+
+  // 위치
+  /** sinceMs 이후의 위치 기록(최근 것부터). onError 는 목록을 읽지 못했을 때 불린다. */
+  watchLocations(familyId: string, sinceMs: number, cb: (records: LocationRecord[]) => void, onError?: () => void): Unsub;
+  /**
+   * 내 위치를 가족에게 알린다. trigger 가 button 이면 설정된 한도 안에서 코인을 받는다.
+   * 돌려주는 coins 는 이번에 받은 코인(없으면 0).
+   */
+  shareLocation(familyId: string, uid: string, fix: LocationFix, trigger: LocationTrigger): Promise<{ coins: number }>;
+  /** beforeMs 보다 오래된 위치 기록을 지운다(부모만). */
+  pruneLocations(familyId: string, beforeMs: number): Promise<void>;
+  watchPlaces(familyId: string, cb: (places: Place[]) => void, onError?: () => void): Unsub;
+  createPlace(familyId: string, input: PlaceInput, byUid: string): Promise<string>;
+  deletePlace(familyId: string, placeId: string): Promise<void>;
 
   /** 체험 모드에서만 제공 */
   demo?: {

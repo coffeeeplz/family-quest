@@ -24,6 +24,11 @@ export function addDays(key: string, n: number): string {
   return dateKey(d);
 }
 
+/** 기기 현지 날짜를 하루에 1씩 커지는 번호로 바꾼다(서버 규칙이 날짜를 비교할 때 쓴다). */
+export function dayNumber(d: Date = new Date()): number {
+  return Math.floor((d.getTime() - d.getTimezoneOffset() * 60_000) / 86_400_000);
+}
+
 /** 그 주의 월요일 */
 export function weekStart(key: string): string {
   const weekday = parseDateKey(key).getDay(); // 0=일

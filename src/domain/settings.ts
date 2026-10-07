@@ -9,6 +9,10 @@ export const MAX_PRESETS = 12;
 
 export const ROUND_CHOICES = [1, 2, 3, 4, 5];
 export const STREAK_DAY_CHOICES = [3, 5, 7];
+/** 위치 공유 한 번에 줄 수 있는 코인과 하루 횟수의 상한 */
+export const MAX_CHECKIN_COINS = 100;
+export const MAX_CHECKIN_PER_DAY = 10;
+export const CHECKIN_PER_DAY_CHOICES = [1, 2, 3, 5, 10];
 
 export const DEFAULT_SETTINGS: FamilySettings = {
   maxRounds: 3,
@@ -17,6 +21,9 @@ export const DEFAULT_SETTINGS: FamilySettings = {
   streakDays: 3,
   streakBonus: 10,
   praises: ['참 잘했어요!', '최고야!', '고마워!', '끝까지 해냈구나!'],
+  // 이 두 값은 firestore.rules 의 기본값과 같아야 한다(설정을 한 번도 저장하지 않은 가족에게 쓰인다).
+  checkinCoins: 1,
+  checkinPerDay: 3,
 };
 
 /** 늦게 한 반복 퀘스트는 절반만 받는다(홀수는 올림). */
@@ -40,6 +47,8 @@ export function normalizeSettings(raw: unknown): FamilySettings {
     streakDays: clampInt(r.streakDays, 2, 30, DEFAULT_SETTINGS.streakDays),
     streakBonus: clampInt(r.streakBonus, 0, MAX_REWARD, DEFAULT_SETTINGS.streakBonus),
     praises,
+    checkinCoins: clampInt(r.checkinCoins, 0, MAX_CHECKIN_COINS, DEFAULT_SETTINGS.checkinCoins),
+    checkinPerDay: clampInt(r.checkinPerDay, 1, MAX_CHECKIN_PER_DAY, DEFAULT_SETTINGS.checkinPerDay),
   };
 }
 
@@ -53,6 +62,12 @@ export function cleanSettings(input: FamilySettings): FamilySettings {
   if (!inRange(input.streakDays, 2, 30)) throw new AppError('연속 달성 일수는 2일에서 30일 사이로 정해 주세요.');
   if (!inRange(input.streakBonus, 0, MAX_REWARD)) {
     throw new AppError(`보너스 코인은 0부터 ${MAX_REWARD} 사이로 정해 주세요.`);
+  }
+  if (!inRange(input.checkinCoins, 0, MAX_CHECKIN_COINS)) {
+    throw new AppError(`위치 공유 코인은 0부터 ${MAX_CHECKIN_COINS} 사이로 정해 주세요.`);
+  }
+  if (!inRange(input.checkinPerDay, 1, MAX_CHECKIN_PER_DAY)) {
+    throw new AppError(`위치 공유 코인을 주는 횟수는 하루 1번에서 ${MAX_CHECKIN_PER_DAY}번 사이로 정해 주세요.`);
   }
   const praises = [...new Set(input.praises.map((p) => p.trim()).filter(Boolean))];
   if (praises.length > MAX_PRAISES) throw new AppError(`칭찬 한마디는 ${MAX_PRAISES}개까지 등록할 수 있어요.`);

@@ -6,8 +6,10 @@ import type {
   Family,
   Food,
   LedgerEntry,
+  LocationRecord,
   Member,
   Order,
+  Place,
   Preset,
   Proposal,
   Quest,
@@ -43,6 +45,8 @@ const orders = () => snapshot<Order[]>((cb) => backend.watchOrders(FAMILY, addDa
 const rewardById = (id: string) => rewards().find((r) => r.id === id)!;
 const foods = () => snapshot<Food[]>((cb) => backend.watchFoods(FAMILY, cb));
 const foodById = (id: string) => foods().find((f) => f.id === id);
+const locations = () => snapshot<LocationRecord[]>((cb) => backend.watchLocations(FAMILY, 0, cb));
+const places = () => snapshot<Place[]>((cb) => backend.watchPlaces(FAMILY, cb));
 const questById = (id: string) => quests().find((q) => q.id === id)!;
 const runById = (id: string) => runs().find((r) => r.id === id)!;
 const proposalById = (id: string) => proposals().find((p) => p.id === id)!;
@@ -557,5 +561,81 @@ describe('뭐먹지', () => {
     as('demo-new');
     await expect(backend.createFood(FAMILY, pizza, 'demo-new')).rejects.toThrow('구성원이 아니에요');
     await expect(backend.addFoodEaten(FAMILY, 'f-chicken', today)).rejects.toThrow('구성원이 아니에요');
+  });
+});
+
+describe('위치', () => {
+  const here = { lat: 35.2476, lng: 129.2192, accuracy: 20 };
+
+  it('직접 알리면 1코인을 받고, 하루 3번까지만 받는다', async () => {
+    as('demo-kid');
+    const before = kid().coins;
+    for (const expected of [1, 1, 1, 0, 0]) {
+      expect((await backend.shareLocation(FAMILY, 'demo-kid', here, 'button')).coins).toBe(expected);
+    }
+    expect(kid().coins).toBe(before + 3);
+    expect(kid().checkin?.count).toBe(3);
+    expect(ledgerSum()).toBe(kid().coins); // 잔액은 여전히 장부 합계와 같다
+    expect(ledger().filter((e) => e.type === 'checkin').map((e) => e.amount)).toEqual([1, 1, 1]);
+    // 한도를 넘긴 공유도 위치는 남는다.
+    const mine = locations().filter((r) => r.uid === 'demo-kid' && r.trigger === 'button');
+    expect(mine).toHaveLength(5);
+    expect(mine.filter((r) => r.coins === 1)).toHaveLength(3);
+  });
+
+  it('자동 기록은 코인을 주지 않고, 최근 것이 먼저 온다', async () => {
+    as('demo-kid');
+    const before = kid().coins;
+    expect((await backend.shareLocation(FAMILY, 'demo-kid', here, 'open')).coins).toBe(0);
+    expect((await backend.shareLocation(FAMILY, 'demo-kid', here, 'quest')).coins).toBe(0);
+    expect(kid().coins).toBe(before);
+    expect(kid().checkin).toBeNull();
+    const all = locations();
+    expect(all[0].at).toBeGreaterThanOrEqual(all[all.length - 1].at);
+  });
+
+  it('설정에서 코인과 하루 횟수를 바꾸면 바로 반영된다', async () => {
+    as('demo-dad');
+    await backend.updateSettings(FAMILY, { ...family().settings, checkinCoins: 5, checkinPerDay: 1 });
+    as('demo-kid');
+    const before = kid().coins;
+    expect((await backend.shareLocation(FAMILY, 'demo-kid', here, 'button')).coins).toBe(5);
+    expect((await backend.shareLocation(FAMILY, 'demo-kid', here, 'button')).coins).toBe(0);
+    expect(kid().coins).toBe(before + 5);
+    as('demo-dad');
+    await backend.updateSettings(FAMILY, { ...family().settings, checkinCoins: 0, checkinPerDay: 3 });
+    as('demo-mom');
+    expect((await backend.shareLocation(FAMILY, 'demo-mom', here, 'button')).coins).toBe(0); // 코인을 꺼 둠
+  });
+
+  it('남의 위치는 남길 수 없고, 잘못된 좌표는 막는다', async () => {
+    as('demo-dad');
+    await expect(backend.shareLocation(FAMILY, 'demo-kid', here, 'button')).rejects.toThrow('본인만');
+    as('demo-kid');
+    await expect(backend.shareLocation(FAMILY, 'demo-kid', { lat: 999, lng: 0, accuracy: 1 }, 'button')).rejects.toThrow('위치를 알 수 없어요');
+    as('demo-new');
+    await expect(backend.shareLocation(FAMILY, 'demo-new', here, 'button')).rejects.toThrow('구성원이 아니에요');
+  });
+
+  it('장소는 부모만 등록하고 지운다', async () => {
+    expect(places().map((p) => p.name)).toEqual(['집', '학교', '학원']);
+    as('demo-kid');
+    await expect(backend.createPlace(FAMILY, { name: '놀이터', ...here, radius: 150 }, 'demo-kid')).rejects.toThrow('부모만');
+    as('demo-dad');
+    const id = await backend.createPlace(FAMILY, { name: ' 놀이터 ', lat: 35.25, lng: 129.22, radius: 300 }, 'demo-dad');
+    expect(places().find((p) => p.id === id)).toMatchObject({ name: '놀이터', radius: 300 });
+    await expect(backend.createPlace(FAMILY, { name: '', lat: 35.25, lng: 129.22, radius: 300 }, 'demo-dad')).rejects.toThrow('장소 이름');
+    await backend.deletePlace(FAMILY, id);
+    expect(places().some((p) => p.id === id)).toBe(false);
+  });
+
+  it('오래된 위치 기록은 부모가 정리한다', async () => {
+    const total = locations().length;
+    expect(total).toBe(2);
+    as('demo-kid');
+    await expect(backend.pruneLocations(FAMILY, Date.now())).rejects.toThrow('부모만');
+    as('demo-dad');
+    await backend.pruneLocations(FAMILY, Date.now() - 60 * 60_000); // 한 시간보다 오래된 것
+    expect(locations().map((r) => r.id)).toEqual(['loc-seed-2']);
   });
 });

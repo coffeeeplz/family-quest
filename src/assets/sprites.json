@@ -612,6 +612,20 @@
    ".KYYK..KBBK.",
    ".KKKK..KKKK.",
    "............"
+  ],
+  "pin": [
+   "....KKKK....",
+   "...KRRRRK...",
+   "..KRRWWRRK..",
+   "..KRWWWWRK..",
+   "..KRRWWRRK..",
+   "..KRRRRRRK..",
+   "...KRRRRK...",
+   "...KRRRRK...",
+   "....KRRK....",
+   "....KRRK....",
+   ".....KK.....",
+   "............"
   ]
  }
 }

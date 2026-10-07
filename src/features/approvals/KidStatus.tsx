@@ -10,6 +10,7 @@ import { formatDay, formatWhen } from '../../lib/dates';
 import type { IconName } from '../../lib/sprites';
 import { AvatarFrame, Icon } from '../../ui/Sprite';
 import { Button, CoinInline, CoinPill } from '../../ui/kit';
+import { KidLocation } from '../location/KidLocation';
 import { GoalCard } from '../shop/GoalCard';
 
 const STATE_TEXT: Record<BoardItem['state'], string> = {
@@ -111,6 +112,8 @@ export function KidStatus({ kid, onGift }: Props) {
           + 퀘스트 추가
         </Link>
       </div>
+
+      <KidLocation kid={kid} />
 
       <GoalCard member={kid} />
 
