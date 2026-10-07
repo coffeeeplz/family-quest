@@ -5,7 +5,7 @@ rules_version = '2';
 // - 퀘스트 만들기, 승인, 코인 지급, 설정 변경은 부모만 할 수 있다.
 // - 자녀는 자기 퀘스트의 완료 요청, 내 할 일 추가, 코인 제안, 보상 신청만 할 수 있고 코인 잔액은 바꿀 수 없다.
 // - 보상을 사는 코인은 부모가 승인할 때만 빠지고, 잔액은 0 아래로 내려갈 수 없다.
-// - 뭐먹지의 메뉴는 가족 누구나 올리고, 먹고 싶다는 표시와 먹은 날 기록도 누구나 할 수 있다.
+// - 뭐먹지의 메뉴는 가족 누구나 올리고, 먹고 싶다는 표시와 먹은 날 기록도 누구나 할 수 있다. 별점은 자기 것만 준다.
 //   내용을 고치거나 지우는 것은 올린 사람과 부모만 할 수 있다.
 // - 위치 기록은 본인 것만 남길 수 있고 가족만 볼 수 있다. 장소 이름은 부모가 관리한다.
 // - 위치 공유 코인은 예외적으로 본인이 직접 받지만, 가족 설정에 정해진 금액만, 하루에 정해진 횟수까지만 받을 수 있다.
@@ -225,10 +225,19 @@ service cloud.firestore {
       return d.name is string && d.name.size() > 0 && d.name.size() <= 30
         && d.link is string && d.link.size() <= 300
         && d.memo is string && d.memo.size() <= 60
-        && d.category in ['home', 'out', 'delivery', 'snack']
+        && d.category is string && d.category.size() > 0 && d.category.size() <= 20
         && d.wantedBy is list && d.wantedBy.size() <= 30
         && d.eaten is list && d.eaten.size() <= 200
+        && d.get('ratings', {}) is map
         && d.active is bool;
+    }
+
+    // 별점은 자기 것만, 1개부터 5개까지 줄 수 있다.
+    function validMyRating() {
+      let after = request.resource.data.get('ratings', {});
+      let before = resource.data.get('ratings', {});
+      return after.diff(before).affectedKeys().hasOnly([request.auth.uid])
+        && (!(request.auth.uid in after) || after[request.auth.uid] in [1, 2, 3, 4, 5]);
     }
 
     match /users/{uid} {
@@ -331,12 +340,13 @@ service cloud.firestore {
       match /foods/{foodId} {
         allow read: if isMember(fid);
         allow create: if isMember(fid) && validFood()
-          && request.resource.data.addedBy == request.auth.uid;
-        // 먹고 싶다는 표시와 먹은 날 기록은 누구나, 그 밖의 변경은 올린 사람과 부모만.
-        allow update: if isMember(fid) && validFood()
+          && request.resource.data.addedBy == request.auth.uid
+          && request.resource.data.get('ratings', {}).size() == 0;
+        // 먹고 싶다는 표시, 먹은 날 기록, 내 별점은 누구나. 그 밖의 변경은 올린 사람과 부모만.
+        allow update: if isMember(fid) && validFood() && validMyRating()
           && request.resource.data.addedBy == resource.data.addedBy
           && (
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['wantedBy', 'eaten'])
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['wantedBy', 'eaten', 'ratings'])
             || resource.data.addedBy == request.auth.uid
             || isParent(fid)
           );

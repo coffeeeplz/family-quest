@@ -410,126 +410,195 @@ try {
   await kid.getByRole('heading', { name: '코인 기록' }).waitFor();
   check('기록에 보상 사용 -50', await kid.getByRole('main').locator('article', { hasText: '게임 30분' }).getByText('-50').isVisible());
 
-  // ── 8-2. 뭐먹지 ──────────────────────────────────────────────────────────
-  await kid.getByRole('link', { name: '뭐먹지' }).click();
-  await kid.getByRole('heading', { name: '먹고 싶어요' }).waitFor();
+  // ── 8-2. 뭐먹지: 첫 화면은 먹고 싶은 메뉴만, 나머지는 버튼 안에 ────────────
+  await kid.locator('.tabbar').getByRole('link', { name: '뭐먹지' }).click();
   const wanted = region(kid, '먹고 싶어요');
-  const savedBox = region(kid, '메뉴 보관함');
-  check('먹고 싶어요 3개, 보관함 3개', (await wanted.locator('article').count()) === 3 && (await savedBox.locator('article').count()) === 3);
+  await wanted.locator('article').first().waitFor();
+  check('첫 화면에는 먹고 싶은 메뉴 3개만', (await wanted.locator('article').count()) === 3 && (await kid.getByText('먹고 싶은 메뉴 3개').isVisible()));
+  check('보관함과 분류 버튼은 첫 화면에 없음', (await kid.getByText('김치찌개').count()) === 0 && (await kid.getByRole('main').getByRole('radio').count()) === 0);
   check('원하는 사람이 많은 메뉴가 맨 위', (await wanted.locator('article').first().innerText()).includes('치킨'));
-  check('먹은 횟수와 마지막 날짜', await savedBox.locator('article', { hasText: '김치찌개' }).getByText('3번 먹음 · 마지막 그저께').isVisible());
+  check('카드에 가족 평균 별점과 먹은 횟수', (await wanted.locator('article', { hasText: '치킨' }).getByLabel('가족 별점 평균 4.5점, 2명').isVisible()) && (await wanted.locator('article', { hasText: '치킨' }).getByText('1번 먹음').isVisible()));
   await kid.locator('.toast').waitFor({ state: 'detached', timeout: 6000 }).catch(() => {});
-  await shot(kid, '29-food-home', true);
+  await shot(kid, '29-food-home');
 
   // 나도!
-  const pastaWant = kid.getByRole('button', { name: '크림 파스타 나도 먹고 싶어' });
-  await pastaWant.click();
-  await kid.locator('.toast', { hasText: '먹고 싶은 목록에 올렸어요' }).waitFor();
-  check('나도! 를 누르면 켜짐', (await pastaWant.getAttribute('aria-pressed')) === 'true');
-  check('링크는 새 창으로 열림', (await wanted.getByRole('link', { name: '크림 파스타 링크 열기' }).getAttribute('target')) === '_blank' && (await wanted.getByRole('link', { name: '크림 파스타 링크 열기' }).getAttribute('href')).startsWith('https://www.google.com/maps/'));
+  const sushiWant = kid.getByRole('button', { name: '초밥 나도 먹고 싶어' });
+  await sushiWant.click();
+  await kid.locator('.toast', { hasText: '나도 먹고 싶다고 표시했어요' }).waitFor();
+  check('나도! 를 누르면 켜짐', (await sushiWant.getAttribute('aria-pressed')) === 'true');
 
-  // 보관함에서 바로 다시 올리기 (두 가지 길)
+  // 자세히: 링크, 별점, 기록은 카드를 눌러야 나온다
+  await kid.getByRole('button', { name: '초밥 자세히' }).click();
+  let foodDetail = kid.getByRole('dialog');
+  check('자세히: 링크는 새 창으로 열림', (await foodDetail.getByRole('link', { name: /링크 열기/ }).getAttribute('target')) === '_blank' && (await foodDetail.getByText('역 앞 새로 생긴 집').isVisible()));
+  check('남이 올린 메뉴는 자녀가 고칠 수 없음', (await foodDetail.getByRole('button', { name: '이름, 분류, 링크 고치기' }).count()) === 0);
+  await foodDetail.getByRole('radio', { name: '별 4개' }).click();
+  await toast(kid, '별 4개를 줬어요');
+  check('자세히에서 준 별점이 평균에 반영', await foodDetail.getByLabel('가족 별점 평균 4.0점, 1명').isVisible());
+  await shot(kid, '31-food-detail');
+  await foodDetail.getByRole('button', { name: '닫기' }).click();
+
+  // 더 보기 메뉴: 분류로 거르기, 보관함
+  await kid.getByRole('button', { name: /더 보기/ }).click();
+  const foodMenu = kid.getByRole('dialog');
+  check('분류 기본값은 한식 중식 일식 빵 기타', (await foodMenu.getByRole('radio').allInnerTexts()).map((s) => s.trim()).join() === '전체,한식,중식,일식,빵,기타');
+  check('자녀 메뉴에는 분류 관리가 없음', (await foodMenu.getByRole('link', { name: '분류 관리' }).count()) === 0);
+  await shot(kid, '30-food-menu');
+  await foodMenu.getByRole('radio', { name: '일식' }).click();
+  check('분류로 거르면 그 분류만', (await wanted.locator('article').count()) === 1 && (await wanted.getByText('초밥').isVisible()));
+  await kid.getByRole('button', { name: /일식만 보는 중/ }).click();
+  check('거르기 해제', (await wanted.locator('article').count()) === 3);
+
+  // 보관함: 한 번에 다시 올리기, 정렬
+  await kid.getByRole('button', { name: /더 보기/ }).click();
+  await kid.getByRole('dialog').getByRole('link', { name: '메뉴 보관함 (3개)' }).click();
+  const savedBox = region(kid, '메뉴 보관함');
+  await savedBox.locator('article').first().waitFor();
+  check('보관함 3개, 마지막으로 먹은 날', (await savedBox.locator('article').count()) === 3 && (await savedBox.locator('article', { hasText: '김치찌개' }).getByText('마지막 그저께').isVisible()));
+  check('뭐먹지 탭이 켜져 있음', (await kid.locator('.tab.active').innerText()).includes('뭐먹지'));
+  await kid.getByRole('combobox', { name: '정렬' }).selectOption('rating');
+  check('별점 높은 순 정렬', (await savedBox.locator('article').first().innerText()).includes('떡볶이'));
+  await kid.getByRole('combobox', { name: '분류' }).selectOption('bread');
+  check('보관함도 분류로 거름', await kid.getByText('보관된 메뉴가 없어요').isVisible());
+  await kid.getByRole('combobox', { name: '분류' }).selectOption('all');
+  await shot(kid, '32-food-saved');
   await savedBox.getByRole('button', { name: '김밥 또 먹고 싶어' }).click();
+  await savedBox.locator('article', { hasText: '김밥' }).waitFor({ state: 'detached' });
+  await kid.getByRole('link', { name: /뭐먹지/ }).first().click();
   await wanted.locator('article', { hasText: '김밥' }).waitFor();
-  check('보관함의 "또 먹고 싶어" 한 번으로 다시 올라감', (await savedBox.locator('article', { hasText: '김밥' }).count()) === 0);
-  await kid.getByRole('button', { name: '+ 메뉴 올리기' }).click();
+  check('보관함의 "또 먹고 싶어" 한 번으로 다시 올라감', true);
+
+  // 올리기: 보관함 버튼, 같은 이름, 새 메뉴
+  await kid.getByRole('button', { name: '+ 올리기' }).click();
   const foodForm = kid.getByRole('dialog');
   check('올리기 창에 보관함 버튼', (await foodForm.getByRole('button', { name: '떡볶이', exact: true }).isVisible()) && (await foodForm.getByRole('button', { name: '김밥', exact: true }).count()) === 0);
-  await shot(kid, '30-food-form');
   await foodForm.getByRole('button', { name: '떡볶이', exact: true }).click();
   await wanted.locator('article', { hasText: '떡볶이' }).waitFor();
   check('올리기 창의 보관함 버튼으로 다시 올라감', true);
-
-  // 같은 이름을 적으면 새로 만들지 않는다
-  await kid.getByRole('button', { name: '+ 메뉴 올리기' }).click();
+  await kid.getByRole('button', { name: '+ 올리기' }).click();
   await kid.getByLabel('새 메뉴 이름').fill(' 김치찌개');
   check('보관함에 있는 이름이면 다시 올리기를 권함', (await foodForm.getByText('"김치찌개" 메뉴는 보관함에 있어요.', { exact: false }).isVisible()) && (await foodForm.getByRole('button', { name: '보관함에서 다시 올리기' }).isVisible()) && (await foodForm.getByRole('button', { name: '메뉴 올리기', exact: true }).count()) === 0);
-  // 새 메뉴: 분류와 링크
-  await kid.getByLabel('새 메뉴 이름').fill('돈가스');
-  await foodForm.getByRole('radio', { name: '외식' }).click();
+  await kid.getByLabel('새 메뉴 이름').fill('짜장면');
+  await foodForm.getByRole('radio', { name: '중식' }).click();
   await kid.getByLabel('링크 (안 넣어도 돼요)').fill('javascript:alert(1)');
   await foodForm.getByRole('button', { name: '메뉴 올리기', exact: true }).click();
   await toast(kid, '웹 주소');
   check('웹 주소가 아닌 링크는 막음', true);
-  await kid.getByLabel('링크 (안 넣어도 돼요)').fill('example.com/donkatsu');
-  await kid.getByLabel('메모 (안 적어도 돼요)').fill('치즈 들어간 것');
+  await kid.getByLabel('링크 (안 넣어도 돼요)').fill('example.com/jjajang');
   await foodForm.getByRole('button', { name: '메뉴 올리기', exact: true }).click();
-  const donkatsu = wanted.locator('article', { hasText: '돈가스' });
-  await donkatsu.waitFor();
-  check('새 메뉴가 올라가고 링크에 https 가 붙음', (await donkatsu.getByRole('link', { name: '돈가스 링크 열기' }).getAttribute('href')) === 'https://example.com/donkatsu' && (await donkatsu.getByText('치즈 들어간 것').isVisible()));
-  check('분류로 거르기', await (async () => {
-    await kid.getByRole('radiogroup', { name: '분류' }).getByRole('radio', { name: '외식' }).click();
-    const names = await wanted.locator('article h3').allInnerTexts();
-    await kid.getByRole('radiogroup', { name: '분류' }).getByRole('radio', { name: '전체' }).click();
-    return names.sort().join() === ['돈가스', '크림 파스타'].sort().join();
-  })());
+  await wanted.locator('article', { hasText: '짜장면' }).waitFor();
+  await kid.getByRole('button', { name: '짜장면 자세히' }).click();
+  check('새 메뉴: 분류와 https 링크', (await kid.getByRole('dialog').getByText('중식').isVisible()) && (await kid.getByRole('dialog').getByRole('link', { name: /링크 열기/ }).getAttribute('href')) === 'https://example.com/jjajang');
+  await kid.getByRole('dialog').getByRole('button', { name: '닫기' }).click();
 
-  // 먹었어요: 횟수와 날짜, 보관함으로
+  // 먹었어요: 바로 별점을 묻는다
+  await kid.locator('.toast').waitFor({ state: 'detached', timeout: 6000 }).catch(() => {});
   await kid.getByRole('button', { name: '치킨 먹었어요' }).click();
   await toast(kid, '"치킨" 먹었어요! 2번째');
-  const chickenSaved = savedBox.locator('article', { hasText: '치킨' });
-  await chickenSaved.getByText('2번 먹음 · 마지막 오늘').waitFor();
-  check('먹으면 보관함으로 가고 횟수가 늘어남', (await wanted.locator('article', { hasText: '치킨' }).count()) === 0);
+  const rate = kid.getByRole('dialog');
+  await rate.getByRole('heading', { name: '어땠어요?' }).waitFor();
+  check('먹으면 별점 창이 뜨고 지난 점수가 골라져 있음', (await rate.getByText('지난번에는 별 5개를 줬어요.', { exact: false }).isVisible()) && (await rate.getByRole('radio', { name: '별 5개' }).getAttribute('aria-checked')) === 'true');
+  await shot(kid, '33-food-rate');
+  await rate.getByRole('radio', { name: '별 3개' }).click();
+  await toast(kid, '별 3개를 줬어요');
+  await rate.waitFor({ state: 'detached' });
+  check('먹은 메뉴는 첫 화면에서 빠짐', (await wanted.locator('article', { hasText: '치킨' }).count()) === 0);
+  await kid.getByRole('button', { name: '소금빵 먹었어요' }).click();
+  await kid.getByRole('dialog').getByRole('button', { name: '그대로 둘게요' }).click();
+  check('별점은 건너뛸 수 있음', (await kid.getByRole('dialog').count()) === 0);
+
+  // 보관함의 자세히: 바뀐 평균, 먹은 기록
+  await kid.getByRole('button', { name: /더 보기/ }).click();
+  await kid.getByRole('dialog').getByRole('link', { name: /메뉴 보관함/ }).click();
+  await savedBox.locator('article', { hasText: '치킨' }).getByText('마지막 오늘').waitFor();
+  check('보관함에 평균 별점(3과 4의 평균 3.5)', await savedBox.locator('article', { hasText: '치킨' }).getByLabel('가족 별점 평균 3.5점, 2명').isVisible());
   await kid.getByRole('button', { name: '치킨 자세히' }).click();
-  const foodDetail = kid.getByRole('dialog');
-  check('자세히: 먹은 기록 2번', (await region(kid, '먹은 기록').locator('.history-row').count()) === 2 && (await foodDetail.getByRole('button', { name: '오늘은 기록했어요' }).isDisabled()));
-  check('내가 올린 메뉴는 고칠 수 있음', await foodDetail.getByRole('button', { name: '이름, 분류, 링크 고치기' }).isVisible());
+  foodDetail = kid.getByRole('dialog');
+  check('자세히: 먹은 기록 2번, 가족 점수 표시', (await region(kid, '먹은 기록').locator('.history-row').count()) === 2 && (await foodDetail.getByText('아빠 4점', { exact: false }).isVisible()) && (await foodDetail.getByRole('button', { name: '오늘은 기록했어요' }).isDisabled()));
   await kid.getByLabel('다른 날 먹은 것 기록하기').fill(new Date(Date.now() - 3 * 86400000).toLocaleDateString('sv-SE'));
   await foodDetail.getByRole('button', { name: '기록', exact: true }).click();
   await region(kid, '먹은 기록').locator('.history-row').nth(2).waitFor();
-  check('지난 날짜도 기록', (await region(kid, '먹은 기록').locator('.history-row').count()) === 3);
-  await shot(kid, '31-food-detail');
   await region(kid, '먹은 기록').locator('.history-row').nth(1).getByRole('button', { name: /기록 지우기/ }).click();
   await kid.locator('.toast', { hasText: '기록을 지웠어요' }).waitFor();
-  check('잘못 누른 기록 지우기', (await region(kid, '먹은 기록').locator('.history-row').count()) === 2);
+  check('지난 날짜 기록과 기록 지우기', (await region(kid, '먹은 기록').locator('.history-row').count()) === 2);
+  check('내가 올린 메뉴는 고칠 수 있음', await foodDetail.getByRole('button', { name: '이름, 분류, 링크 고치기' }).isVisible());
   await foodDetail.getByRole('button', { name: '닫기' }).click();
-  await kid.getByRole('button', { name: '크림 파스타 자세히' }).click();
-  check('남이 올린 메뉴는 자녀가 고칠 수 없음', (await kid.getByRole('dialog').getByRole('button', { name: '이름, 분류, 링크 고치기' }).count()) === 0);
-  await kid.getByRole('dialog').getByRole('button', { name: '닫기' }).click();
+  await kid.getByRole('link', { name: /뭐먹지/ }).first().click();
 
   // 랜덤 뽑기
-  await kid.getByRole('button', { name: '랜덤 뽑기' }).click();
+  await kid.getByRole('button', { name: '뽑기', exact: true }).click();
   const drawSheet = kid.getByRole('dialog');
-  await drawSheet.getByRole('radio', { name: '배달' }).click();
-  check('후보가 없으면 안내', await drawSheet.getByText('뽑을 메뉴가 없어요').isVisible() && (await drawSheet.getByRole('button', { name: '뽑기!' }).isDisabled()));
+  await drawSheet.getByRole('radio', { name: '빵' }).click();
+  check('후보가 없으면 안내', (await drawSheet.getByText('뽑을 메뉴가 없어요').isVisible()) && (await drawSheet.getByRole('button', { name: '뽑기!' }).isDisabled()));
   await drawSheet.getByRole('radio', { name: '보관함까지 전부' }).click();
   await drawSheet.getByRole('button', { name: '뽑기!' }).click();
-  await drawSheet.locator('.draw-name', { hasText: '치킨' }).waitFor();
+  await drawSheet.locator('.draw-name', { hasText: '소금빵' }).waitFor();
   check('후보가 하나면 그 메뉴', await drawSheet.getByRole('button', { name: '오늘 이미 먹었어요' }).isDisabled());
   await drawSheet.getByRole('radio', { name: '전체' }).click();
   await drawSheet.getByRole('radio', { name: '먹고 싶은 것 중에서' }).click();
-  check('먹고 싶은 것 후보 5개', await drawSheet.getByText('후보 5개').isVisible());
+  check('먹고 싶은 것 후보 4개', await drawSheet.getByText('후보 4개').isVisible());
   await drawSheet.getByRole('button', { name: '뽑기!' }).click();
   await drawSheet.getByRole('button', { name: '다시 뽑기' }).waitFor({ timeout: 5000 });
   const first = await drawSheet.locator('.draw-name').innerText();
-  check('뽑힌 메뉴는 먹고 싶은 것 중 하나', ['크림 파스타', '아이스크림', '김밥', '떡볶이', '돈가스'].includes(first), first);
-  await shot(kid, '32-food-draw');
+  check('뽑힌 메뉴는 먹고 싶은 것 중 하나', ['초밥', '김밥', '떡볶이', '짜장면'].includes(first), first);
   await drawSheet.getByRole('button', { name: '다시 뽑기' }).click();
   await drawSheet.getByRole('button', { name: '다시 뽑기' }).waitFor({ timeout: 5000 });
   const second = await drawSheet.locator('.draw-name').innerText();
   check('다시 뽑으면 다른 메뉴', second !== first, `${first} -> ${second}`);
   await drawSheet.getByRole('button', { name: '이걸로 먹었어요!' }).click();
-  await savedBox.locator('article', { hasText: second }).waitFor();
-  check('뽑은 메뉴를 먹었어요로 기록', (await kid.getByRole('dialog').count()) === 0);
+  await kid.getByRole('dialog').getByRole('heading', { name: '어땠어요?' }).waitFor();
+  check('뽑은 메뉴를 먹었다고 하면 별점을 물음', true);
+  await kid.getByRole('dialog').getByRole('radio', { name: '별 5개' }).click();
+  await kid.getByRole('dialog').waitFor({ state: 'detached' });
 
-  // 부모 화면에도 보이고, 부모는 남의 메뉴도 고치고 지울 수 있다
-  await dad.getByRole('link', { name: '뭐먹지' }).click();
+  // 부모: 분류 관리, 남의 메뉴 고치고 지우기
+  await dad.locator('.tabbar').getByRole('link', { name: '뭐먹지' }).click();
   await region(dad, '먹고 싶어요').waitFor();
-  const dadDonkatsu = second === '돈가스' ? region(dad, '메뉴 보관함').locator('article', { hasText: '돈가스' }) : region(dad, '먹고 싶어요').locator('article', { hasText: '돈가스' });
-  check('자녀가 올린 메뉴가 부모 화면에', await dadDonkatsu.isVisible());
-  await dad.getByRole('button', { name: '돈가스 자세히' }).click();
+  await dad.getByRole('button', { name: /더 보기/ }).click();
+  await dad.getByRole('dialog').getByRole('link', { name: '분류 관리' }).click();
+  await dad.getByRole('heading', { name: '분류 관리' }).waitFor();
+  check('분류 관리: 기타는 지울 수 없음', (await dad.getByText('지울 수 없어요').isVisible()) && (await dad.getByRole('button', { name: '기타 분류 지우기' }).count()) === 0);
+  await dad.getByRole('button', { name: '빵 분류 지우기' }).click();
+  await dad.getByLabel('새 분류').fill('양식');
+  await dad.getByRole('button', { name: '추가', exact: true }).click();
+  await dad.getByRole('button', { name: '양식 그림 바꾸기' }).click();
+  await dad.getByRole('dialog').getByRole('radio', { name: '식사' }).click();
+  await dad.getByLabel('분류 이름').first().fill('한식당');
+  await shot(dad, '34-food-categories');
+  await dad.getByLabel('분류 이름').nth(1).fill('한식당');
+  await dad.getByRole('button', { name: '분류 저장하기' }).click();
+  check('같은 이름의 분류는 오류', await dad.getByRole('alert').getByText('같은 이름의 분류가 있어요.').isVisible());
+  await dad.getByLabel('분류 이름').nth(1).fill('중식');
+  await dad.getByRole('button', { name: '분류 저장하기' }).click();
+  await toast(dad, '분류를 저장했어요');
+  await region(dad, '먹고 싶어요').waitFor();
+  await kid.getByRole('button', { name: /더 보기/ }).click();
+  check('바뀐 분류가 자녀 화면에 바로 반영', (await kid.getByRole('dialog').getByRole('radio').allInnerTexts()).map((s) => s.trim()).join() === '전체,한식당,중식,일식,양식,기타');
+  await kid.getByRole('dialog').getByRole('radio', { name: '기타' }).click();
+  await kid.getByRole('button', { name: /기타만 보는 중/ }).waitFor();
+  await kid.getByRole('button', { name: /더 보기/ }).click();
+  await kid.getByRole('dialog').getByRole('link', { name: /메뉴 보관함/ }).click();
+  await kid.getByRole('combobox', { name: '분류' }).selectOption('etc');
+  check('지운 분류(빵)의 메뉴는 기타로', (await savedBox.locator('article', { hasText: '소금빵' }).isVisible()) && (await savedBox.locator('article', { hasText: '치킨' }).isVisible()));
+  await kid.getByRole('link', { name: /뭐먹지/ }).first().click();
+  await wanted.locator('article').first().waitFor();
+  check('다른 화면에 다녀오면 거르기는 풀려 있음', (await kid.getByRole('button', { name: /만 보는 중/ }).count()) === 0);
+
+  const dadTarget = ['초밥', '김밥', '떡볶이', '짜장면'].find((name) => name !== second);
+  await dad.getByRole('button', { name: `${dadTarget} 자세히` }).click();
   await dad.getByRole('dialog').getByRole('button', { name: '이름, 분류, 링크 고치기' }).click();
-  await dad.getByLabel('메뉴 이름').fill('치즈 돈가스');
+  await dad.getByLabel('메뉴 이름').fill(`맛있는 ${dadTarget}`);
   await dad.getByRole('dialog').getByRole('button', { name: '고친 내용 저장하기' }).click();
-  await kid.getByRole('button', { name: '치즈 돈가스 자세히' }).waitFor();
+  await kid.getByRole('button', { name: `맛있는 ${dadTarget} 자세히` }).waitFor();
   check('부모가 고친 이름이 자녀 화면에 반영', true);
-  await dad.getByRole('button', { name: '아이스크림 자세히' }).click();
+  await dad.getByRole('button', { name: `맛있는 ${dadTarget} 자세히` }).click();
   await dad.getByRole('dialog').getByRole('button', { name: '이름, 분류, 링크 고치기' }).click();
   await dad.getByRole('dialog').getByRole('button', { name: '이 메뉴 지우기' }).click();
   await dad.getByRole('dialog').getByRole('button', { name: /정말 지울까요/ }).click();
-  await kid.getByRole('button', { name: '아이스크림 자세히' }).waitFor({ state: 'detached' });
-  check('지운 메뉴는 모두의 화면에서 사라짐', (await dad.getByRole('button', { name: '아이스크림 자세히' }).count()) === 0);
-  await shot(dad, '33-food-parent', true);
+  await kid.getByRole('button', { name: `맛있는 ${dadTarget} 자세히` }).waitFor({ state: 'detached' });
+  check('지운 메뉴는 모두의 화면에서 사라짐', (await dad.getByRole('button', { name: `맛있는 ${dadTarget} 자세히` }).count()) === 0);
+  await dad.locator('.toast').waitFor({ state: 'detached', timeout: 6000 }).catch(() => {});
+  await shot(dad, '35-food-parent');
 
   // ── 8-3. 위치: 지금 여기예요, 코인 한도, 자녀 현황, 장소 이름, 설정 ─────────
   await kid.getByRole('link', { name: '퀘스트' }).click();
@@ -639,7 +708,7 @@ try {
   await dad.getByRole('tab', { name: '동생 현황', selected: true }).waitFor();
   check('두 번 밀면 둘째의 현황', await dad.getByRole('tabpanel').getByText('오늘은 퀘스트가 없어요').isVisible());
   await dad.waitForTimeout(300);
-  await shot(dad, '34-parent-two-kids');
+  await shot(dad, '44-parent-two-kids');
   await dad.getByRole('tab', { name: '승인' }).click();
 
   // ── 10. 화면 넘침 검사 ───────────────────────────────────────────────────
@@ -680,13 +749,25 @@ try {
   await sp.getByRole('heading', { name: '오늘 할 일' }).waitFor();
   check('넘어오는 중에도 가로 넘침 없음', (await overflow(sp)) <= 0 && (await inner()) <= 0);
   await sp.waitForTimeout(300);
-  await sp.screenshot({ path: `${OUT}/35-small-kid-status.png`, fullPage: true });
+  await sp.screenshot({ path: `${OUT}/45-small-kid-status.png`, fullPage: true });
   check('320px 자녀 현황 가로 넘침 없음', (await overflow(sp)) <= 0 && (await inner()) <= 0);
-  await sp.getByRole('link', { name: '뭐먹지' }).click();
-  await sp.getByRole('heading', { name: '먹고 싶어요' }).waitFor();
+  await sp.locator('.tabbar').getByRole('link', { name: '뭐먹지' }).click();
+  await region(sp, '먹고 싶어요').locator('article').first().waitFor();
   await sp.screenshot({ path: `${OUT}/36-small-food.png`, fullPage: true });
   check('320px 뭐먹지 가로 넘침 없음', (await overflow(sp)) <= 0 && (await inner()) <= 0);
-  await sp.getByRole('button', { name: '랜덤 뽑기' }).click();
+  await sp.getByRole('button', { name: /더 보기/ }).click();
+  await sp.getByRole('dialog').getByRole('link', { name: /메뉴 보관함/ }).click();
+  await region(sp, '메뉴 보관함').locator('article').first().waitFor();
+  await sp.screenshot({ path: `${OUT}/42-small-food-saved.png`, fullPage: true });
+  check('320px 보관함 가로 넘침 없음', (await overflow(sp)) <= 0 && (await inner()) <= 0);
+  await sp.getByRole('link', { name: /뭐먹지/ }).first().click();
+  await sp.getByRole('button', { name: /더 보기/ }).click();
+  await sp.getByRole('dialog').getByRole('link', { name: '분류 관리' }).click();
+  await sp.getByRole('heading', { name: '분류 관리' }).waitFor();
+  await sp.screenshot({ path: `${OUT}/43-small-food-categories.png`, fullPage: true });
+  check('320px 분류 관리 가로 넘침 없음', (await overflow(sp)) <= 0 && (await inner()) <= 0);
+  await sp.getByRole('link', { name: /뭐먹지/ }).first().click();
+  await sp.getByRole('button', { name: '뽑기', exact: true }).click();
   const drawOver = await sp.evaluate(() => { const s = document.querySelector('.sheet'); return s.scrollWidth - s.clientWidth; });
   check('320px 뽑기 창 가로 넘침 없음', drawOver <= 0, String(drawOver));
   await sp.getByRole('dialog').getByRole('button', { name: '닫기' }).click();

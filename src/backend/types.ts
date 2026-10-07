@@ -40,6 +40,16 @@ export interface FamilySettings {
   checkinCoins: number;
   /** 하루에 몇 번까지 위치 공유 코인을 줄지 */
   checkinPerDay: number;
+  /** 뭐먹지의 분류. 마지막은 항상 "기타" */
+  foodCategories: FoodCategoryDef[];
+}
+
+/** 뭐먹지의 분류 하나. id 는 메뉴에 저장되고, 이름과 그림은 설정에서 바꿀 수 있다. */
+export interface FoodCategoryDef {
+  id: string;
+  name: string;
+  /** sprites.json 의 아이콘 이름 */
+  icon: string;
 }
 
 export interface Family {
@@ -250,12 +260,10 @@ export interface Order {
   deliveredAt: number | null;
 }
 
-/** 뭐먹지의 분류: 집밥, 외식, 배달, 간식 */
-export type FoodCategory = 'home' | 'out' | 'delivery' | 'snack';
-
 export interface FoodInput {
   name: string;
-  category: FoodCategory;
+  /** 분류의 id. 설정에서 지워진 분류라면 "기타"로 보인다 */
+  category: string;
   /** 맛집, 레시피, 배달 페이지 주소. 없으면 빈 문자열 */
   link: string;
   memo: string;
@@ -273,6 +281,8 @@ export interface Food extends FoodInput {
   wantedBy: string[];
   /** 먹은 날(YYYY-MM-DD), 오래된 날부터. 하루에 한 번만 기록한다 */
   eaten: string[];
+  /** 가족 각자가 준 별점(1~5). 한 사람당 하나이고 언제든 바꿀 수 있다 */
+  ratings: Record<string, number>;
   active: boolean;
 }
 
@@ -421,6 +431,8 @@ export interface Backend {
   /** 먹은 날을 기록한다. 먹었으니 "먹고 싶어요"는 모두 풀리고 보관함으로 간다. */
   addFoodEaten(familyId: string, foodId: string, day: string): Promise<void>;
   removeFoodEaten(familyId: string, foodId: string, day: string): Promise<void>;
+  /** 내 별점을 주거나 바꾼다(1~5). */
+  rateFood(familyId: string, foodId: string, uid: string, stars: number): Promise<void>;
 
   // 위치
   /** sinceMs 이후의 위치 기록(최근 것부터). onError 는 목록을 읽지 못했을 때 불린다. */

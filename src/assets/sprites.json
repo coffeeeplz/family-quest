@@ -626,6 +626,62 @@
    "....KRRK....",
    ".....KK.....",
    "............"
+  ],
+  "noodle": [
+   "........K..K",
+   ".......K..K.",
+   "......K..K..",
+   ".KYYYYKYYKK.",
+   "KYYYYYYYYYYK",
+   "KKKKKKKKKKKK",
+   "KRRRRRRRRRRK",
+   "KRRWRRRRRRRK",
+   ".KRRRRRRRRK.",
+   "..KRRRRRRK..",
+   "...KKKKKK...",
+   "............"
+  ],
+  "sushi": [
+   "............",
+   "............",
+   "..KKKKKKKK..",
+   ".KOOOOOOOOK.",
+   "KOOWOOWOOWOK",
+   "KOOOOOOOOOOK",
+   ".KKKKKKKKKK.",
+   ".KWWWWWWWWK.",
+   ".KWWWWWWWWK.",
+   ".KWWWWWWWWK.",
+   "..KKKKKKKK..",
+   "............"
+  ],
+  "bread": [
+   "............",
+   "...KKKKKK...",
+   "..KOOOOOOK..",
+   ".KOOCOOCOOK.",
+   "KOOCOOCOOCOK",
+   "KOOOOOOOOOOK",
+   "KOOOOOOOOOOK",
+   "KNNNNNNNNNNK",
+   ".KNNNNNNNNK.",
+   "..KKKKKKKK..",
+   "............",
+   "............"
+  ],
+  "star_off": [
+   ".....KK.....",
+   "....KWWK....",
+   "....KWWK....",
+   "KKKKKWWKKKKK",
+   "KWWWWWWWWWWK",
+   ".KWWWWWWWWK.",
+   "..KWWWWWWK..",
+   "..KWWWWWWK..",
+   ".KWWWKKWWWK.",
+   ".KWWK..KWWK.",
+   "KWKK....KKWK",
+   "KKK......KKK"
   ]
  }
 }

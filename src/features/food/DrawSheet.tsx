@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFamilyData } from '../../app/familyData';
 import { useBackend, useSession } from '../../app/session';
-import type { Food, FoodCategory } from '../../backend/types';
-import { FOOD_CATEGORIES, categoryOf, drawPool, eatCount, eatenLabel, pickRandom, type DrawScope } from '../../domain/foods';
+import type { Food } from '../../backend/types';
+import { categoryOf, drawPool, eatCount, eatenLabel, pickRandom, type DrawScope } from '../../domain/foods';
 import { Icon } from '../../ui/Sprite';
 import { Button, FieldGroup, Sheet } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
 
 interface Props {
   foods: Food[];
-  initialCategory: FoodCategory | 'all';
+  initialCategory: string;
   onClose: () => void;
+  /** 뽑은 메뉴를 먹었다고 기록한 뒤에 불린다(별점을 물어보는 데 쓴다). */
+  onEaten: (food: Food) => void;
 }
 
 /** 이름이 바뀌며 돌아가는 횟수와 간격 */
@@ -21,19 +23,20 @@ const reducedMotion = () =>
   typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** 랜덤 뽑기: 먹고 싶은 것 중에서(또는 보관함까지) 하나를 골라 준다. */
-export function DrawSheet({ foods, initialCategory, onClose }: Props) {
+export function DrawSheet({ foods, initialCategory, onClose, onEaten }: Props) {
   const backend = useBackend();
   const { family } = useSession();
   const { today } = useFamilyData();
   const { busy, run } = useAction();
   const [scope, setScope] = useState<DrawScope>('wanted');
-  const [category, setCategory] = useState<FoodCategory | 'all'>(initialCategory);
+  const categories = family.settings.foodCategories;
+  const [category, setCategory] = useState(initialCategory);
   const [pickedId, setPickedId] = useState<string | null>(null);
   /** 돌아가는 동안 스쳐 지나가는 이름 */
   const [flash, setFlash] = useState<string | null>(null);
   const timer = useRef<number | null>(null);
 
-  const pool = useMemo(() => drawPool(foods, scope, category), [foods, scope, category]);
+  const pool = useMemo(() => drawPool(foods, scope, category, categories), [foods, scope, category, categories]);
   const picked = pool.find((food) => food.id === pickedId) ?? null;
   const spinning = flash !== null;
 
@@ -67,7 +70,7 @@ export function DrawSheet({ foods, initialCategory, onClose }: Props) {
     }, SPIN_MS);
   }
 
-  function change(next: { scope?: DrawScope; category?: FoodCategory | 'all' }) {
+  function change(next: { scope?: DrawScope; category?: string }) {
     stop();
     setFlash(null);
     setPickedId(null);
@@ -93,7 +96,7 @@ export function DrawSheet({ foods, initialCategory, onClose }: Props) {
           <button type="button" role="radio" className="chip" aria-checked={category === 'all'} onClick={() => change({ category: 'all' })}>
             전체
           </button>
-          {FOOD_CATEGORIES.map((c) => (
+          {categories.map((c) => (
             <button key={c.id} type="button" role="radio" className="chip" aria-checked={category === c.id} onClick={() => change({ category: c.id })}>
               {c.name}
             </button>
@@ -117,7 +120,7 @@ export function DrawSheet({ foods, initialCategory, onClose }: Props) {
           </>
         ) : picked ? (
           <>
-            <Icon name={categoryOf(picked.category).icon} size={48} />
+            <Icon name={categoryOf(categories, picked.category).icon} size={48} />
             <p className="draw-name">{picked.name}</p>
             <p className="t-cap">{eatenLabel(picked, today)}</p>
             {picked.memo && <p className="t-cap">{picked.memo}</p>}
@@ -151,7 +154,7 @@ export function DrawSheet({ foods, initialCategory, onClose }: Props) {
               void run(
                 () => backend.addFoodEaten(family.id, picked.id, today),
                 `"${picked.name}" 먹었어요! ${eatCount(picked) + 1}번째`,
-              ).then((ok) => ok && onClose())
+              ).then((ok) => ok && onEaten(picked))
             }
           >
             {picked.eaten.includes(today) ? '오늘 이미 먹었어요' : '이걸로 먹었어요!'}

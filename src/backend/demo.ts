@@ -3,7 +3,7 @@
  * 데이터는 이 기기의 브라우저에만 저장되고, 실제 서버와 같은 권한 규칙을 흉내 낸다.
  */
 import { INVITE_TTL_MS, isInviteCodeShape, newInviteCode, normalizeInviteCode } from '../domain/invites';
-import { MAX_FOODS, canEditFood, cleanFoodInput, findSameName, withEaten } from '../domain/foods';
+import { MAX_FOODS, canEditFood, cleanFoodInput, cleanStars, findSameName, withEaten } from '../domain/foods';
 import { MAX_PLACES, cleanFix, cleanPlaceInput, planCheckin } from '../domain/location';
 import { cleanFamilyName, cleanProfile } from '../domain/profile';
 import { MAX_OFFER_NOTE, canCounter, cleanOfferAmount, cleanProposalInput, turnOf } from '../domain/proposals';
@@ -50,7 +50,7 @@ interface DemoUser {
 }
 
 interface DemoState {
-  v: 5;
+  v: 6;
   currentUid: string | null;
   users: Record<string, DemoUser>;
   families: Record<string, Family>;
@@ -73,7 +73,7 @@ export interface KeyValueStore {
   setItem(key: string, value: string): void;
 }
 
-const STORAGE_KEY = 'family-quest-demo-v5';
+const STORAGE_KEY = 'family-quest-demo-v6';
 const FAMILY = 'demo-family';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -182,6 +182,7 @@ function seed(now: number = Date.now()): DemoState {
     category: Food['category'],
     wantedBy: string[],
     eatenDaysAgo: number[],
+    ratings: Food['ratings'] = {},
     link = '',
     memo = '',
   ): Food => ({
@@ -194,11 +195,12 @@ function seed(now: number = Date.now()): DemoState {
     createdAt: startedAt + eatenDaysAgo.length,
     wantedBy,
     eaten: eatenDaysAgo.map((n) => addDays(today, -n)).sort(),
+    ratings,
     active: true,
   });
 
   return {
-    v: 5,
+    v: 6,
     currentUid: null,
     users: {
       'demo-dad': { uid: 'demo-dad', email: 'dad@example.com', label: '아빠', hint: '퀘스트를 만들고 승인해요', familyId: FAMILY },
@@ -286,12 +288,12 @@ function seed(now: number = Date.now()): DemoState {
     orders: { [FAMILY]: {} },
     foods: {
       [FAMILY]: {
-        'f-chicken': food('f-chicken', '치킨', 'delivery', ['demo-kid', 'demo-dad'], [9]),
-        'f-pasta': food('f-pasta', '크림 파스타', 'out', ['demo-mom'], [], 'https://www.google.com/maps/search/?api=1&query=%ED%8C%8C%EC%8A%A4%ED%83%80', '역 앞 새로 생긴 집'),
-        'f-icecream': food('f-icecream', '아이스크림', 'snack', ['demo-kid'], [12]),
-        'f-kimchi': food('f-kimchi', '김치찌개', 'home', [], [2, 9, 20]),
-        'f-gimbap': food('f-gimbap', '김밥', 'home', [], [5]),
-        'f-tteok': food('f-tteok', '떡볶이', 'snack', [], [15, 30]),
+        'f-chicken': food('f-chicken', '치킨', 'etc', ['demo-kid', 'demo-dad'], [9], { 'demo-kid': 5, 'demo-dad': 4 }),
+        'f-sushi': food('f-sushi', '초밥', 'japanese', ['demo-mom'], [], {}, 'https://www.google.com/maps/search/?api=1&query=%EC%B4%88%EB%B0%A5', '역 앞 새로 생긴 집'),
+        'f-bread': food('f-bread', '소금빵', 'bread', ['demo-kid'], [12], { 'demo-kid': 4 }),
+        'f-kimchi': food('f-kimchi', '김치찌개', 'korean', [], [2, 9, 20], { 'demo-dad': 5, 'demo-mom': 4, 'demo-kid': 3 }),
+        'f-gimbap': food('f-gimbap', '김밥', 'korean', [], [5]),
+        'f-tteok': food('f-tteok', '떡볶이', 'korean', [], [15, 30], { 'demo-kid': 5 }),
       },
     },
     // 체험용 장소와 위치는 지어낸 좌표다.
@@ -326,7 +328,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       const raw = store?.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as DemoState;
-        if (parsed.v === 5) return parsed;
+        if (parsed.v === 6) return parsed;
       }
     } catch {
       // 저장소를 못 읽으면 새로 시작한다.
@@ -1031,7 +1033,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
         () =>
           Object.values(state.foods[familyId] ?? {})
             .filter((f) => f.active)
-            .map((f) => ({ ...f, wantedBy: [...f.wantedBy], eaten: [...f.eaten] })),
+            .map((f) => ({ ...f, wantedBy: [...f.wantedBy], eaten: [...f.eaten], ratings: { ...f.ratings } })),
         cb,
       );
     },
@@ -1044,7 +1046,16 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       if (findSameName(active, clean.name)) throw new AppError('이미 올라와 있는 메뉴예요.');
       if (active.length >= MAX_FOODS) throw new AppError(`메뉴는 ${MAX_FOODS}개까지 올릴 수 있어요.`);
       const id = newId('f');
-      state.foods[familyId][id] = { id, ...clean, addedBy: byUid, createdAt: Date.now(), wantedBy: [byUid], eaten: [], active: true };
+      state.foods[familyId][id] = {
+        id,
+        ...clean,
+        addedBy: byUid,
+        createdAt: Date.now(),
+        wantedBy: [byUid],
+        eaten: [],
+        ratings: {},
+        active: true,
+      };
       commit();
       return id;
     },
@@ -1081,6 +1092,14 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       requireMember(familyId);
       const stored = requireFood(familyId, foodId);
       state.foods[familyId][foodId] = { ...stored, eaten: withEaten(stored.eaten, day, dateKey()), wantedBy: [] };
+      commit();
+    },
+
+    async rateFood(familyId, foodId, uid, stars) {
+      requireSelf(uid);
+      requireMember(familyId);
+      const stored = requireFood(familyId, foodId);
+      state.foods[familyId][foodId] = { ...stored, ratings: { ...stored.ratings, [uid]: cleanStars(stars) } };
       commit();
     },
 

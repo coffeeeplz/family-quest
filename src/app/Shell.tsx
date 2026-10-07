@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { HashRouter, Link, MemoryRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { ApprovalsPage } from '../features/approvals/ApprovalsPage';
 import { FamilyPage } from '../features/family/FamilyPage';
+import { FoodCategoriesPage } from '../features/food/FoodCategoriesPage';
 import { FoodPage } from '../features/food/FoodPage';
+import { FoodSavedPage } from '../features/food/FoodSavedPage';
 import { LedgerPage } from '../features/ledger/LedgerPage';
 import { LocationAuto } from '../features/location/LocationAuto';
 import { MorePage } from '../features/more/MorePage';
@@ -71,6 +73,7 @@ export function Shell() {
             <Route path="/shop" element={<ShopAdminPage />} />
             <Route path="/shop/new" element={<RewardFormPage />} />
             <Route path="/shop/:rewardId" element={<RewardFormPage />} />
+            <Route path="/food/categories" element={<FoodCategoriesPage />} />
           </>
         ) : (
           <>
@@ -79,6 +82,7 @@ export function Shell() {
           </>
         )}
         <Route path="/food" element={<FoodPage />} />
+        <Route path="/food/saved" element={<FoodSavedPage />} />
         <Route path="/more" element={<MorePage />} />
         <Route path="/log" element={<LedgerPage />} />
         <Route path="/family" element={<FamilyPage />} />

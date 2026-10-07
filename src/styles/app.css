@@ -866,7 +866,70 @@ button.member-chip {
   font: inherit;
   text-align: left;
   min-height: var(--tap);
+  width: 100%;
+  min-width: 0;
+}
+.food-open .card-main > span {
+  display: block;
+}
+.food-open .card-main > span.meta {
+  display: flex;
+}
+.food-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 12px;
+}
+.filter-chip {
+  align-self: flex-start;
+}
+.rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.stars {
+  display: flex;
   justify-content: center;
+  gap: 6px;
+}
+.star-button {
+  width: var(--tap);
+  height: var(--tap);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.select {
+  min-width: 0;
+  padding-right: 8px;
+  font-family: var(--font-title);
+  font-size: 14px;
+  appearance: auto;
+}
+.category-row {
+  gap: 12px;
+}
+.category-row .avatar-cell {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+}
+.category-row .avatar-cell.fixed {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gray);
 }
 .food-foot {
   display: flex;

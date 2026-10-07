@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useFamilyData } from '../../app/familyData';
 import { useBackend, useSession } from '../../app/session';
 import { AppError, type FamilySettings } from '../../backend/types';
@@ -70,6 +70,8 @@ export function SettingsPage() {
       streakBonus: parseCoins(streakBonus),
       checkinCoins: parseCoins(checkinCoins),
       checkinPerDay,
+      // 뭐먹지의 분류는 따로 있는 분류 관리 화면에서 고친다.
+      foodCategories: family.settings.foodCategories,
       // 입력칸에 적어 두고 추가를 안 누른 한마디도 함께 저장한다.
       praises: newPraise.trim() ? [...praises, newPraise.trim()] : praises,
     };
@@ -286,6 +288,16 @@ export function SettingsPage() {
         ) : (
           <p className="t-cap">버튼은 {MAX_PRESETS}개까지 만들 수 있어요.</p>
         )}
+      </section>
+
+      <div className="hr" />
+
+      <section className="stack" aria-label="뭐먹지 분류">
+        <h2 className="t-title">뭐먹지 분류</h2>
+        <p className="t-cap">지금 분류: {family.settings.foodCategories.map((c) => c.name).join(', ')}</p>
+        <Link className="btn plain big block" to="/food/categories">
+          분류 관리로 가기
+        </Link>
       </section>
 
       <div className="hr" />

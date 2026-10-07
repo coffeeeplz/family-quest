@@ -7,6 +7,7 @@ import { addDays, formatDay } from '../../lib/dates';
 import { Icon } from '../../ui/Sprite';
 import { Button, Field, Sheet } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
+import { RatingInline, StarInput } from './Stars';
 
 interface Props {
   food: Food;
@@ -31,7 +32,9 @@ export function FoodDetailSheet({ food, onClose, onEdit }: Props) {
   const { busy, run } = useAction();
   const [day, setDay] = useState(addDays(today, -1));
 
-  const category = categoryOf(food.category);
+  const category = categoryOf(family.settings.foodCategories, food.category);
+  const myStars = food.ratings[me.uid] ?? 0;
+  const others = members.filter((m) => m.uid !== me.uid && food.ratings[m.uid] !== undefined);
   const mine = food.wantedBy.includes(me.uid);
   const fans = members.filter((m) => food.wantedBy.includes(m.uid)).map((m) => m.displayName);
   const history = [...food.eaten].reverse();
@@ -75,6 +78,24 @@ export function FoodDetailSheet({ food, onClose, onEdit }: Props) {
           {food.eaten.includes(today) ? '오늘은 기록했어요' : '오늘 먹었어요!'}
         </Button>
       </div>
+
+      <section className="stack" style={{ gap: 10 }} aria-label="별점">
+        <div className="section-head">
+          <h3 className="t-title" style={{ fontSize: 15 }}>
+            별점
+          </h3>
+          <RatingInline food={food} withCount />
+        </div>
+        <StarInput
+          value={myStars}
+          disabled={busy}
+          onChange={(stars) => void run(() => backend.rateFood(family.id, food.id, me.uid, stars), `별 ${stars}개를 줬어요.`)}
+        />
+        <p className="t-cap">
+          {myStars > 0 ? '별을 다시 누르면 내 점수를 바꿀 수 있어요.' : '별을 눌러 내 점수를 남겨 주세요.'}
+          {others.length > 0 ? ` ${others.map((m) => `${m.displayName} ${food.ratings[m.uid]}점`).join(' · ')}` : ''}
+        </p>
+      </section>
 
       <section className="stack" style={{ gap: 10 }} aria-label="먹은 기록">
         <div className="section-head">

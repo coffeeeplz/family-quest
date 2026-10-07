@@ -29,6 +29,7 @@ import {
   signOut as fbSignOut,
 } from 'firebase/auth';
 import {
+  FieldPath,
   arrayRemove,
   arrayUnion,
   collection,
@@ -55,7 +56,7 @@ import {
 } from 'firebase/firestore';
 import { firebaseConfig } from '../config/firebase';
 import { INVITE_TTL_MS, isInviteCodeShape, newInviteCode, normalizeInviteCode } from '../domain/invites';
-import { MAX_EATEN, categoryOf, cleanFoodInput, withEaten } from '../domain/foods';
+import { ETC_CATEGORY_ID, MAX_EATEN, cleanFoodInput, cleanStars, withEaten } from '../domain/foods';
 import { cleanFix, cleanPlaceInput, planCheckin } from '../domain/location';
 import { cleanFamilyName, cleanProfile } from '../domain/profile';
 import { MAX_OFFER_NOTE, canCounter, cleanOfferAmount, cleanProposalInput, turnOf } from '../domain/proposals';
@@ -248,13 +249,14 @@ export function createFirebaseBackend(): Backend {
   const toFood = (id: string, d: DocumentData): Food => ({
     id,
     name: d.name,
-    category: categoryOf(d.category).id,
+    category: typeof d.category === 'string' && d.category ? d.category : ETC_CATEGORY_ID,
     link: d.link ?? '',
     memo: d.memo ?? '',
     addedBy: d.addedBy,
     createdAt: d.createdAt ?? 0,
     wantedBy: [...((d.wantedBy as string[] | undefined) ?? [])],
     eaten: [...((d.eaten as string[] | undefined) ?? [])].sort(),
+    ratings: { ...((d.ratings as Record<string, number> | undefined) ?? {}) },
     active: d.active === true,
   });
 
@@ -929,6 +931,7 @@ export function createFirebaseBackend(): Backend {
           createdAt: Date.now(),
           wantedBy: [byUid],
           eaten: [],
+          ratings: {},
           active: true,
         });
         return ref.id;
@@ -959,6 +962,12 @@ export function createFirebaseBackend(): Backend {
         // 기록이 가득 차서 오래된 날을 덜어 내야 할 때만 목록을 통째로 바꾼다.
         const eaten = current.length >= MAX_EATEN ? next : arrayUnion(day);
         await updateDoc(ref, { eaten, wantedBy: [] });
+      }),
+
+    rateFood: (familyId, foodId, uid, stars) =>
+      guard(async () => {
+        // ratings.<uid> 한 칸만 바꾼다. 다른 사람의 별점은 건드리지 않는다.
+        await updateDoc(doc(foodsCol(familyId), foodId), new FieldPath('ratings', uid), cleanStars(stars));
       }),
 
     removeFoodEaten: (familyId, foodId, day) =>

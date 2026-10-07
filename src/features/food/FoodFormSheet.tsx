@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useBackend, useSession } from '../../app/session';
-import type { Food, FoodCategory } from '../../backend/types';
-import { FOOD_CATEGORIES, MAX_FOODS, MAX_FOOD_MEMO, MAX_FOOD_NAME, findSameName, isWanted, splitFoods } from '../../domain/foods';
+import type { Food } from '../../backend/types';
+import { MAX_FOODS, MAX_FOOD_MEMO, MAX_FOOD_NAME, categoryOf, findSameName, isWanted, splitFoods } from '../../domain/foods';
 import { Icon } from '../../ui/Sprite';
 import { Button, Field, FieldGroup, Sheet } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
@@ -11,7 +11,8 @@ interface Props {
   foods: Food[];
   /** 고칠 메뉴. null 이면 새로 올린다. */
   food: Food | null;
-  initialCategory: FoodCategory | 'all';
+  /** 처음에 골라 둘 분류의 id. 'all' 이면 첫 분류 */
+  initialCategory: string;
   onClose: () => void;
 }
 
@@ -24,7 +25,10 @@ export function FoodFormSheet({ foods, food, initialCategory, onClose }: Props) 
   const { family, me } = useSession();
   const { busy, run } = useAction();
   const [name, setName] = useState(food?.name ?? '');
-  const [category, setCategory] = useState<FoodCategory>(food?.category ?? (initialCategory === 'all' ? 'home' : initialCategory));
+  const categories = family.settings.foodCategories;
+  const [category, setCategory] = useState(
+    food ? categoryOf(categories, food.category).id : initialCategory === 'all' ? categories[0].id : initialCategory,
+  );
   const [link, setLink] = useState(food?.link ?? '');
   const [memo, setMemo] = useState(food?.memo ?? '');
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -106,9 +110,9 @@ export function FoodFormSheet({ foods, food, initialCategory, onClose }: Props) 
         <>
           <FieldGroup label="분류">
             <div className="chips">
-              {FOOD_CATEGORIES.map((c) => (
+              {categories.map((c) => (
                 <button key={c.id} type="button" role="radio" className="chip" aria-checked={category === c.id} onClick={() => setCategory(c.id)}>
-                  <Icon name={c.icon} size={24} />
+                  <Icon name={categoryOf(categories, c.id).icon} size={24} />
                   {c.name}
                 </button>
               ))}

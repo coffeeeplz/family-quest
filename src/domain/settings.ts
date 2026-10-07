@@ -1,4 +1,5 @@
 import { AppError, type FamilySettings } from '../backend/types';
+import { DEFAULT_FOOD_CATEGORIES, cleanFoodCategories, normalizeFoodCategories } from './foods';
 
 /** 놓친 반복 퀘스트를 며칠 전 것까지 보여 줄지 */
 export const MISSED_DAYS = 3;
@@ -24,6 +25,7 @@ export const DEFAULT_SETTINGS: FamilySettings = {
   // 이 두 값은 firestore.rules 의 기본값과 같아야 한다(설정을 한 번도 저장하지 않은 가족에게 쓰인다).
   checkinCoins: 1,
   checkinPerDay: 3,
+  foodCategories: DEFAULT_FOOD_CATEGORIES,
 };
 
 /** 늦게 한 반복 퀘스트는 절반만 받는다(홀수는 올림). */
@@ -49,6 +51,7 @@ export function normalizeSettings(raw: unknown): FamilySettings {
     praises,
     checkinCoins: clampInt(r.checkinCoins, 0, MAX_CHECKIN_COINS, DEFAULT_SETTINGS.checkinCoins),
     checkinPerDay: clampInt(r.checkinPerDay, 1, MAX_CHECKIN_PER_DAY, DEFAULT_SETTINGS.checkinPerDay),
+    foodCategories: normalizeFoodCategories(r.foodCategories),
   };
 }
 
@@ -74,5 +77,5 @@ export function cleanSettings(input: FamilySettings): FamilySettings {
   if (praises.some((p) => p.length > MAX_PRAISE_LENGTH)) {
     throw new AppError(`칭찬 한마디는 ${MAX_PRAISE_LENGTH}자까지 쓸 수 있어요.`);
   }
-  return { ...input, praises };
+  return { ...input, praises, foodCategories: cleanFoodCategories(input.foodCategories) };
 }

@@ -1,14 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import type { Food, Member, Order, Place, Proposal, Quest, Reward, Run } from '../src/backend/types';
 import {
+  DEFAULT_FOOD_CATEGORIES,
   MAX_EATEN,
+  MAX_FOOD_CATEGORIES,
   canEditFood,
+  categoryOf,
+  cleanFoodCategories,
   cleanFoodInput,
   cleanLink,
+  cleanStars,
   drawPool,
+  eatCountLabel,
   eatenLabel,
+  lastEatenLabel,
   findSameName,
+  normalizeFoodCategories,
   pickRandom,
+  ratingSummary,
+  sortSaved,
   splitFoods,
   withEaten,
 } from '../src/domain/foods';
@@ -446,13 +456,14 @@ describe('뭐먹지', () => {
   const food = (over: Partial<Food>): Food => ({
     id: 'f1',
     name: '떡볶이',
-    category: 'snack',
+    category: 'korean',
     link: '',
     memo: '',
     addedBy: 'kid',
     createdAt: 0,
     wantedBy: [],
     eaten: [],
+    ratings: {},
     active: true,
     ...over,
   });
@@ -469,11 +480,11 @@ describe('뭐먹지', () => {
   });
 
   it('validates food input', () => {
-    const base = { name: '  크림   파스타 ', category: 'out' as const, link: '', memo: ' 순한맛 ' };
-    expect(cleanFoodInput(base)).toEqual({ name: '크림 파스타', category: 'out', link: '', memo: '순한맛' });
+    const base = { name: '  크림   파스타 ', category: 'etc', link: '', memo: ' 순한맛 ' };
+    expect(cleanFoodInput(base)).toEqual({ name: '크림 파스타', category: 'etc', link: '', memo: '순한맛' });
     expect(() => cleanFoodInput({ ...base, name: ' ' })).toThrow('메뉴 이름');
     expect(() => cleanFoodInput({ ...base, name: '가'.repeat(31) })).toThrow('30자');
-    expect(() => cleanFoodInput({ ...base, category: '없음' as never })).toThrow('분류');
+    expect(() => cleanFoodInput({ ...base, category: '' })).toThrow('분류');
   });
 
   it('finds the same name ignoring spacing and case', () => {
@@ -498,21 +509,22 @@ describe('뭐먹지', () => {
 
   it('splits into wanted (most wanted first) and saved (recently eaten first)', () => {
     const foods = [
-      food({ id: 'one', name: '치킨', category: 'delivery', wantedBy: ['kid'], createdAt: 5 }),
-      food({ id: 'two', name: '피자', category: 'delivery', wantedBy: ['kid', 'dad'], createdAt: 1 }),
-      food({ id: 'old', name: '김밥', category: 'home', eaten: ['2026-09-01'] }),
-      food({ id: 'new', name: '찌개', category: 'home', eaten: ['2026-09-01', '2026-10-04'] }),
-      food({ id: 'never', name: '라면', category: 'home' }),
+      food({ id: 'one', name: '치킨', category: 'etc', wantedBy: ['kid'], createdAt: 5 }),
+      food({ id: 'two', name: '피자', category: 'delivery', wantedBy: ['kid', 'dad'], createdAt: 1 }), // 예전 분류는 기타로 본다
+      food({ id: 'old', name: '김밥', category: 'korean', eaten: ['2026-09-01'] }),
+      food({ id: 'new', name: '찌개', category: 'korean', eaten: ['2026-09-01', '2026-10-04'] }),
+      food({ id: 'never', name: '라면', category: 'korean' }),
       food({ id: 'gone', name: '지운 것', active: false, wantedBy: ['kid'] }),
     ];
     const lists = splitFoods(foods);
     expect(lists.wanted.map((f) => f.id)).toEqual(['two', 'one']);
     expect(lists.saved.map((f) => f.id)).toEqual(['new', 'old', 'never']);
-    expect(splitFoods(foods, 'home').wanted).toEqual([]);
-    expect(splitFoods(foods, 'home').saved).toHaveLength(3);
+    expect(splitFoods(foods, 'korean').wanted).toEqual([]);
+    expect(splitFoods(foods, 'korean').saved).toHaveLength(3);
     expect(drawPool(foods, 'wanted', 'all').map((f) => f.id)).toEqual(['two', 'one']);
     expect(drawPool(foods, 'all', 'all')).toHaveLength(5);
-    expect(drawPool(foods, 'all', 'delivery')).toHaveLength(2);
+    expect(drawPool(foods, 'all', 'etc')).toHaveLength(2);
+    expect(drawPool(foods, 'all', 'bread')).toHaveLength(0);
   });
 
   it('draws at random and avoids repeating the last pick', () => {
@@ -534,6 +546,79 @@ describe('뭐먹지', () => {
     expect(canEditFood(food({ addedBy: 'kid' }), 'kid', false)).toBe(true);
     expect(canEditFood(food({ addedBy: 'kid' }), 'other', false)).toBe(false);
     expect(canEditFood(food({ addedBy: 'kid' }), 'dad', true)).toBe(true);
+  });
+
+  it('resolves categories, sending removed or old ones to 기타', () => {
+    expect(DEFAULT_FOOD_CATEGORIES.map((c) => c.name)).toEqual(['한식', '중식', '일식', '빵', '기타']);
+    expect(categoryOf(DEFAULT_FOOD_CATEGORIES, 'chinese')).toMatchObject({ name: '중식', icon: 'noodle' });
+    expect(categoryOf(DEFAULT_FOOD_CATEGORIES, 'home').id).toBe('etc'); // 예전 분류
+    expect(categoryOf(DEFAULT_FOOD_CATEGORIES, '없는분류').name).toBe('기타');
+    expect(categoryOf([{ id: 'x', name: '양식', icon: '없는그림' }], 'x').icon).toBe('fork');
+  });
+
+  it('normalizes saved categories and always keeps 기타 last', () => {
+    expect(normalizeFoodCategories(undefined)).toEqual(DEFAULT_FOOD_CATEGORIES);
+    expect(normalizeFoodCategories('잘못된 값')).toEqual(DEFAULT_FOOD_CATEGORIES);
+    const custom = normalizeFoodCategories([
+      { id: 'a', name: ' 양식 ', icon: 'food' },
+      { id: 'a', name: '중복', icon: 'food' },
+      { id: 'etc', name: '바꾼 기타', icon: 'star' },
+      { id: 'b', name: '', icon: 'food' },
+      { id: 'c', name: '분식', icon: '없는그림' },
+    ]);
+    expect(custom.map((c) => `${c.id}:${c.name}:${c.icon}`)).toEqual(['a:양식:food', 'c:분식:fork', 'etc:기타:fork']);
+    const many = Array.from({ length: 20 }, (_, i) => ({ id: `c${i}`, name: `분류${i}`, icon: 'food' }));
+    expect(normalizeFoodCategories(many)).toHaveLength(MAX_FOOD_CATEGORIES);
+    expect(normalizeSettings({}).foodCategories).toEqual(DEFAULT_FOOD_CATEGORIES);
+  });
+
+  it('validates categories before saving', () => {
+    const list = [{ id: 'a', name: '양식', icon: 'food' }, DEFAULT_FOOD_CATEGORIES[4]];
+    expect(cleanFoodCategories(list).map((c) => c.name)).toEqual(['양식', '기타']);
+    expect(cleanFoodCategories([{ id: 'a', name: '양식', icon: 'food' }]).map((c) => c.id)).toEqual(['a', 'etc']); // 기타가 빠져도 붙는다
+    expect(() => cleanFoodCategories([{ id: 'a', name: ' ', icon: 'food' }])).toThrow('분류 이름을 적어');
+    expect(() => cleanFoodCategories([{ id: 'a', name: '일곱글자이름임', icon: 'food' }])).toThrow('6자');
+    expect(() => cleanFoodCategories([{ id: 'a', name: '양식', icon: 'food' }, { id: 'b', name: '양식', icon: 'food' }])).toThrow('같은 이름');
+    expect(() => cleanFoodCategories([{ id: 'a', name: '기타', icon: 'food' }])).toThrow('같은 이름');
+    expect(() => cleanFoodCategories(Array.from({ length: 8 }, (_, i) => ({ id: `c${i}`, name: `분류${i}`, icon: 'food' })))).toThrow('8개까지');
+    expect(() => cleanSettings({ ...DEFAULT_SETTINGS, foodCategories: [{ id: 'a', name: '', icon: 'food' }] })).toThrow('분류 이름');
+  });
+
+  it('filters by category using the family list', () => {
+    const categories = [{ id: 'west', name: '양식', icon: 'fork' }, DEFAULT_FOOD_CATEGORIES[4]];
+    const foods = [
+      food({ id: 'a', name: '파스타', category: 'west', wantedBy: ['kid'] }),
+      food({ id: 'b', name: '김밥', category: 'korean', wantedBy: ['kid'] }), // 한식 분류를 지운 가족
+    ];
+    expect(splitFoods(foods, 'west', categories).wanted.map((f) => f.id)).toEqual(['a']);
+    expect(splitFoods(foods, 'etc', categories).wanted.map((f) => f.id)).toEqual(['b']);
+    expect(drawPool(foods, 'wanted', 'etc', categories).map((f) => f.id)).toEqual(['b']);
+  });
+
+  it('averages the latest star from each member', () => {
+    expect(ratingSummary(food({}))).toEqual({ average: null, count: 0 });
+    expect(ratingSummary(food({ ratings: { kid: 5 } }))).toEqual({ average: 5, count: 1 });
+    expect(ratingSummary(food({ ratings: { kid: 5, dad: 4, mom: 4 } }))).toEqual({ average: 4.3, count: 3 });
+    expect(ratingSummary(food({ ratings: { kid: 5, dad: 0, mom: 9 } }))).toEqual({ average: 5, count: 1 }); // 잘못된 값은 빼고 센다
+    expect(cleanStars(3)).toBe(3);
+    expect(() => cleanStars(0)).toThrow('1개부터 5개');
+    expect(() => cleanStars(6)).toThrow('1개부터 5개');
+    expect(() => cleanStars(2.5)).toThrow('1개부터 5개');
+  });
+
+  it('sorts the saved list by rating when asked', () => {
+    const saved = [
+      food({ id: 'none', name: '가' }),
+      food({ id: 'low', name: '나', ratings: { kid: 2 } }),
+      food({ id: 'high', name: '다', ratings: { kid: 5, dad: 4 } }),
+      food({ id: 'top', name: '라', ratings: { kid: 5 } }),
+    ];
+    expect(sortSaved(saved, 'recent').map((f) => f.id)).toEqual(['none', 'low', 'high', 'top']);
+    expect(sortSaved(saved, 'rating').map((f) => f.id)).toEqual(['top', 'high', 'low', 'none']);
+    expect(eatCountLabel(food({}))).toBe('아직 안 먹어 봤어요');
+    expect(eatCountLabel(food({ eaten: ['2026-10-01', '2026-10-03'] }))).toBe('2번 먹음');
+    expect(lastEatenLabel(food({}), TODAY)).toBe('아직 안 먹어 봤어요');
+    expect(lastEatenLabel(food({ eaten: ['2026-10-01', '2026-10-03'] }), TODAY)).toBe('마지막 10월 3일');
   });
 });
 
