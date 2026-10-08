@@ -15,7 +15,8 @@ import { Avatar, AvatarFrame, Icon } from '../../ui/Sprite';
 import { SwipePages, type SwipePage } from '../../ui/SwipePages';
 import { Button, CoinInline, Empty, Field, FieldGroup, Sheet } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
-import { TodayEvents } from '../calendar/TodayEvents';
+import { HomeEvents } from '../calendar/TodayEvents';
+import { NotesBlock } from '../notes/NotesBlock';
 import { OfferSheet } from '../negotiation/OfferSheet';
 import { WishInbox } from '../wishes/WishInbox';
 import { useWishes } from '../wishes/useWishes';
@@ -24,7 +25,7 @@ import { KidStatus } from './KidStatus';
 const QUICK_REASONS = ['조금만 더 해 보자', '다시 확인해 줘', '끝까지 해 보자'];
 
 /**
- * 부모의 첫 화면: 완료 요청과 코인 제안에 답한다. 부모 중 한 명만 답하면 된다.
+ * 부모의 홈: 맨 위에 가족 메모와 오늘·내일 일정, 그 아래에서 완료 요청과 코인 제안에 답한다. 부모 중 한 명만 답하면 된다.
  * 왼쪽으로 밀면(또는 위의 버튼을 누르면) 자녀별 현황이 나온다.
  * 화면에는 답해야 할 카드만 두고, 칭찬 코인과 관리 화면으로 가는 길은 더 보기 안에 있다.
  */
@@ -81,8 +82,6 @@ export function ApprovalsPage() {
 
   const approvals = (
     <div className="stack" style={{ gap: 22 }}>
-      <TodayEvents />
-
       {offersForParent.length > 0 && (
         <section className="stack" aria-label="코인 제안">
           <h2 className="t-title">코인 제안</h2>
@@ -304,6 +303,10 @@ export function ApprovalsPage() {
           <Icon name="more" size={24} />
         </Button>
       </header>
+
+      <NotesBlock />
+
+      <HomeEvents />
 
       {kids.length > 0 ? (
         <SwipePages

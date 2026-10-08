@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { CalendarEvent, Food, LedgerEntry, Member, Order, Place, Proposal, Quest, Reward, Run, Wish } from '../src/backend/types';
+import type { CalendarEvent, Food, LedgerEntry, Member, Note, Order, Place, Proposal, Quest, Reward, Run, Wish } from '../src/backend/types';
+import { canEditNote, cleanNoteInput, isUnreadFor, noteReceiptText, noteTargetText, noteUntilText, visibleNotes } from '../src/domain/notes';
 import { coinScene, gainsOf, goalJustReached, latestAt, missedGains } from '../src/domain/celebrate';
 import { canAddWish, canCounterWish, cleanWishInput, splitMyWishes, wishTurn, wishesForParent } from '../src/domain/wishes';
 import {
@@ -949,5 +950,59 @@ describe('보상 제안', () => {
     expect(wishesForParent(list).map((w) => w.id)).toEqual(['남의것', '기다림']);
     expect(canAddWish(list, 'kid')).toBe(true); // 협상 중인 것은 2개
     expect(canAddWish([...list, wish('셋째')], 'kid')).toBe(false);
+  });
+});
+
+describe('가족 메모', () => {
+  const person = (uid: string, displayName: string, role: 'parent' | 'child' = 'parent') =>
+    ({ uid, displayName, role, avatar: { id: 'bear', color: 'brown' }, coins: 0 }) as unknown as Member;
+  const family = [person('dad', '아빠'), person('mom', '엄마'), person('kid', '딸', 'child')];
+  const note = (id: string, extra: Partial<Note> = {}): Note => ({ id, text: id, toUids: [], until: '', createdBy: 'dad', createdAt: 0, readBy: [], ...extra });
+
+  it('입력값을 다듬는다', () => {
+    const uids = ['dad', 'mom', 'kid'];
+    expect(cleanNoteInput({ text: ' 전화해 줘 ', toUids: ['kid', 'kid', 'dad', 'x'], until: '' }, uids, 'dad', '2026-10-08')).toEqual({ text: '전화해 줘', toUids: ['kid'], until: '' });
+    expect(cleanNoteInput({ text: '모두에게', toUids: [], until: '2026-10-08' }, uids, 'dad', '2026-10-08').until).toBe('2026-10-08');
+    expect(() => cleanNoteInput({ text: '', toUids: [], until: '' }, uids, 'dad', '2026-10-08')).toThrow('메모를 적어 주세요');
+    expect(() => cleanNoteInput({ text: '가'.repeat(101), toUids: [], until: '' }, uids, 'dad', '2026-10-08')).toThrow('100자까지');
+    expect(() => cleanNoteInput({ text: '메모', toUids: [], until: '2026-10-07' }, uids, 'dad', '2026-10-08')).toThrow('오늘보다 앞설 수 없어요');
+    expect(() => cleanNoteInput({ text: '메모', toUids: [], until: '내일' }, uids, 'dad', '2026-10-08')).toThrow('다시 골라 주세요');
+    expect(() => cleanNoteInput({ text: '메모', toUids: ['dad'], until: '' }, uids, 'dad', '2026-10-08')).toThrow('받을 사람을 골라 주세요');
+  });
+
+  it('내가 썼거나 나에게 온 메모만, 사라질 날짜가 지나지 않은 것만 보인다', () => {
+    const list = [
+      note('모두', { createdAt: 1 }),
+      note('딸에게', { toUids: ['kid'], createdAt: 2 }),
+      note('엄마에게', { toUids: ['mom'], createdAt: 3 }),
+      note('어제까지', { until: '2026-10-07', createdAt: 4 }),
+      note('오늘까지', { until: '2026-10-08', createdAt: 5 }),
+    ];
+    expect(visibleNotes(list, 'kid', '2026-10-08').map((n) => n.id)).toEqual(['오늘까지', '딸에게', '모두']);
+    expect(visibleNotes(list, 'dad', '2026-10-08').map((n) => n.id)).toEqual(['오늘까지', '엄마에게', '딸에게', '모두']); // 쓴 사람은 다 본다
+    expect(visibleNotes(list, 'mom', '2026-10-09').map((n) => n.id)).toEqual(['엄마에게', '모두']);
+  });
+
+  it('확인 안 한 메모와 확인 상황', () => {
+    const toAll = note('모두', { readBy: ['kid'] });
+    expect(isUnreadFor(toAll, 'mom')).toBe(true);
+    expect(isUnreadFor(toAll, 'kid')).toBe(false);
+    expect(isUnreadFor(toAll, 'dad')).toBe(false); // 내가 쓴 메모
+    expect(isUnreadFor(note('딸에게', { toUids: ['kid'] }), 'mom')).toBe(false); // 나에게 온 것이 아니다
+    expect(noteReceiptText(toAll, family)).toBe('딸 확인 · 엄마 아직');
+    expect(noteReceiptText(note('모두', { readBy: ['kid', 'mom'] }), family)).toBe('모두 확인');
+    expect(noteReceiptText(note('모두'), family)).toBe('엄마, 딸 아직');
+    expect(noteReceiptText(note('딸에게', { toUids: ['kid'], readBy: ['kid'] }), family)).toBe('딸 확인');
+    expect(noteTargetText(toAll, family)).toBe('가족 모두');
+    expect(noteTargetText(note('둘', { toUids: ['mom', 'kid'] }), family)).toBe('엄마, 딸');
+  });
+
+  it('고치기와 지우기는 쓴 사람과 부모만, 사라질 날짜 안내', () => {
+    const kidNote = note('딸 메모', { createdBy: 'kid' });
+    expect(canEditNote(kidNote, 'kid', false)).toBe(true);
+    expect(canEditNote(kidNote, 'mom', true)).toBe(true);
+    expect(canEditNote(note('아빠 메모'), 'kid', false)).toBe(false);
+    expect(noteUntilText({ until: '' }, '2026-10-08')).toBe('지울 때까지 보여요');
+    expect(noteUntilText({ until: '2026-10-12' }, '2026-10-08')).toBe('10월 12일까지 보여요');
   });
 });

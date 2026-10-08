@@ -9,6 +9,7 @@ import type {
   LedgerEntry,
   LocationRecord,
   Member,
+  Note,
   Order,
   Place,
   Preset,
@@ -48,6 +49,8 @@ const orders = () => snapshot<Order[]>((cb) => backend.watchOrders(FAMILY, addDa
 const rewardById = (id: string) => rewards().find((r) => r.id === id)!;
 const foods = () => snapshot<Food[]>((cb) => backend.watchFoods(FAMILY, cb));
 const foodById = (id: string) => foods().find((f) => f.id === id);
+const notes = () => snapshot<Note[]>((cb) => backend.watchNotes(FAMILY, cb));
+const noteById = (id: string) => notes().find((n) => n.id === id);
 const wishes = () => snapshot<Wish[]>((cb) => backend.watchWishes(FAMILY, cb));
 const wishById = (id: string) => wishes().find((w) => w.id === id);
 const events = () => snapshot<CalendarEvent[]>((cb) => backend.watchEvents(FAMILY, cb));
@@ -793,5 +796,59 @@ describe('보상 제안', () => {
     await expect(backend.deleteWish(FAMILY, 'w-park')).rejects.toThrow('이미 상점에 올라간');
     as('demo-new');
     await expect(backend.createWish(FAMILY, input, 'demo-new')).rejects.toThrow('구성원이 아니에요');
+  });
+});
+
+describe('가족 메모', () => {
+  const input = { text: '준비물로 색종이가 필요해요', toUids: ['demo-dad', 'demo-mom'], until: '' };
+
+  it('부모도 자녀도 메모를 남긴다. 받는 사람에서 자기 자신은 빠진다', async () => {
+    expect(notes()).toHaveLength(2);
+    as('demo-kid');
+    const id = await backend.createNote(FAMILY, { ...input, toUids: ['demo-dad', 'demo-kid', '없는사람'] }, 'demo-kid');
+    expect(noteById(id)).toMatchObject({ text: '준비물로 색종이가 필요해요', toUids: ['demo-dad'], until: '', createdBy: 'demo-kid', readBy: [] });
+    await expect(backend.createNote(FAMILY, { ...input, text: '  ' }, 'demo-kid')).rejects.toThrow('메모를 적어 주세요');
+    await expect(backend.createNote(FAMILY, { ...input, text: '가'.repeat(101) }, 'demo-kid')).rejects.toThrow('100자까지');
+    await expect(backend.createNote(FAMILY, { ...input, until: addDays(today, -1) }, 'demo-kid')).rejects.toThrow('오늘보다 앞설 수 없어요');
+    await expect(backend.createNote(FAMILY, { ...input, toUids: ['demo-kid'] }, 'demo-kid')).rejects.toThrow('받을 사람을 골라 주세요');
+    await expect(backend.createNote(FAMILY, input, 'demo-dad')).rejects.toThrow('본인만');
+    as('demo-dad');
+    const all = await backend.createNote(FAMILY, { text: '주말에 할머니 댁 가요', toUids: [], until: addDays(today, 3) }, 'demo-dad');
+    expect(noteById(all)).toMatchObject({ toUids: [], until: addDays(today, 3) });
+    as('demo-new');
+    await expect(backend.createNote(FAMILY, input, 'demo-new')).rejects.toThrow('구성원이 아니에요');
+  });
+
+  it('받은 사람만 확인 표시를 한다', async () => {
+    as('demo-kid');
+    await backend.markNoteRead(FAMILY, 'n-call', 'demo-kid');
+    await backend.markNoteRead(FAMILY, 'n-call', 'demo-kid'); // 두 번 눌러도 한 번만 남는다
+    expect(noteById('n-call')!.readBy).toEqual(['demo-kid']);
+    as('demo-dad');
+    await expect(backend.markNoteRead(FAMILY, 'n-call', 'demo-dad')).rejects.toThrow('나에게 온 메모만'); // 딸에게만 보낸 메모
+    await expect(backend.markNoteRead(FAMILY, 'n-clean', 'demo-dad')).rejects.toThrow('나에게 온 메모만'); // 내가 쓴 메모
+    await expect(backend.markNoteRead(FAMILY, 'n-clean', 'demo-mom')).rejects.toThrow('본인만');
+    as('demo-mom');
+    await backend.markNoteRead(FAMILY, 'n-clean', 'demo-mom');
+    expect(noteById('n-clean')!.readBy).toEqual(['demo-kid', 'demo-mom']);
+  });
+
+  it('고치기와 지우기는 쓴 사람과 부모만. 고치면 다시 확인받는다', async () => {
+    as('demo-kid');
+    await expect(backend.updateNote(FAMILY, 'n-clean', { text: '안 해요', toUids: [], until: '' })).rejects.toThrow('쓴 사람과 부모만');
+    await expect(backend.deleteNote(FAMILY, 'n-call')).rejects.toThrow('쓴 사람과 부모만');
+    const mine = await backend.createNote(FAMILY, input, 'demo-kid');
+    await backend.updateNote(FAMILY, mine, { ...input, text: '색종이와 풀이 필요해요' });
+    expect(noteById(mine)!.text).toBe('색종이와 풀이 필요해요');
+    as('demo-dad');
+    await backend.updateNote(FAMILY, 'n-clean', { text: '토요일 11시로 바꿔요', toUids: [], until: '' });
+    expect(noteById('n-clean')).toMatchObject({ text: '토요일 11시로 바꿔요', readBy: [], createdBy: 'demo-dad' });
+    // 부모는 자녀가 쓴 메모도 고치고 지울 수 있다(쓴 사람은 그대로).
+    await backend.updateNote(FAMILY, mine, { ...input, text: '색종이 샀어' });
+    expect(noteById(mine)).toMatchObject({ text: '색종이 샀어', createdBy: 'demo-kid' });
+    await backend.deleteNote(FAMILY, mine);
+    expect(noteById(mine)).toBeUndefined();
+    as('demo-kid');
+    await expect(backend.deleteNote(FAMILY, mine)).rejects.toThrow('찾을 수 없어요');
   });
 });

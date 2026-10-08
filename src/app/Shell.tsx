@@ -1,6 +1,10 @@
 import { HashRouter, Link, MemoryRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { ApprovalsPage } from '../features/approvals/ApprovalsPage';
 import { CalendarPage } from '../features/calendar/CalendarPage';
+import { HomePage } from '../features/home/HomePage';
+import { useNotes } from '../features/notes/useNotes';
+import { useMyBoard } from '../features/quests/QuestCards';
+import { isUnreadFor, visibleNotes } from '../domain/notes';
 import { Celebrations } from '../features/celebrate/Celebrations';
 import { FamilyPage } from '../features/family/FamilyPage';
 import { FoodCategoriesPage } from '../features/food/FoodCategoriesPage';
@@ -46,14 +50,21 @@ const MORE_PATHS = ['/family', '/log', '/settings'];
  */
 export function Shell() {
   const { isParent, me } = useSession();
-  const { pending, offersForParent, ordersForParent } = useFamilyData();
+  const { pending, offersForParent, ordersForParent, proposals, today } = useFamilyData();
+  const { notes } = useNotes();
+  const { remaining } = useMyBoard();
+  // 아직 확인하지 않은 가족 메모: 홈 탭에 숫자로 보인다.
+  const unreadNotes = visibleNotes(notes, me.uid, today).filter((note) => isUnreadFor(note, me.uid)).length;
+  // 자녀가 답할 차례인 코인 협상
+  const offersForMe = proposals.filter((p) => p.ownerUid === me.uid && p.status === 'negotiating' && p.lastRole === 'parent').length;
   const { wishes } = useWishes();
-  // 보상 제안 가운데 내가 답할 차례인 것: 부모는 승인 탭에, 자녀는 상점 탭에 숫자로 보인다.
+  // 보상 제안 가운데 내가 답할 차례인 것: 부모는 홈 탭에, 자녀는 퀘스트 탭에 숫자로 보인다.
   const wishesForMe = isParent ? wishesForParent(wishes).length : splitMyWishes(wishes, me.uid, () => false).toAnswer.length;
 
   const tabs: TabDef[] = isParent
     ? [
-        { to: '/approve', label: '승인', icon: 'check_inbox', count: pending.length + offersForParent.length + ordersForParent.length + wishesForMe },
+        // 부모의 홈: 가족 메모와 일정, 그리고 답해야 할 승인 카드
+        { to: '/home', label: '홈', icon: 'home', count: pending.length + offersForParent.length + ordersForParent.length + wishesForMe + unreadNotes },
         { to: '/quests', label: '퀘스트', icon: 'quest' },
         { to: '/calendar', label: '캘린더', icon: 'calendar' },
         { to: '/food', label: '뭐먹지', icon: 'food' },
@@ -61,8 +72,9 @@ export function Shell() {
         { to: '/more', label: '더보기', icon: 'more', also: [...MORE_PATHS, '/shop'] },
       ]
     : [
-        { to: '/quests', label: '퀘스트', icon: 'quest' },
-        { to: '/shop', label: '상점', icon: 'shop', count: wishesForMe },
+        { to: '/home', label: '홈', icon: 'home', count: unreadNotes },
+        // 상점은 퀘스트 화면의 버튼으로 들어간다.
+        { to: '/quests', label: '퀘스트', icon: 'quest', count: remaining + offersForMe + wishesForMe, also: ['/shop'] },
         { to: '/calendar', label: '캘린더', icon: 'calendar' },
         { to: '/food', label: '뭐먹지', icon: 'food' },
         { to: '/more', label: '더보기', icon: 'more', also: MORE_PATHS },
@@ -73,7 +85,7 @@ export function Shell() {
       <Routes>
         {isParent ? (
           <>
-            <Route path="/approve" element={<ApprovalsPage />} />
+            <Route path="/home" element={<ApprovalsPage />} />
             <Route path="/quests" element={<QuestListPage />} />
             <Route path="/quests/new" element={<QuestFormPage />} />
             <Route path="/quests/:questId" element={<QuestFormPage />} />
@@ -86,6 +98,7 @@ export function Shell() {
           </>
         ) : (
           <>
+            <Route path="/home" element={<HomePage />} />
             <Route path="/quests" element={<TodayPage />} />
             <Route path="/shop" element={<ShopPage />} />
           </>

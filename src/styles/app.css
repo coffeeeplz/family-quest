@@ -1253,3 +1253,54 @@ button.today-line {
   font: inherit;
   text-align: left;
 }
+
+/* 가족 메모 */
+.input.area {
+  height: auto;
+  resize: none;
+  font-family: inherit;
+  display: block;
+}
+.note-text {
+  margin-top: 4px;
+  font-size: 17px;
+  line-height: 24px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.today-line.note-line {
+  background: var(--card);
+}
+.note-state {
+  flex-shrink: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 머리말 오른쪽: 코인과 그 아래 작은 버튼 */
+.head-side {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.btn.compact {
+  min-height: 40px;
+  padding: 0 8px;
+  font-size: 12px;
+  gap: 4px;
+}
+.corner-badge.ask {
+  background: var(--pink);
+}
+/* 홈의 진행 막대는 누르면 퀘스트 화면으로 간다. */
+.progress-link {
+  display: block;
+  text-decoration: none;
+}
+.today-line.is-next {
+  background: var(--card);
+}

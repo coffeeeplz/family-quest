@@ -18,6 +18,7 @@ import {
   halfReward,
   normalizeSettings,
 } from '../domain/settings';
+import { MAX_NOTES, canEditNote, cleanNoteInput, isNoteFor } from '../domain/notes';
 import { MAX_REWARDS, buyBlockReason, cleanRewardInput } from '../domain/shop';
 import { MAX_DECLINE_NOTE, MAX_OPEN_WISHES, WISH_KEEP_DAYS, canCounterWish, checkWishTurn, cleanWishInput, cleanWishPrice, openWishCount } from '../domain/wishes';
 import { addDays, dateKey, dayNumber } from '../lib/dates';
@@ -33,6 +34,7 @@ import {
   type LedgerEntry,
   type LocationRecord,
   type Member,
+  type Note,
   type Order,
   type Place,
   type Preset,
@@ -54,7 +56,7 @@ interface DemoUser {
 }
 
 interface DemoState {
-  v: 8;
+  v: 9;
   currentUid: string | null;
   users: Record<string, DemoUser>;
   families: Record<string, Family>;
@@ -71,6 +73,7 @@ interface DemoState {
   places: Record<string, Record<string, Place>>;
   events: Record<string, Record<string, CalendarEvent>>;
   wishes: Record<string, Record<string, Wish>>;
+  notes: Record<string, Record<string, Note>>;
   invites: Record<string, Invite>;
 }
 
@@ -79,7 +82,7 @@ export interface KeyValueStore {
   setItem(key: string, value: string): void;
 }
 
-const STORAGE_KEY = 'family-quest-demo-v8';
+const STORAGE_KEY = 'family-quest-demo-v9';
 const FAMILY = 'demo-family';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -226,7 +229,7 @@ function seed(now: number = Date.now()): DemoState {
   });
 
   return {
-    v: 8,
+    v: 9,
     currentUid: null,
     users: {
       'demo-dad': { uid: 'demo-dad', email: 'dad@example.com', label: '아빠', hint: '퀘스트를 만들고 승인해요', familyId: FAMILY },
@@ -333,6 +336,13 @@ function seed(now: number = Date.now()): DemoState {
         'e-kid': event('e-kid', '친구 생일 파티', addDays(today, 6), { startTime: '14:00', who: ['demo-kid'], createdBy: 'demo-kid' }),
       },
     },
+    // 가족 메모: 딸이 아직 확인하지 않은 엄마의 메모와, 딸은 확인한 아빠의 메모
+    notes: {
+      [FAMILY]: {
+        'n-call': { id: 'n-call', text: '학원 끝나면 바로 전화해 줘! 오늘 저녁은 할머니 댁에서 먹어요.', toUids: ['demo-kid'], until: today, createdBy: 'demo-mom', createdAt: now - 20 * 60_000, readBy: [] },
+        'n-clean': { id: 'n-clean', text: '토요일 10시에 가족 대청소', toUids: [], until: '', createdBy: 'demo-dad', createdAt: now - 5 * 3_600_000, readBy: ['demo-kid'] },
+      },
+    },
     // 자녀가 상점에 올려 달라고 제안한 보상: 부모의 답을 기다리는 중
     wishes: {
       [FAMILY]: {
@@ -385,7 +395,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       const raw = store?.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as DemoState;
-        if (parsed.v === 8) return parsed;
+        if (parsed.v === 9) return parsed;
       }
     } catch {
       // 저장소를 못 읽으면 새로 시작한다.
@@ -464,6 +474,12 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
     const proposal = state.proposals[familyId]?.[proposalId];
     if (!proposal) throw new AppError('할 일을 찾을 수 없어요.');
     return proposal;
+  }
+
+  function requireNote(familyId: string, noteId: string): Note {
+    const note = state.notes[familyId]?.[noteId];
+    if (!note) throw new AppError('메모를 찾을 수 없어요.');
+    return note;
   }
 
   function requireWish(familyId: string, wishId: string): Wish {
@@ -552,6 +568,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       state.places[id] = {};
       state.events[id] = {};
       state.wishes[id] = {};
+      state.notes[id] = {};
       state.users[uid].familyId = id;
       commit();
       return id;
@@ -1248,6 +1265,51 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
     async deletePlace(familyId, placeId) {
       requireParent(familyId);
       delete state.places[familyId][placeId];
+      commit();
+    },
+
+    watchNotes(familyId, cb) {
+      return watch(() => Object.values(state.notes[familyId] ?? {}).map((note) => ({ ...note, toUids: [...note.toUids], readBy: [...note.readBy] })), cb);
+    },
+
+    async createNote(familyId, input, byUid) {
+      requireSelf(byUid);
+      requireMember(familyId);
+      const clean = cleanNoteInput(input, Object.keys(state.members[familyId]), byUid, dateKey());
+      if (Object.keys(state.notes[familyId]).length >= MAX_NOTES) {
+        throw new AppError(`메모는 ${MAX_NOTES}개까지 남길 수 있어요. 지난 메모를 지워 주세요.`);
+      }
+      const id = newId('n');
+      state.notes[familyId][id] = { id, ...clean, createdBy: byUid, createdAt: Date.now(), readBy: [] };
+      commit();
+      return id;
+    },
+
+    async updateNote(familyId, noteId, input) {
+      const member = requireMember(familyId);
+      const note = requireNote(familyId, noteId);
+      if (!canEditNote(note, member.uid, member.role === 'parent')) throw new AppError('메모는 쓴 사람과 부모만 고칠 수 있어요.');
+      const clean = cleanNoteInput(input, Object.keys(state.members[familyId]), note.createdBy, dateKey());
+      // 내용이 바뀌었으므로 다시 확인받는다(고친 사람이 이미 확인했다면 그 표시는 남긴다).
+      state.notes[familyId][noteId] = { ...note, ...clean, readBy: note.readBy.filter((uid) => uid === member.uid) };
+      commit();
+    },
+
+    async markNoteRead(familyId, noteId, uid) {
+      requireSelf(uid);
+      requireMember(familyId);
+      const note = requireNote(familyId, noteId);
+      if (note.createdBy === uid || !isNoteFor(note, uid)) throw new AppError('나에게 온 메모만 확인할 수 있어요.');
+      if (note.readBy.includes(uid)) return;
+      state.notes[familyId][noteId] = { ...note, readBy: [...note.readBy, uid] };
+      commit();
+    },
+
+    async deleteNote(familyId, noteId) {
+      const member = requireMember(familyId);
+      const note = requireNote(familyId, noteId);
+      if (!canEditNote(note, member.uid, member.role === 'parent')) throw new AppError('메모는 쓴 사람과 부모만 지울 수 있어요.');
+      delete state.notes[familyId][noteId];
       commit();
     },
 

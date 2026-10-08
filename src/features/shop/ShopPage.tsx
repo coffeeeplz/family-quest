@@ -7,14 +7,14 @@ import { openWishCount, splitMyWishes } from '../../domain/wishes';
 import { dateKey } from '../../lib/dates';
 import type { IconName } from '../../lib/sprites';
 import { Icon } from '../../ui/Sprite';
-import { Button, CoinInline, CoinPill, Empty, Sheet } from '../../ui/kit';
+import { BackLink, Button, CoinInline, CoinPill, Empty, Sheet } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
 import { MyWishCard } from '../wishes/MyWishCard';
 import { WishFormSheet } from '../wishes/WishFormSheet';
 import { useWishes } from '../wishes/useWishes';
 import { GoalCard } from './GoalCard';
 
-/** 자녀의 상점: 모은 코인으로 보상을 신청하고, 받을 보상을 확인한다. */
+/** 자녀의 상점: 모은 코인으로 보상을 신청하고, 받을 보상을 확인한다. 퀘스트 화면의 상점 버튼으로 들어온다. */
 export function ShopPage() {
   const backend = useBackend();
   const { me, family } = useSession();
@@ -60,6 +60,7 @@ export function ShopPage() {
 
   return (
     <main className="screen">
+      <BackLink to="/quests" label="퀘스트" />
       <header className="screen-head">
         <div className="grow">
           <h1 className="t-title">상점</h1>

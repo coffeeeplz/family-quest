@@ -58,6 +58,7 @@ import {
 import { firebaseConfig } from '../config/firebase';
 import { INVITE_TTL_MS, isInviteCodeShape, newInviteCode, normalizeInviteCode } from '../domain/invites';
 import { cleanEventInput } from '../domain/calendar';
+import { cleanNoteInput } from '../domain/notes';
 import { MAX_DECLINE_NOTE, MAX_OPEN_WISHES, WISH_KEEP_DAYS, canCounterWish, checkWishTurn, cleanWishInput, cleanWishPrice } from '../domain/wishes';
 import { ETC_CATEGORY_ID, MAX_EATEN, cleanFoodInput, cleanStars, withEaten } from '../domain/foods';
 import { cleanFix, cleanPlaceInput, planCheckin } from '../domain/location';
@@ -85,6 +86,7 @@ import {
   type LedgerEntry,
   type LocationRecord,
   type Member,
+  type Note,
   type Offer,
   type Order,
   type Place,
@@ -191,6 +193,7 @@ export function createFirebaseBackend(): Backend {
   const placesCol = (fid: string) => collection(db, 'families', fid, 'places');
   const eventsCol = (fid: string) => collection(db, 'families', fid, 'events');
   const wishesCol = (fid: string) => collection(db, 'families', fid, 'wishes');
+  const notesCol = (fid: string) => collection(db, 'families', fid, 'notes');
 
   const onListenError = (what: string) => (error: Error) => console.error(`[${what}]`, error);
 
@@ -309,6 +312,22 @@ export function createFirebaseBackend(): Backend {
     trigger: d.trigger === 'open' || d.trigger === 'quest' ? d.trigger : 'button',
     coins: d.coins ?? 0,
   });
+
+  const toNote = (id: string, d: DocumentData): Note => ({
+    id,
+    text: d.text ?? '',
+    toUids: [...((d.toUids as string[] | undefined) ?? [])],
+    until: d.until ?? '',
+    createdBy: d.createdBy,
+    createdAt: d.createdAt ?? 0,
+    readBy: [...((d.readBy as string[] | undefined) ?? [])],
+  });
+
+  /** 가족 구성원의 uid 목록(메모를 받을 사람을 검사할 때 쓴다) */
+  async function readMemberUids(fid: string): Promise<string[]> {
+    const snap = await getDocs(collection(db, 'families', fid, 'members'));
+    return snap.docs.map((s) => s.id);
+  }
 
   const toWish = (id: string, d: DocumentData): Wish => ({
     id,
@@ -1105,6 +1124,44 @@ export function createFirebaseBackend(): Backend {
       guard(async () => {
         await deleteDoc(doc(placesCol(familyId), placeId));
       }),
+
+    watchNotes(familyId, cb, onError) {
+      return onSnapshot(
+        notesCol(familyId),
+        (snap) => cb(snap.docs.map((s) => toNote(s.id, s.data()))),
+        (error) => {
+          console.error('[notes]', error);
+          onError?.();
+        },
+      );
+    },
+
+    createNote: (familyId, input, byUid) =>
+      guard(async () => {
+        const clean = cleanNoteInput(input, await readMemberUids(familyId), byUid, dateKey());
+        const ref = doc(notesCol(familyId));
+        await setDoc(ref, { ...clean, createdBy: byUid, createdAt: Date.now(), readBy: [] });
+        return ref.id;
+      }),
+
+    updateNote: (familyId, noteId, input) =>
+      guard(async () => {
+        const ref = doc(notesCol(familyId), noteId);
+        const snap = await getDoc(ref);
+        if (!snap.exists()) throw new AppError('메모를 찾을 수 없어요.');
+        const clean = cleanNoteInput(input, await readMemberUids(familyId), snap.data().createdBy, dateKey());
+        // 내용이 바뀌었으므로 다시 확인받는다(고친 사람이 이미 확인했다면 그 표시는 남긴다).
+        const editor = auth.currentUser?.uid ?? '';
+        const readBy = ((snap.data().readBy as string[] | undefined) ?? []).filter((uid) => uid === editor);
+        await updateDoc(ref, { ...clean, readBy });
+      }),
+
+    markNoteRead: (familyId, noteId, uid) =>
+      guard(async () => {
+        await updateDoc(doc(notesCol(familyId), noteId), { readBy: arrayUnion(uid) });
+      }),
+
+    deleteNote: (familyId, noteId) => guard(() => deleteDoc(doc(notesCol(familyId), noteId))),
 
     watchWishes(familyId, cb, onError) {
       return onSnapshot(

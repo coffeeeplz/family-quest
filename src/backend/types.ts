@@ -238,6 +238,23 @@ export interface Reward extends RewardInput {
   createdAt: number;
 }
 
+export interface NoteInput {
+  text: string;
+  /** 보여 줄 사람. 비어 있으면 가족 모두 */
+  toUids: string[];
+  /** 이날까지 보인다(YYYY-MM-DD). 빈 문자열이면 지울 때까지 */
+  until: string;
+}
+
+/** 가족 메모: 홈 화면 맨 위에 보이는 한 방향 알림. 받은 사람이 "확인했어요"를 누르면 readBy 에 들어간다. */
+export interface Note extends NoteInput {
+  id: string;
+  createdBy: string;
+  createdAt: number;
+  /** 확인한 사람들 */
+  readBy: string[];
+}
+
 /** negotiating=가격 협상 중, agreed=합의되어 상점에 올라감, declined=부모가 거절함 */
 export type WishStatus = 'negotiating' | 'agreed' | 'declined';
 
@@ -466,6 +483,14 @@ export interface Backend {
   createReward(familyId: string, input: RewardInput, byUid: string): Promise<string>;
   updateReward(familyId: string, rewardId: string, input: RewardInput): Promise<void>;
   archiveReward(familyId: string, rewardId: string): Promise<void>;
+  // 가족 메모
+  watchNotes(familyId: string, cb: (notes: Note[]) => void, onError?: () => void): Unsub;
+  createNote(familyId: string, input: NoteInput, byUid: string): Promise<string>;
+  /** 내용을 고치면 확인 표시는 처음으로 돌아간다(고친 사람의 표시만 남는다). */
+  updateNote(familyId: string, noteId: string, input: NoteInput): Promise<void>;
+  markNoteRead(familyId: string, noteId: string, uid: string): Promise<void>;
+  deleteNote(familyId: string, noteId: string): Promise<void>;
+
   // 자녀의 보상 제안과 가격 협상
   /** 협상 중인 제안과 최근에 끝난 제안 */
   watchWishes(familyId: string, cb: (wishes: Wish[]) => void, onError?: () => void): Unsub;

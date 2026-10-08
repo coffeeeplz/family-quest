@@ -26,10 +26,10 @@ function noticeSeen(): boolean {
 }
 
 /**
- * 자녀 홈의 "지금 여기예요" 버튼: 누르면 지금 위치를 가족에게 알리고, 하루 정해진 횟수까지 코인을 받는다.
+ * 자녀 홈의 "지금 여기예요" 버튼(compact 면 코인 아래에 두는 작은 버튼): 누르면 지금 위치를 가족에게 알리고, 하루 정해진 횟수까지 코인을 받는다.
  * 처음 성공했을 때 한 번, 위치가 언제 전해지는지 알려 준다.
  */
-export function CheckinButton() {
+export function CheckinButton({ compact = false }: { compact?: boolean }) {
   const backend = useBackend();
   const { family, me } = useSession();
   const notify = useToast();
@@ -65,9 +65,9 @@ export function CheckinButton() {
 
   return (
     <>
-      <Button tone="mint" className="with-corner" disabled={busy} aria-label="지금 여기예요: 부모님께 위치 알리기" onClick={() => void share()}>
+      <Button tone="mint" className={compact ? 'with-corner compact' : 'with-corner'} disabled={busy} aria-label="지금 여기예요: 부모님께 위치 알리기" onClick={() => void share()}>
         <Icon name="pin" size={24} />
-        {busy ? '찾는 중...' : '지금 여기예요'}
+        {busy ? '찾는 중...' : compact ? '여기예요' : '지금 여기예요'}
         {coinLeft && !busy && (
           <span className="corner-badge" aria-label={`누르면 코인 ${checkinCoins}개`}>
             +{checkinCoins}

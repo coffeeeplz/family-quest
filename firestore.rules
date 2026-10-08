@@ -169,6 +169,21 @@ service cloud.firestore {
         );
     }
 
+    // 가족 메모의 모양
+    function validNote() {
+      let d = request.resource.data;
+      return d.text is string && d.text.size() > 0 && d.text.size() <= 100
+        && d.toUids is list && d.toUids.size() <= 30
+        && d.until is string && d.until.size() <= 10
+        && d.readBy is list && d.readBy.size() <= 30;
+    }
+
+    // 메모를 받은 사람이 "확인했어요"를 누르는 변경: 확인한 사람 목록에 자기만 더할 수 있다.
+    function noteMarkedRead() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy'])
+        && request.resource.data.readBy.toSet().difference(resource.data.readBy.toSet()) == [request.auth.uid].toSet();
+    }
+
     // 자녀의 보상 제안: 모양 검사
     function validWish() {
       let d = request.resource.data;
@@ -388,6 +403,19 @@ service cloud.firestore {
         // 보상은 부모가 올린다. 자녀는 부모와 가격을 합의한 제안만 올릴 수 있다.
         allow create: if isMember(fid) && validRewardShape() && (isParent(fid) || rewardFromWish(fid, rid));
         allow update: if isParent(fid) && validRewardShape();
+      }
+
+      match /notes/{nid} {
+        allow read: if isMember(fid);
+        allow create: if isMember(fid) && validNote()
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.readBy.size() == 0;
+        // 고치기는 쓴 사람과 부모만. 받은 사람은 확인 표시만 할 수 있다.
+        allow update: if isMember(fid) && validNote()
+          && request.resource.data.createdBy == resource.data.createdBy
+          && (resource.data.createdBy == request.auth.uid || isParent(fid) || noteMarkedRead());
+        allow delete: if isMember(fid)
+          && (resource.data.createdBy == request.auth.uid || isParent(fid));
       }
 
       match /wishes/{wid} {
