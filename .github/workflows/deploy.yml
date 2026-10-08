@@ -85,6 +85,16 @@ jobs:
       - name: 키 파일 준비
         if: ${{ env.FIREBASE_SERVICE_ACCOUNT != '' }}
         run: printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/sa.json"
+      # 배포 계정이 가진 역할과 요금제(Blaze)가 켜져 있는지를 기록에 남긴다(문제를 찾을 때 쓴다).
+      - name: 권한 살피기
+        if: ${{ env.FIREBASE_SERVICE_ACCOUNT != '' }}
+        continue-on-error: true
+        run: |
+          gcloud auth activate-service-account --key-file="$RUNNER_TEMP/sa.json" --quiet
+          SA=$(gcloud config get-value account 2>/dev/null)
+          ROLES=$(gcloud projects get-iam-policy family-quest-22c44 --flatten="bindings[].members" --filter="bindings.members:serviceAccount:${SA}" --format="value(bindings.role)" 2>&1 | tr '\n' ' ')
+          FN=$(gcloud services list --enabled --project family-quest-22c44 --filter="config.name:cloudfunctions.googleapis.com" --format="value(config.name)" 2>&1 | tr '\n' ' ')
+          echo "::notice title=배포 계정 상태::계정 ${SA} / 역할: ${ROLES} / Cloud Functions API: ${FN:-꺼짐}"
       # 새 프로젝트는 함수를 빌드하는 계정에 권한이 없어 첫 배포가 실패하는 경우가 있어 미리 준다(실패해도 계속).
       - name: 빌드 계정 권한 확인
         if: ${{ env.FIREBASE_SERVICE_ACCOUNT != '' }}
