@@ -169,6 +169,71 @@ service cloud.firestore {
         );
     }
 
+    // 자녀의 보상 제안: 모양 검사
+    function validWish() {
+      let d = request.resource.data;
+      return d.title is string && d.title.size() > 0 && d.title.size() <= 40
+        && d.note is string && d.note.size() <= 200
+        && d.icon is string && d.icon.size() <= 20
+        && d.lastPrice is int && d.lastPrice > 0 && d.lastPrice <= 10000
+        && d.offerCount is int
+        && d.offers is list && d.offers.size() <= 30
+        && d.status in ['negotiating', 'agreed', 'declined'];
+    }
+
+    // 제안한 본인이 할 수 있는 변경: 부모의 가격에 다시 제안하거나 그 가격 그대로 수락
+    function ownerWishUpdate() {
+      let before = resource.data;
+      let after = request.resource.data;
+      return before.ownerUid == request.auth.uid
+        && after.ownerUid == before.ownerUid
+        && after.title == before.title
+        && before.status == 'negotiating'
+        && before.lastRole == 'parent'
+        && (
+          (after.status == 'negotiating' && after.lastRole == 'child' && after.offerCount == before.offerCount + 1)
+          || (after.status == 'agreed' && after.lastPrice == before.lastPrice)
+        );
+    }
+
+    // 자녀의 제안에 부모가 답하기: 다른 가격 제안, 그 가격으로 수락, 거절
+    function parentWishUpdate(fid) {
+      let before = resource.data;
+      let after = request.resource.data;
+      return isParent(fid)
+        && before.status == 'negotiating'
+        && before.lastRole == 'child'
+        && after.ownerUid == before.ownerUid
+        && after.title == before.title
+        && (
+          (after.status == 'negotiating' && after.lastRole == 'parent' && after.offerCount == before.offerCount + 1)
+          || (after.status == 'agreed' && after.lastPrice == before.lastPrice)
+          || (after.status == 'declined' && after.lastPrice == before.lastPrice)
+        );
+    }
+
+    // 자녀가 부모의 가격을 수락하면서 상점에 올리는 보상(보상 id = 제안 id).
+    // 이름과 가격은 합의한 그대로여야 한다.
+    function rewardFromWish(fid, rid) {
+      let d = request.resource.data;
+      let before = get(/databases/$(database)/documents/families/$(fid)/wishes/$(rid)).data;
+      let after = getAfter(/databases/$(database)/documents/families/$(fid)/wishes/$(rid)).data;
+      return before.ownerUid == request.auth.uid
+        && before.status == 'negotiating'
+        && before.lastRole == 'parent'
+        && after.status == 'agreed'
+        && d.title == before.title
+        && d.price == before.lastPrice
+        && d.active == true;
+    }
+
+    function validRewardShape() {
+      let d = request.resource.data;
+      return d.title is string && d.title.size() > 0 && d.title.size() <= 40
+        && d.price is int && d.price > 0 && d.price <= 10000
+        && d.active is bool;
+    }
+
     function familyPath(fid) {
       return /databases/$(database)/documents/families/$(fid);
     }
@@ -320,12 +385,23 @@ service cloud.firestore {
 
       match /rewards/{rid} {
         allow read: if isMember(fid);
-        allow create, update: if isParent(fid)
-          && request.resource.data.title is string
-          && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 40
-          && request.resource.data.price is int
-          && request.resource.data.price > 0 && request.resource.data.price <= 10000
-          && request.resource.data.active is bool;
+        // 보상은 부모가 올린다. 자녀는 부모와 가격을 합의한 제안만 올릴 수 있다.
+        allow create: if isMember(fid) && validRewardShape() && (isParent(fid) || rewardFromWish(fid, rid));
+        allow update: if isParent(fid) && validRewardShape();
+      }
+
+      match /wishes/{wid} {
+        allow read: if isMember(fid);
+        allow create: if isMember(fid) && validWish()
+          && request.resource.data.ownerUid == request.auth.uid
+          && request.resource.data.status == 'negotiating'
+          && request.resource.data.lastRole == 'child'
+          && request.resource.data.offerCount == 1;
+        allow update: if isMember(fid) && validWish() && (ownerWishUpdate() || parentWishUpdate(fid));
+        // 상점에 올라가기 전이라면 제안한 본인이 그만두거나 지울 수 있다.
+        allow delete: if isMember(fid)
+          && resource.data.ownerUid == request.auth.uid
+          && resource.data.status != 'agreed';
       }
 
       match /orders/{oid} {

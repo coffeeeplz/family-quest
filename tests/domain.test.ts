@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { CalendarEvent, Food, Member, Order, Place, Proposal, Quest, Reward, Run } from '../src/backend/types';
+import type { CalendarEvent, Food, LedgerEntry, Member, Order, Place, Proposal, Quest, Reward, Run, Wish } from '../src/backend/types';
+import { coinScene, gainsOf, goalJustReached, latestAt, missedGains } from '../src/domain/celebrate';
+import { canAddWish, canCounterWish, cleanWishInput, splitMyWishes, wishTurn, wishesForParent } from '../src/domain/wishes';
 import {
   canEditEvent,
   cleanEventInput,
@@ -844,5 +846,108 @@ describe('캘린더', () => {
     expect(holidayName('2030-12-25')).toBe('성탄절'); // 표가 없는 해도 날짜가 고정된 공휴일은 보인다
     expect(holidaysComplete(2027)).toBe(true);
     expect(holidaysComplete(2028)).toBe(false);
+  });
+});
+
+describe('코인 축하 연출', () => {
+  const entry = (id: string, amount: number, at: number, extra: Partial<LedgerEntry> = {}): LedgerEntry => ({
+    id,
+    uid: 'kid',
+    amount,
+    type: 'quest',
+    refId: '',
+    memo: id,
+    note: '',
+    by: 'dad',
+    at,
+    ...extra,
+  });
+  const ledger = [entry('a', 10, 100), entry('b', -50, 200, { type: 'reward' }), entry('c', 5, 300, { type: 'gift', note: '고마워!' }), entry('d', 20, 400, { uid: 'other' })];
+
+  it('받은 코인만 고르고, 마지막으로 본 뒤의 것만 "그동안 받은 코인"이 된다', () => {
+    const gains = gainsOf(ledger, 'kid');
+    expect(gains.map((e) => e.id)).toEqual(['a', 'c']);
+    expect(latestAt(gains)).toBe(300);
+    expect(latestAt([])).toBe(0);
+    expect(missedGains(gains, 100).map((e) => e.id)).toEqual(['c']);
+    expect(missedGains(gains, 300)).toEqual([]);
+    expect(missedGains([entry('z', 1, 900), entry('y', 1, 800)], 0).map((e) => e.id)).toEqual(['y', 'z']);
+  });
+
+  it('한 장면으로 묶는다: 합계, 내역 4줄까지, 최근 한마디, 연속 달성 여부', () => {
+    const scene = coinScene([entry('수학', 10, 1), entry('칭찬 코인', 5, 2, { type: 'gift', note: '고마워!' })]);
+    expect(scene).toMatchObject({ total: 15, lines: ['수학 +10', '칭찬 코인 +5'], more: 0, note: '고마워!', streak: false, rain: 15 });
+    const many = coinScene(Array.from({ length: 6 }, (_, i) => entry(`q${i}`, 1, i)));
+    expect(many.lines).toHaveLength(4);
+    expect(many.more).toBe(2);
+    expect(many.rain).toBe(8); // 적어도 8개는 떨어진다
+    expect(coinScene([entry('큰돈', 500, 1)]).rain).toBe(28); // 많아도 28개까지
+    expect(coinScene([entry('보너스', 10, 1, { type: 'bonus' })]).streak).toBe(true);
+  });
+
+  it('이번에 받은 코인으로 목표를 처음 채웠을 때만 목표 달성이다', () => {
+    const goal = { id: 'g', title: '게임', note: '', price: 50, icon: 'game', limit: { period: 'none', count: 1 }, active: true, createdBy: 'dad', createdAt: 0 } as Reward;
+    expect(goalJustReached(goal, 55, 10, 0)).toBe(true); // 45 → 55
+    expect(goalJustReached(goal, 70, 10, 0)).toBe(false); // 이미 채워져 있었다
+    expect(goalJustReached(goal, 45, 10, 0)).toBe(false); // 아직 모자라다
+    expect(goalJustReached(goal, 55, 10, 20)).toBe(false); // 묶인 코인을 빼면 모자라다
+    expect(goalJustReached(undefined, 55, 10, 0)).toBe(false);
+    expect(goalJustReached(goal, 55, 0, 0)).toBe(false);
+  });
+});
+
+describe('보상 제안', () => {
+  const settings = { ...DEFAULT_SETTINGS };
+  const wish = (id: string, extra: Partial<Wish> = {}): Wish => ({
+    id,
+    ownerUid: 'kid',
+    title: id,
+    note: '',
+    icon: 'shop',
+    status: 'negotiating',
+    lastPrice: 100,
+    lastRole: 'child',
+    offerCount: 1,
+    offers: [],
+    declineNote: '',
+    decidedAt: null,
+    createdAt: 0,
+    ...extra,
+  });
+
+  it('입력값을 다듬고 잘못된 값은 막는다', () => {
+    expect(cleanWishInput({ title: ' 놀이공원 ', note: ' 가고 싶어요 ', icon: 'balloon', price: 150 })).toEqual({ title: '놀이공원', note: '가고 싶어요', icon: 'balloon', price: 150 });
+    expect(cleanWishInput({ title: '선물', note: '', icon: '없는그림', price: 1 }).icon).toBe('shop');
+    expect(() => cleanWishInput({ title: '', note: '', icon: 'shop', price: 10 })).toThrow('이름을 적어 주세요');
+    expect(() => cleanWishInput({ title: '선물', note: '', icon: 'shop', price: 0 })).toThrow('가격은 1부터');
+    expect(() => cleanWishInput({ title: '선물', note: '', icon: 'shop', price: 1.5 })).toThrow('가격은 1부터');
+    expect(() => cleanWishInput({ title: '선물', note: '', icon: 'shop', price: 10001 })).toThrow('가격은 1부터');
+  });
+
+  it('차례와 다시 제안할 수 있는 횟수', () => {
+    expect(wishTurn(wish('a'))).toBe('parent');
+    expect(wishTurn(wish('a', { lastRole: 'parent' }))).toBe('child');
+    expect(wishTurn(wish('a', { status: 'agreed' }))).toBeNull();
+    expect(canCounterWish(wish('a', { offerCount: 2 }), settings)).toBe(true);
+    expect(canCounterWish(wish('a', { offerCount: 3 }), settings)).toBe(false);
+    expect(canCounterWish(wish('a', { status: 'declined' }), settings)).toBe(false);
+  });
+
+  it('자녀 화면과 부모 화면에 나눠 보여 준다', () => {
+    const list = [
+      wish('기다림', { createdAt: 2 }),
+      wish('답할것', { lastRole: 'parent', createdAt: 1 }),
+      wish('오늘거절', { status: 'declined', decidedAt: 10 }),
+      wish('어제거절', { status: 'declined', decidedAt: 5 }),
+      wish('올라감', { status: 'agreed', decidedAt: 10 }),
+      wish('남의것', { ownerUid: 'other' }),
+    ];
+    const mine = splitMyWishes(list, 'kid', (at) => at === 10);
+    expect(mine.toAnswer.map((w) => w.id)).toEqual(['답할것']);
+    expect(mine.waiting.map((w) => w.id)).toEqual(['기다림']);
+    expect(mine.declinedToday.map((w) => w.id)).toEqual(['오늘거절']);
+    expect(wishesForParent(list).map((w) => w.id)).toEqual(['남의것', '기다림']);
+    expect(canAddWish(list, 'kid')).toBe(true); // 협상 중인 것은 2개
+    expect(canAddWish([...list, wish('셋째')], 'kid')).toBe(false);
   });
 });

@@ -3,11 +3,15 @@ import { useFamilyData } from '../../app/familyData';
 import { useBackend, useSession } from '../../app/session';
 import type { Reward } from '../../backend/types';
 import { buyState, limitLabel, limitUsage, reservedCoins } from '../../domain/shop';
+import { openWishCount, splitMyWishes } from '../../domain/wishes';
 import { dateKey } from '../../lib/dates';
 import type { IconName } from '../../lib/sprites';
 import { Icon } from '../../ui/Sprite';
 import { Button, CoinInline, CoinPill, Empty, Sheet } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
+import { MyWishCard } from '../wishes/MyWishCard';
+import { WishFormSheet } from '../wishes/WishFormSheet';
+import { useWishes } from '../wishes/useWishes';
 import { GoalCard } from './GoalCard';
 
 /** 자녀의 상점: 모은 코인으로 보상을 신청하고, 받을 보상을 확인한다. */
@@ -18,6 +22,8 @@ export function ShopPage() {
   const { busy, run } = useAction();
   const [picked, setPicked] = useState<Reward | null>(null);
   const [showMine, setShowMine] = useState(false);
+  const [wishing, setWishing] = useState(false);
+  const { wishes } = useWishes();
 
   const mine = orders.filter((o) => o.uid === me.uid);
   const requested = mine.filter((o) => o.status === 'requested').sort((a, b) => a.requestedAt - b.requestedAt);
@@ -25,12 +31,16 @@ export function ShopPage() {
   // 오늘 거절된 신청은 이유와 함께 하루 동안 보여 준다.
   const rejectedToday = mine.filter((o) => o.status === 'rejected' && dateKey(new Date(o.decidedAt ?? 0)) === today);
   const reserved = reservedCoins(orders, me.uid);
-  const mineCount = requested.length + toReceive.length + rejectedToday.length;
+  // 내가 상점에 올려 달라고 한 보상: 내가 답할 것은 화면에, 나머지는 "내 신청" 안에 둔다.
+  const myWishes = splitMyWishes(wishes, me.uid, (at) => dateKey(new Date(at)) === today);
+  const mineCount = requested.length + toReceive.length + rejectedToday.length + myWishes.waiting.length + myWishes.declinedToday.length;
   // 첫 화면에는 한 줄만: 자세한 내용은 눌러서 본다.
   const summary = [
     toReceive.length > 0 ? `받을 보상 ${toReceive.length}개` : '',
     requested.length > 0 ? `승인 대기 ${requested.length}개` : '',
     rejectedToday.length > 0 ? `거절 ${rejectedToday.length}개` : '',
+    myWishes.waiting.length > 0 ? `제안 대기 ${myWishes.waiting.length}개` : '',
+    myWishes.declinedToday.length > 0 ? `제안 거절 ${myWishes.declinedToday.length}개` : '',
   ]
     .filter(Boolean)
     .join(' · ');
@@ -69,10 +79,24 @@ export function ShopPage() {
         </button>
       )}
 
+      {myWishes.toAnswer.length > 0 && (
+        <section className="stack" aria-label="가격 협상">
+          <h2 className="t-title">가격 협상</h2>
+          {myWishes.toAnswer.map((wish) => (
+            <MyWishCard key={wish.id} wish={wish} />
+          ))}
+        </section>
+      )}
+
       <GoalCard onChange={() => setGoal(null)} />
 
       <section className="stack" aria-label="보상 목록">
-        <h2 className="t-title">보상 목록</h2>
+        <div className="section-head" style={{ alignItems: 'center' }}>
+          <h2 className="t-title">보상 목록</h2>
+          <Button tone="plain" onClick={() => setWishing(true)}>
+            + 보상 제안
+          </Button>
+        </div>
         {!loading && rewards.length === 0 && (
           <Empty icon={<Icon name="shop" size={48} />} title="아직 보상이 없어요" hint="부모님이 보상을 올리면 여기에 나타나요." />
         )}
@@ -155,11 +179,42 @@ export function ShopPage() {
               ))}
             </section>
           )}
+          {(myWishes.waiting.length > 0 || myWishes.declinedToday.length > 0) && (
+            <section className="stack" aria-label="내가 제안한 보상">
+              <h3 className="t-title" style={{ fontSize: 15 }}>내가 제안한 보상</h3>
+              {myWishes.waiting.map((wish) => (
+                <article key={wish.id} className="card is-wait card-row">
+                  <Icon name={wish.icon as IconName} size={36} />
+                  <div className="card-main">
+                    <h3 className="t-body item-title">{wish.title}</h3>
+                    <div className="meta t-cap">
+                      <span>부모님의 답을 기다리는 중</span>
+                      <CoinInline amount={wish.lastPrice} />
+                    </div>
+                  </div>
+                  <Button tone="plain" disabled={busy} aria-label={`${wish.title} 제안 그만두기`} onClick={() => void run(() => backend.deleteWish(family.id, wish.id), '제안을 그만뒀어요.')}>
+                    그만두기
+                  </Button>
+                </article>
+              ))}
+              {myWishes.declinedToday.map((wish) => (
+                <article key={wish.id} className="card is-redo card-row">
+                  <Icon name={wish.icon as IconName} size={36} />
+                  <div className="card-main">
+                    <h3 className="t-body item-title">{wish.title}</h3>
+                    <p className="t-capb">이번에는 안 된대요.{wish.declineNote ? ` "${wish.declineNote}"` : ''}</p>
+                  </div>
+                </article>
+              ))}
+            </section>
+          )}
           <Button tone="plain" big block onClick={() => setShowMine(false)}>
             닫기
           </Button>
         </Sheet>
       )}
+
+      {wishing && <WishFormSheet openCount={openWishCount(wishes, me.uid)} onClose={() => setWishing(false)} />}
 
       {picked && pickedState && pickedUsage && (
         <Sheet title={picked.title} onClose={() => setPicked(null)}>

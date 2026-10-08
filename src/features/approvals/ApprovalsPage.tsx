@@ -7,6 +7,7 @@ import { canCounter } from '../../domain/proposals';
 import { relativeDay } from '../../domain/quests';
 import { MAX_PRAISE_LENGTH, MAX_REWARD } from '../../domain/settings';
 import { planStreak } from '../../domain/streak';
+import { wishTurn, wishesForParent } from '../../domain/wishes';
 import { formatWhen } from '../../lib/dates';
 import type { IconName } from '../../lib/sprites';
 import { CoinInput, parseCoins } from '../../ui/CoinInput';
@@ -16,6 +17,8 @@ import { Button, CoinInline, Empty, Field, FieldGroup, Sheet } from '../../ui/ki
 import { useAction } from '../../ui/toast';
 import { TodayEvents } from '../calendar/TodayEvents';
 import { OfferSheet } from '../negotiation/OfferSheet';
+import { WishInbox } from '../wishes/WishInbox';
+import { useWishes } from '../wishes/useWishes';
 import { KidStatus } from './KidStatus';
 
 const QUICK_REASONS = ['조금만 더 해 보자', '다시 확인해 줘', '끝까지 해 보자'];
@@ -45,7 +48,11 @@ export function ApprovalsPage() {
   const memberById = useMemo(() => new Map(members.map((m) => [m.uid, m])), [members]);
   const nameOf = (uid: string) => memberById.get(uid)?.displayName ?? '알 수 없음';
   const waitingOnKid = proposals.filter((p) => p.status === 'negotiating' && p.lastRole === 'parent');
-  const waitingCount = pending.length + offersForParent.length + ordersForParent.length;
+  const { wishes } = useWishes();
+  // 자녀가 상점에 올려 달라고 한 보상 가운데 부모가 답할 것
+  const wishInbox = wishesForParent(wishes);
+  const wishesOnKid = wishes.filter((wish) => wishTurn(wish) === 'child');
+  const waitingCount = pending.length + offersForParent.length + ordersForParent.length + wishInbox.length;
   // 승인했지만 아직 주지 않은 보상
   const toGive = orders.filter((o) => o.status === 'approved').sort((a, b) => (a.decidedAt ?? 0) - (b.decidedAt ?? 0));
 
@@ -180,6 +187,8 @@ export function ApprovalsPage() {
         </section>
       )}
 
+      <WishInbox wishes={wishInbox} />
+
       {toGive.length > 0 && (
         <section className="stack" aria-label="줄 보상">
           <h2 className="t-title">줄 보상</h2>
@@ -249,6 +258,11 @@ export function ApprovalsPage() {
       {waitingOnKid.length > 0 && (
         <p className="t-cap">
           자녀의 답을 기다리는 코인 제안 {waitingOnKid.length}개: {waitingOnKid.map((p) => p.title).join(', ')}
+        </p>
+      )}
+      {wishesOnKid.length > 0 && (
+        <p className="t-cap">
+          자녀의 답을 기다리는 가격 제안 {wishesOnKid.length}개: {wishesOnKid.map((wish) => wish.title).join(', ')}
         </p>
       )}
     </div>

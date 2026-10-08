@@ -58,6 +58,7 @@ import {
 import { firebaseConfig } from '../config/firebase';
 import { INVITE_TTL_MS, isInviteCodeShape, newInviteCode, normalizeInviteCode } from '../domain/invites';
 import { cleanEventInput } from '../domain/calendar';
+import { MAX_DECLINE_NOTE, MAX_OPEN_WISHES, WISH_KEEP_DAYS, canCounterWish, checkWishTurn, cleanWishInput, cleanWishPrice } from '../domain/wishes';
 import { ETC_CATEGORY_ID, MAX_EATEN, cleanFoodInput, cleanStars, withEaten } from '../domain/foods';
 import { cleanFix, cleanPlaceInput, planCheckin } from '../domain/location';
 import { cleanFamilyName, cleanProfile } from '../domain/profile';
@@ -94,6 +95,7 @@ import {
   type Role,
   type Run,
   type Unsub,
+  type Wish,
 } from './types';
 
 const AUTH_MESSAGES: Record<string, string> = {
@@ -188,6 +190,7 @@ export function createFirebaseBackend(): Backend {
   const locationsCol = (fid: string) => collection(db, 'families', fid, 'locations');
   const placesCol = (fid: string) => collection(db, 'families', fid, 'places');
   const eventsCol = (fid: string) => collection(db, 'families', fid, 'events');
+  const wishesCol = (fid: string) => collection(db, 'families', fid, 'wishes');
 
   const onListenError = (what: string) => (error: Error) => console.error(`[${what}]`, error);
 
@@ -305,6 +308,22 @@ export function createFirebaseBackend(): Backend {
     at: d.at ?? 0,
     trigger: d.trigger === 'open' || d.trigger === 'quest' ? d.trigger : 'button',
     coins: d.coins ?? 0,
+  });
+
+  const toWish = (id: string, d: DocumentData): Wish => ({
+    id,
+    ownerUid: d.ownerUid,
+    title: d.title,
+    note: d.note ?? '',
+    icon: d.icon ?? 'shop',
+    status: d.status === 'agreed' || d.status === 'declined' ? d.status : 'negotiating',
+    lastPrice: d.lastPrice ?? 0,
+    lastRole: d.lastRole === 'parent' ? 'parent' : 'child',
+    offerCount: d.offerCount ?? 0,
+    offers: [...((d.offers as Offer[] | undefined) ?? [])],
+    declineNote: d.declineNote ?? '',
+    decidedAt: d.decidedAt ?? null,
+    createdAt: d.createdAt ?? 0,
   });
 
   const toEvent = (id: string, d: DocumentData): CalendarEvent => ({
@@ -1086,6 +1105,101 @@ export function createFirebaseBackend(): Backend {
       guard(async () => {
         await deleteDoc(doc(placesCol(familyId), placeId));
       }),
+
+    watchWishes(familyId, cb, onError) {
+      return onSnapshot(
+        wishesCol(familyId),
+        (snap) => {
+          const since = Date.now() - WISH_KEEP_DAYS * 24 * 60 * 60 * 1000;
+          cb(
+            snap.docs
+              .map((s) => toWish(s.id, s.data()))
+              .filter((wish) => wish.status === 'negotiating' || (wish.decidedAt ?? 0) >= since),
+          );
+        },
+        (error) => {
+          console.error('[wishes]', error);
+          onError?.();
+        },
+      );
+    },
+
+    createWish: (familyId, input, uid) =>
+      guard(async () => {
+        const clean = cleanWishInput(input);
+        const open = await getDocs(query(wishesCol(familyId), where('ownerUid', '==', uid), where('status', '==', 'negotiating')));
+        if (open.size >= MAX_OPEN_WISHES) throw new AppError(`제안은 한 번에 ${MAX_OPEN_WISHES}개까지 걸어 둘 수 있어요.`);
+        const ref = doc(wishesCol(familyId));
+        const now = Date.now();
+        await setDoc(ref, {
+          ownerUid: uid,
+          title: clean.title,
+          note: clean.note,
+          icon: clean.icon,
+          status: 'negotiating',
+          lastPrice: clean.price,
+          lastRole: 'child',
+          offerCount: 1,
+          offers: [{ byUid: uid, role: 'child', amount: clean.price, note: '', at: now }],
+          declineNote: '',
+          decidedAt: null,
+          createdAt: now,
+        });
+        return ref.id;
+      }),
+
+    counterWish: (familyId, wishId, price, note, byUid) =>
+      guard(async () => {
+        const ref = doc(wishesCol(familyId), wishId);
+        const [role, settings] = await Promise.all([readRole(familyId, byUid), readSettings(familyId)]);
+        await runTransaction(db, async (tx) => {
+          const snap = await tx.get(ref);
+          if (!snap.exists()) throw new AppError('제안을 찾을 수 없어요.');
+          const wish = toWish(snap.id, snap.data());
+          checkWishTurn(wish, role, byUid);
+          if (!canCounterWish(wish, settings)) throw new AppError('더는 다시 제안할 수 없어요. 수락하거나 그만둘 수 있어요.');
+          const clean = cleanWishPrice(price);
+          const offer: Offer = { byUid, role, amount: clean, note: note.trim().slice(0, MAX_OFFER_NOTE), at: Date.now() };
+          tx.update(ref, { lastPrice: clean, lastRole: role, offerCount: wish.offerCount + 1, offers: [...wish.offers, offer] });
+        });
+      }),
+
+    acceptWish: (familyId, wishId, byUid) =>
+      guard(async () => {
+        const ref = doc(wishesCol(familyId), wishId);
+        const role = await readRole(familyId, byUid);
+        await runTransaction(db, async (tx) => {
+          const snap = await tx.get(ref);
+          if (!snap.exists()) throw new AppError('제안을 찾을 수 없어요.');
+          const wish = toWish(snap.id, snap.data());
+          checkWishTurn(wish, role, byUid);
+          const now = Date.now();
+          // 합의된 가격으로 상점에 보상을 올린다(보상 id = 제안 id).
+          tx.set(doc(rewardsCol(familyId), wishId), {
+            title: wish.title,
+            note: wish.note,
+            price: cleanWishPrice(wish.lastPrice),
+            icon: wish.icon,
+            limit: { period: 'none', count: 1 },
+            active: true,
+            createdBy: byUid,
+            createdAt: now,
+            wishId,
+          });
+          tx.update(ref, { status: 'agreed', decidedAt: now });
+        });
+      }),
+
+    declineWish: (familyId, wishId, note, _byUid) =>
+      guard(async () => {
+        await updateDoc(doc(wishesCol(familyId), wishId), {
+          status: 'declined',
+          declineNote: note.trim().slice(0, MAX_DECLINE_NOTE),
+          decidedAt: Date.now(),
+        });
+      }),
+
+    deleteWish: (familyId, wishId) => guard(() => deleteDoc(doc(wishesCol(familyId), wishId))),
 
     watchEvents(familyId, cb, onError) {
       return onSnapshot(

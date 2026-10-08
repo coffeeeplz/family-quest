@@ -238,6 +238,38 @@ export interface Reward extends RewardInput {
   createdAt: number;
 }
 
+/** negotiating=가격 협상 중, agreed=합의되어 상점에 올라감, declined=부모가 거절함 */
+export type WishStatus = 'negotiating' | 'agreed' | 'declined';
+
+/** 자녀가 상점에 올려 달라고 제안한 보상. 가격을 주고받다가 합의되면 상점의 보상이 된다. */
+export interface Wish {
+  id: string;
+  ownerUid: string;
+  title: string;
+  note: string;
+  /** sprites.json 의 아이콘 이름 */
+  icon: string;
+  status: WishStatus;
+  /** 마지막으로 나온 가격 */
+  lastPrice: number;
+  lastRole: Role;
+  offerCount: number;
+  offers: Offer[];
+  /** 부모가 거절하며 남긴 한마디 */
+  declineNote: string;
+  /** 합의되거나 거절된 시각 */
+  decidedAt: number | null;
+  createdAt: number;
+}
+
+export interface WishInput {
+  title: string;
+  note: string;
+  icon: string;
+  /** 자녀가 원하는 가격 */
+  price: number;
+}
+
 /** requested=신청함(코인 묶임), approved=승인되어 받을 보상, delivered=받음, rejected=거절됨 */
 export type OrderStatus = 'requested' | 'approved' | 'delivered' | 'rejected';
 
@@ -434,6 +466,19 @@ export interface Backend {
   createReward(familyId: string, input: RewardInput, byUid: string): Promise<string>;
   updateReward(familyId: string, rewardId: string, input: RewardInput): Promise<void>;
   archiveReward(familyId: string, rewardId: string): Promise<void>;
+  // 자녀의 보상 제안과 가격 협상
+  /** 협상 중인 제안과 최근에 끝난 제안 */
+  watchWishes(familyId: string, cb: (wishes: Wish[]) => void, onError?: () => void): Unsub;
+  createWish(familyId: string, input: WishInput, uid: string): Promise<string>;
+  /** 받은 가격 대신 다른 가격을 제안한다(정해 둔 횟수까지). */
+  counterWish(familyId: string, wishId: string, price: number, note: string, byUid: string): Promise<void>;
+  /** 받은 가격을 수락한다. 그 가격의 보상이 상점에 올라간다. */
+  acceptWish(familyId: string, wishId: string, byUid: string): Promise<void>;
+  /** 부모가 제안을 거절한다. */
+  declineWish(familyId: string, wishId: string, note: string, byUid: string): Promise<void>;
+  /** 자녀가 제안을 그만두거나, 거절된 제안을 목록에서 지운다. */
+  deleteWish(familyId: string, wishId: string): Promise<void>;
+
   /** 진행 중인 신청과, sinceDay 이후의 신청 기록 */
   watchOrders(familyId: string, sinceDay: string, cb: (orders: Order[]) => void): Unsub;
   /** 보상을 신청한다. 승인 전까지 그만큼의 코인이 묶인다. */

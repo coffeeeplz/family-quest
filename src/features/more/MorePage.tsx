@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useBackend, useSession } from '../../app/session';
+import { feedbackOn, previewTune, setFeedbackOn } from '../../lib/feedback';
 import type { IconName } from '../../lib/sprites';
 import { AvatarFrame, Icon } from '../../ui/Sprite';
 import { Button } from '../../ui/kit';
@@ -60,6 +62,7 @@ export function MorePage() {
           </Link>
         ))}
         {!isParent && <LocationInfoRow />}
+        {!isParent && <FeedbackRow />}
       </nav>
 
       <div className="hr" />
@@ -86,5 +89,32 @@ export function MorePage() {
         </Button>
       )}
     </main>
+  );
+}
+
+/** 코인을 받을 때의 효과음과 진동을 켜고 끈다(이 기기에만 저장된다). */
+function FeedbackRow() {
+  const [on, setOn] = useState(feedbackOn);
+  return (
+    <button
+      type="button"
+      className="px list-button menu-row"
+      aria-pressed={on}
+      onClick={() => {
+        setFeedbackOn(!on);
+        setOn(!on);
+        // 켰을 때는 어떤 소리인지 바로 들려준다.
+        if (!on) previewTune('coin');
+      }}
+    >
+      <Icon name="star" size={36} />
+      <span className="card-main">
+        <span className="t-body item-title">효과음과 진동</span>
+        <span className="t-cap">{on ? '켜짐 · 코인을 받을 때 소리가 나요' : '꺼짐'}</span>
+      </span>
+      <span className="t-capb" aria-hidden="true">
+        {on ? '끄기' : '켜기'}
+      </span>
+    </button>
   );
 }

@@ -524,7 +524,7 @@ textarea.input {
   z-index: 20;
 }
 
-/* 코인 획득 연출 */
+/* 축하 장면: 코인 획득, 목표 달성, 보상 획득 */
 .celebrate {
   position: absolute;
   inset: 0;
@@ -532,14 +532,52 @@ textarea.input {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  background: rgba(246, 240, 255, 0.9);
+  gap: 14px;
+  padding: 0 24px;
+  text-align: center;
+  background: rgba(246, 240, 255, 0.92);
   z-index: 30;
   pointer-events: none;
-  animation: celebrate-fade 2.2s steps(12) forwards;
+  overflow: hidden;
+  /* 길이는 장면마다 다르게 정해서 넣는다. */
+  animation: celebrate-fade 2.6s steps(16) forwards;
+}
+.celebrate.is-big {
+  background: rgba(255, 244, 196, 0.94);
+}
+/* 그동안 받은 코인은 눌러서 닫을 수 있다. */
+.celebrate.is-away {
+  pointer-events: auto;
+  cursor: pointer;
+  /* 내역을 읽어야 하므로 뒤 화면이 덜 비치게 한다. */
+  background: rgba(246, 240, 255, 0.97);
+}
+.celebrate > * {
+  position: relative;
+  z-index: 1;
 }
 .celebrate .coin {
   animation: coin-hop 0.5s steps(5) 4 alternate;
+}
+.celebrate-title {
+  font-size: 36px;
+  line-height: 40px;
+  animation: celebrate-pop 0.4s steps(4);
+}
+.celebrate-badge {
+  padding: 4px 10px;
+  background: var(--yellow);
+  box-shadow: var(--px-shadow);
+}
+.celebrate .rain {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+.celebrate .drop {
+  position: absolute;
+  top: -48px;
+  animation: rain-fall 1.5s steps(18) both;
 }
 @keyframes coin-hop {
   from {
@@ -549,18 +587,43 @@ textarea.input {
     transform: translateY(-36px);
   }
 }
+@keyframes celebrate-pop {
+  from {
+    transform: scale(0.4);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+@keyframes rain-fall {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(calc(100vh + 96px));
+  }
+}
 @keyframes celebrate-fade {
   0%,
-  80% {
+  82% {
     opacity: 1;
   }
   100% {
     opacity: 0;
   }
 }
+/* 위쪽 코인 숫자가 올라가는 동안 살짝 커진다. */
+.coin-pill.counting {
+  background: var(--yellow);
+  transform: scale(1.08);
+}
 @media (prefers-reduced-motion: reduce) {
-  .celebrate .coin {
+  .celebrate .coin,
+  .celebrate-title {
     animation: none;
+  }
+  .coin-pill.counting {
+    transform: none;
   }
 }
 

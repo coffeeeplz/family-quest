@@ -19,6 +19,7 @@ import {
   normalizeSettings,
 } from '../domain/settings';
 import { MAX_REWARDS, buyBlockReason, cleanRewardInput } from '../domain/shop';
+import { MAX_DECLINE_NOTE, MAX_OPEN_WISHES, WISH_KEEP_DAYS, canCounterWish, checkWishTurn, cleanWishInput, cleanWishPrice, openWishCount } from '../domain/wishes';
 import { addDays, dateKey, dayNumber } from '../lib/dates';
 import {
   AppError,
@@ -41,6 +42,7 @@ import {
   type Run,
   type Unsub,
   type UserProfile,
+  type Wish,
 } from './types';
 
 interface DemoUser {
@@ -52,7 +54,7 @@ interface DemoUser {
 }
 
 interface DemoState {
-  v: 7;
+  v: 8;
   currentUid: string | null;
   users: Record<string, DemoUser>;
   families: Record<string, Family>;
@@ -68,6 +70,7 @@ interface DemoState {
   locations: Record<string, LocationRecord[]>;
   places: Record<string, Record<string, Place>>;
   events: Record<string, Record<string, CalendarEvent>>;
+  wishes: Record<string, Record<string, Wish>>;
   invites: Record<string, Invite>;
 }
 
@@ -76,7 +79,7 @@ export interface KeyValueStore {
   setItem(key: string, value: string): void;
 }
 
-const STORAGE_KEY = 'family-quest-demo-v7';
+const STORAGE_KEY = 'family-quest-demo-v8';
 const FAMILY = 'demo-family';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -223,7 +226,7 @@ function seed(now: number = Date.now()): DemoState {
   });
 
   return {
-    v: 7,
+    v: 8,
     currentUid: null,
     users: {
       'demo-dad': { uid: 'demo-dad', email: 'dad@example.com', label: '아빠', hint: '퀘스트를 만들고 승인해요', familyId: FAMILY },
@@ -330,6 +333,26 @@ function seed(now: number = Date.now()): DemoState {
         'e-kid': event('e-kid', '친구 생일 파티', addDays(today, 6), { startTime: '14:00', who: ['demo-kid'], createdBy: 'demo-kid' }),
       },
     },
+    // 자녀가 상점에 올려 달라고 제안한 보상: 부모의 답을 기다리는 중
+    wishes: {
+      [FAMILY]: {
+        'w-park': {
+          id: 'w-park',
+          ownerUid: 'demo-kid',
+          title: '놀이공원 가기',
+          note: '시험 끝나고 가고 싶어요',
+          icon: 'balloon',
+          status: 'negotiating',
+          lastPrice: 150,
+          lastRole: 'child',
+          offerCount: 1,
+          offers: [{ byUid: 'demo-kid', role: 'child', amount: 150, note: '', at: now - 2 * 3_600_000 }],
+          declineNote: '',
+          decidedAt: null,
+          createdAt: now - 2 * 3_600_000,
+        },
+      },
+    },
     // 체험용 장소와 위치는 지어낸 좌표다.
     places: {
       [FAMILY]: {
@@ -362,7 +385,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       const raw = store?.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as DemoState;
-        if (parsed.v === 7) return parsed;
+        if (parsed.v === 8) return parsed;
       }
     } catch {
       // 저장소를 못 읽으면 새로 시작한다.
@@ -441,6 +464,12 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
     const proposal = state.proposals[familyId]?.[proposalId];
     if (!proposal) throw new AppError('할 일을 찾을 수 없어요.');
     return proposal;
+  }
+
+  function requireWish(familyId: string, wishId: string): Wish {
+    const wish = state.wishes[familyId]?.[wishId];
+    if (!wish) throw new AppError('제안을 찾을 수 없어요.');
+    return wish;
   }
 
   function requireEvent(familyId: string, eventId: string): CalendarEvent {
@@ -522,6 +551,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       state.locations[id] = [];
       state.places[id] = {};
       state.events[id] = {};
+      state.wishes[id] = {};
       state.users[uid].familyId = id;
       commit();
       return id;
@@ -1218,6 +1248,110 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
     async deletePlace(familyId, placeId) {
       requireParent(familyId);
       delete state.places[familyId][placeId];
+      commit();
+    },
+
+    watchWishes(familyId, cb) {
+      const since = Date.now() - WISH_KEEP_DAYS * DAY_MS;
+      return watch(
+        () =>
+          Object.values(state.wishes[familyId] ?? {})
+            .filter((wish) => wish.status === 'negotiating' || (wish.decidedAt ?? 0) >= since)
+            .map((wish) => ({ ...wish, offers: [...wish.offers] })),
+        cb,
+      );
+    },
+
+    async createWish(familyId, input, uid) {
+      requireSelf(uid);
+      requireMember(familyId);
+      const clean = cleanWishInput(input);
+      if (openWishCount(Object.values(state.wishes[familyId]), uid) >= MAX_OPEN_WISHES) {
+        throw new AppError(`제안은 한 번에 ${MAX_OPEN_WISHES}개까지 걸어 둘 수 있어요.`);
+      }
+      const id = newId('w');
+      const now = Date.now();
+      state.wishes[familyId][id] = {
+        id,
+        ownerUid: uid,
+        title: clean.title,
+        note: clean.note,
+        icon: clean.icon,
+        status: 'negotiating',
+        lastPrice: clean.price,
+        lastRole: 'child',
+        offerCount: 1,
+        offers: [{ byUid: uid, role: 'child', amount: clean.price, note: '', at: now }],
+        declineNote: '',
+        decidedAt: null,
+        createdAt: now,
+      };
+      commit();
+      return id;
+    },
+
+    async counterWish(familyId, wishId, price, note, byUid) {
+      requireSelf(byUid);
+      const member = requireMember(familyId);
+      const wish = requireWish(familyId, wishId);
+      checkWishTurn(wish, member.role, member.uid);
+      if (!canCounterWish(wish, settingsOf(familyId))) throw new AppError('더는 다시 제안할 수 없어요. 수락하거나 그만둘 수 있어요.');
+      const clean = cleanWishPrice(price);
+      state.wishes[familyId][wishId] = {
+        ...wish,
+        lastPrice: clean,
+        lastRole: member.role,
+        offerCount: wish.offerCount + 1,
+        offers: [...wish.offers, { byUid, role: member.role, amount: clean, note: note.trim().slice(0, MAX_OFFER_NOTE), at: Date.now() }],
+      };
+      commit();
+    },
+
+    async acceptWish(familyId, wishId, byUid) {
+      requireSelf(byUid);
+      const member = requireMember(familyId);
+      const wish = requireWish(familyId, wishId);
+      checkWishTurn(wish, member.role, member.uid);
+      if (Object.values(state.rewards[familyId]).filter((r) => r.active).length >= MAX_REWARDS) {
+        throw new AppError(`보상은 ${MAX_REWARDS}개까지 올릴 수 있어요. 상점 관리에서 안 쓰는 보상을 내려 주세요.`);
+      }
+      const now = Date.now();
+      // 합의된 가격으로 상점에 보상을 올린다(보상 id = 제안 id).
+      state.rewards[familyId][wishId] = {
+        id: wishId,
+        title: wish.title,
+        note: wish.note,
+        price: cleanWishPrice(wish.lastPrice),
+        icon: wish.icon,
+        limit: { period: 'none', count: 1 },
+        active: true,
+        createdBy: byUid,
+        createdAt: now,
+      };
+      state.wishes[familyId][wishId] = { ...wish, status: 'agreed', decidedAt: now };
+      commit();
+    },
+
+    async declineWish(familyId, wishId, note, byUid) {
+      requireSelf(byUid);
+      const member = requireParent(familyId);
+      const wish = requireWish(familyId, wishId);
+      checkWishTurn(wish, member.role, member.uid);
+      state.wishes[familyId][wishId] = {
+        ...wish,
+        status: 'declined',
+        declineNote: note.trim().slice(0, MAX_DECLINE_NOTE),
+        decidedAt: Date.now(),
+      };
+      commit();
+    },
+
+    async deleteWish(familyId, wishId) {
+      const member = requireMember(familyId);
+      const wish = requireWish(familyId, wishId);
+      if (wish.ownerUid !== member.uid) throw new AppError('내 제안만 지울 수 있어요.');
+      if (wish.status === 'agreed') throw new AppError('이미 상점에 올라간 제안이에요.');
+      delete state.wishes[familyId][wishId];
       commit();
     },
 

@@ -16,6 +16,7 @@ import type {
   Quest,
   Reward,
   Run,
+  Wish,
 } from '../src/backend/types';
 import { categoryOf, ratingSummary } from '../src/domain/foods';
 import { DEFAULT_SETTINGS } from '../src/domain/settings';
@@ -47,6 +48,8 @@ const orders = () => snapshot<Order[]>((cb) => backend.watchOrders(FAMILY, addDa
 const rewardById = (id: string) => rewards().find((r) => r.id === id)!;
 const foods = () => snapshot<Food[]>((cb) => backend.watchFoods(FAMILY, cb));
 const foodById = (id: string) => foods().find((f) => f.id === id);
+const wishes = () => snapshot<Wish[]>((cb) => backend.watchWishes(FAMILY, cb));
+const wishById = (id: string) => wishes().find((w) => w.id === id);
 const events = () => snapshot<CalendarEvent[]>((cb) => backend.watchEvents(FAMILY, cb));
 const eventById = (id: string) => events().find((e) => e.id === id);
 const locations = () => snapshot<LocationRecord[]>((cb) => backend.watchLocations(FAMILY, 0, cb));
@@ -705,5 +708,90 @@ describe('캘린더', () => {
     expect(eventById('e-mom')!.title).toBe('엄마 모임 (취소)');
     await backend.deleteEvent(FAMILY, 'e-mom');
     await expect(backend.deleteEvent(FAMILY, 'e-mom')).rejects.toThrow('찾을 수 없어요');
+  });
+});
+
+describe('보상 제안', () => {
+  const input = { title: '보드게임 사기', note: '', icon: 'game', price: 80 };
+
+  it('자녀가 제안하면 부모의 답을 기다린다. 한 번에 3개까지만 걸 수 있다', async () => {
+    expect(wishById('w-park')).toMatchObject({ status: 'negotiating', lastRole: 'child', lastPrice: 150 });
+    as('demo-kid');
+    const id = await backend.createWish(FAMILY, input, 'demo-kid');
+    expect(wishById(id)).toMatchObject({ title: '보드게임 사기', icon: 'game', lastPrice: 80, offerCount: 1, ownerUid: 'demo-kid' });
+    await expect(backend.createWish(FAMILY, { ...input, title: ' ' }, 'demo-kid')).rejects.toThrow('이름을 적어 주세요');
+    await expect(backend.createWish(FAMILY, { ...input, price: 0 }, 'demo-kid')).rejects.toThrow('가격은 1부터');
+    await backend.createWish(FAMILY, { ...input, title: '셋째' }, 'demo-kid');
+    await expect(backend.createWish(FAMILY, { ...input, title: '넷째' }, 'demo-kid')).rejects.toThrow('3개까지');
+    // 아직 부모가 답하지 않았으므로 자녀가 수락하거나 다시 제안할 수 없다.
+    await expect(backend.acceptWish(FAMILY, id, 'demo-kid')).rejects.toThrow('상대가 답할 차례');
+    await expect(backend.counterWish(FAMILY, id, 60, '', 'demo-kid')).rejects.toThrow('상대가 답할 차례');
+  });
+
+  it('부모가 그 가격으로 수락하면 상점에 보상이 올라간다(코인은 빠지지 않는다)', async () => {
+    const before = rewards().length;
+    as('demo-dad');
+    await backend.acceptWish(FAMILY, 'w-park', 'demo-dad');
+    expect(wishById('w-park')).toMatchObject({ status: 'agreed' });
+    expect(rewards()).toHaveLength(before + 1);
+    expect(rewardById('w-park')).toMatchObject({ title: '놀이공원 가기', price: 150, icon: 'balloon', active: true, limit: { period: 'none' } });
+    expect(kid().coins).toBe(30);
+    await expect(backend.acceptWish(FAMILY, 'w-park', 'demo-dad')).rejects.toThrow('이미 끝난 제안');
+    // 올라간 뒤에는 상점 관리에서 다른 보상처럼 고칠 수 있다.
+    await backend.updateReward(FAMILY, 'w-park', { title: '놀이공원 가기', note: '', price: 200, icon: 'balloon', limit: { period: 'week', count: 1 } });
+    expect(rewardById('w-park').price).toBe(200);
+  });
+
+  it('가격을 주고받다가 자녀가 수락하면 그 가격으로 올라간다. 횟수를 다 쓰면 수락이나 그만두기만 남는다', async () => {
+    as('demo-dad');
+    await backend.counterWish(FAMILY, 'w-park', 300, '멀어서 비싸', 'demo-dad');
+    expect(wishById('w-park')).toMatchObject({ lastRole: 'parent', lastPrice: 300, offerCount: 2 });
+    await expect(backend.counterWish(FAMILY, 'w-park', 250, '', 'demo-dad')).rejects.toThrow('상대가 답할 차례');
+    as('demo-kid');
+    await backend.counterWish(FAMILY, 'w-park', 200, '', 'demo-kid');
+    expect(wishById('w-park')).toMatchObject({ lastRole: 'child', lastPrice: 200, offerCount: 3 });
+    as('demo-mom');
+    // 기본 3번을 다 썼으므로 부모는 수락하거나 거절만 할 수 있다.
+    await expect(backend.counterWish(FAMILY, 'w-park', 250, '', 'demo-mom')).rejects.toThrow('더는 다시 제안할 수 없어요');
+    await backend.acceptWish(FAMILY, 'w-park', 'demo-mom');
+    expect(rewardById('w-park').price).toBe(200);
+    expect(wishById('w-park')!.offers.map((o) => o.amount)).toEqual([150, 300, 200]);
+  });
+
+  it('자녀가 부모의 가격을 수락해도 상점에 올라간다', async () => {
+    as('demo-dad');
+    await backend.counterWish(FAMILY, 'w-park', 250, '', 'demo-dad');
+    as('demo-kid');
+    await backend.acceptWish(FAMILY, 'w-park', 'demo-kid');
+    expect(rewardById('w-park')).toMatchObject({ price: 250, title: '놀이공원 가기' });
+  });
+
+  it('부모가 거절하면 이유가 남고 상점에는 올라가지 않는다. 자녀는 그 제안을 지울 수 있다', async () => {
+    const before = rewards().length;
+    as('demo-kid');
+    await expect(backend.declineWish(FAMILY, 'w-park', '', 'demo-kid')).rejects.toThrow('부모만');
+    as('demo-dad');
+    await backend.declineWish(FAMILY, 'w-park', '겨울에 다시 얘기하자', 'demo-dad');
+    expect(wishById('w-park')).toMatchObject({ status: 'declined', declineNote: '겨울에 다시 얘기하자' });
+    expect(rewards()).toHaveLength(before);
+    await expect(backend.deleteWish(FAMILY, 'w-park')).rejects.toThrow('내 제안만'); // 부모는 지우지 못한다
+    as('demo-kid');
+    await backend.deleteWish(FAMILY, 'w-park');
+    expect(wishById('w-park')).toBeUndefined();
+    // 거절된 제안은 3개 제한에 세지 않는다.
+    await backend.createWish(FAMILY, input, 'demo-kid');
+  });
+
+  it('자녀는 기다리는 제안을 그만둘 수 있고, 상점에 올라간 제안은 지울 수 없다', async () => {
+    as('demo-kid');
+    const id = await backend.createWish(FAMILY, input, 'demo-kid');
+    await backend.deleteWish(FAMILY, id);
+    expect(wishById(id)).toBeUndefined();
+    as('demo-dad');
+    await backend.acceptWish(FAMILY, 'w-park', 'demo-dad');
+    as('demo-kid');
+    await expect(backend.deleteWish(FAMILY, 'w-park')).rejects.toThrow('이미 상점에 올라간');
+    as('demo-new');
+    await expect(backend.createWish(FAMILY, input, 'demo-new')).rejects.toThrow('구성원이 아니에요');
   });
 });

@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { celebratingFor, reducedMotion } from '../lib/feedback';
 import { Icon } from './Sprite';
 
 type ButtonTone = 'pink' | 'mint' | 'plain';
@@ -27,11 +28,53 @@ export function BackLink({ to = '/more', label = '더보기' }: { to?: string; l
   );
 }
 
+/** 숫자가 바뀌면 차례로 올라가거나 내려가며 따라간다. 축하 화면이 떠 있으면 그것이 걷힐 즈음에 시작한다. */
+function useCountUp(target: number): number {
+  const [shown, setShown] = useState(target);
+  const current = useRef(target);
+  useEffect(() => {
+    const start = current.current;
+    if (start === target) return;
+    if (reducedMotion()) {
+      current.current = target;
+      setShown(target);
+      return;
+    }
+    let wait = 0;
+    let tick = 0;
+    const run = () => {
+      const steps = Math.min(Math.abs(target - start), 12);
+      let step = 0;
+      tick = window.setInterval(() => {
+        step += 1;
+        const value = step >= steps ? target : Math.round(start + ((target - start) * step) / steps);
+        current.current = value;
+        setShown(value);
+        if (step >= steps) window.clearInterval(tick);
+      }, 70);
+    };
+    // 늘어날 때는 축하 화면이 뜨는지 잠깐 기다려 본다(잔액이 장부보다 먼저 바뀌기도 한다).
+    const first = window.setTimeout(
+      () => {
+        wait = window.setTimeout(run, target > start ? Math.max(0, celebratingFor() - 700) : 0);
+      },
+      target > start ? 250 : 0,
+    );
+    return () => {
+      window.clearTimeout(first);
+      window.clearTimeout(wait);
+      window.clearInterval(tick);
+    };
+  }, [target]);
+  return shown;
+}
+
 export function CoinPill({ amount }: { amount: number }) {
+  const shown = useCountUp(amount);
   return (
-    <div className="coin-pill" aria-label={`코인 ${amount}개`}>
+    <div className={shown === amount ? 'coin-pill' : 'coin-pill counting'} aria-label={`코인 ${amount}개`}>
       <Icon name="coin" size={24} />
-      <span>{amount}</span>
+      <span>{shown}</span>
     </div>
   );
 }

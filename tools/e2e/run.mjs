@@ -174,9 +174,9 @@ try {
   watch(dad, 'dad');
   await enter(dad, '아빠');
   await dad.getByRole('heading', { name: '승인 대기' }).waitFor();
-  check('탭 배지 = 승인 3 + 제안 2', (await dad.locator('.tab-count').innerText()) === '5', await dad.locator('.tab-count').innerText());
+  check('탭 배지 = 승인 3 + 코인 제안 2 + 보상 제안 1', (await dad.locator('.tab-count').innerText()) === '6', await dad.locator('.tab-count').innerText());
   check('아래 탭: 승인 퀘스트 캘린더 뭐먹지 더보기', (await tabNames(dad)) === '승인,퀘스트,캘린더,뭐먹지,더보기', await tabNames(dad));
-  check('승인 화면 머리말: 답할 일 5개, 작은 + 버튼', (await dad.getByText('답할 일 5개').isVisible()) && (await dad.getByRole('link', { name: '새 퀘스트 만들기', exact: true }).isVisible()));
+  check('승인 화면 머리말: 답할 일 6개, 작은 + 버튼', (await dad.getByText('답할 일 6개').isVisible()) && (await dad.getByRole('link', { name: '새 퀘스트 만들기', exact: true }).isVisible()));
   check('가족 칸과 큰 버튼은 첫 화면에 없음', (await dad.locator('.member-strip').count()) === 0 && (await dad.getByRole('main').getByRole('button', { name: '칭찬 코인 주기' }).count()) === 0);
   check('부모 홈에도 오늘 일정 한 줄', await dad.getByRole('link', { name: /오늘 일정: 오후 3:30 치과/ }).isVisible());
   await shot(dad, '04-parent-home', true);
@@ -259,7 +259,10 @@ try {
   await dad.getByRole('dialog').getByRole('button', { name: '최고야!' }).click();
   await kid.locator('.celebrate').waitFor({ timeout: 5000 });
   check('코인 연출에 한마디가 보임', await kid.locator('.celebrate').getByText('"최고야!"').isVisible());
+  check('코인이 쏟아짐(10코인이면 10개)', (await kid.locator('.celebrate .rain .drop').count()) === 10);
+  const counting = kid.locator('.coin-pill.counting').waitFor({ timeout: 8000 }).then(() => true, () => false);
   await shot(kid, '08-kid-celebrate');
+  check('연출이 걷힐 즈음 위쪽 코인 숫자가 차례로 올라감', await counting);
   await expectCoins(kid, 40, '승인 뒤 코인 40');
   check('완료 카드에 한마디', await region(kid, '오늘 할 일').locator('article', { hasText: '수학 문제집 2쪽' }).getByText('"최고야!"').isVisible());
 
@@ -270,6 +273,10 @@ try {
   await shot(dad, '09-parent-bonus');
   await dad.getByRole('dialog').getByRole('button', { name: '한마디 없이 승인' }).click();
   const afterBonus = isSaturday ? 50 : 60;
+  if (!isSaturday) check('연속 달성 보너스는 더 크게 축하', await kid.locator('.celebrate.is-big').getByText('연속 달성 보너스!').isVisible().catch(() => false));
+  await kid.locator('.celebrate', { hasText: '목표 달성!' }).waitFor({ timeout: 8000 });
+  check('목표 저금통을 채우면 목표 달성 장면이 이어짐', await kid.locator('.celebrate').getByText('코인을 다 모았어요. 상점에서 바꿀 수 있어요!').isVisible());
+  await shot(kid, '60-goal-reached');
   await expectCoins(kid, afterBonus, `퀘스트 10 + 보너스 = ${afterBonus}`);
   if (!isSaturday) check('연속 달성 3일로 표시', await kid.getByText('3일 연속 달성 중').isVisible());
 
@@ -395,6 +402,47 @@ try {
   check('기록에 한마디와 보너스', (await kid.getByRole('main').getByText('"스스로 해서 멋져!"').isVisible()) && (isSaturday || (await kid.getByRole('main').getByText('3일 연속 달성 보너스').isVisible())));
   await shot(kid, '14-kid-ledger', true);
 
+  // ── 8-0. 보상 제안과 가격 협상(자녀가 제안해 둔 "놀이공원 가기" 150코인) ───────
+  const wishBox = region(dad, '보상 제안');
+  const park = wishBox.locator('article', { hasText: '놀이공원 가기' });
+  check('승인 화면에 자녀의 보상 제안', (await park.getByText('딸 · 상점에 올려 주세요 · 제안 1/1번째').isVisible()) && (await park.getByText('"시험 끝나고 가고 싶어요"').isVisible()));
+  check('협상 횟수는 코인 협상 설정과 같이 씀(1번이면 수락과 거절만)', (await park.getByRole('button', { name: '다른 가격 제안' }).count()) === 0);
+  await more(dad, '가족 설정');
+  await openSetting('코인 협상');
+  await dad.getByRole('radio', { name: '3번' }).click();
+  await dad.getByRole('button', { name: '설정 저장하기' }).click();
+  await toast(dad, '설정을 저장했어요');
+  await dad.getByRole('link', { name: '승인' }).click();
+  await park.getByText('제안 1/3번째', { exact: false }).waitFor();
+  await dad.locator('.toast').waitFor({ state: 'detached', timeout: 6000 }).catch(() => {});
+  await park.scrollIntoViewIfNeeded();
+  await shot(dad, '58-parent-wish');
+  await park.getByRole('button', { name: '다른 가격 제안' }).click();
+  await dad.getByRole('dialog').getByLabel('가격 (코인)').fill('300');
+  await dad.getByRole('dialog').getByLabel('한마디 (안 적어도 돼요)').fill('멀어서 비싸');
+  await dad.getByRole('dialog').getByRole('button', { name: '이 가격으로 제안하기' }).click();
+  await dad.getByText('자녀의 답을 기다리는 가격 제안 1개: 놀이공원 가기').waitFor();
+  check('부모가 다른 가격을 제안하면 카드가 빠지고 한 줄 안내만', (await park.count()) === 0);
+  const shopTab = kid.locator('.tabbar a', { hasText: '상점' });
+  await shopTab.locator('.tab-count').waitFor();
+  check('자녀의 상점 탭에 답할 제안 수', (await shopTab.locator('.tab-count').innerText()) === '1');
+  await shopTab.click();
+  const haggle = region(kid, '가격 협상').locator('article', { hasText: '놀이공원 가기' });
+  await haggle.getByText('부모님이 300코인에 올리자고 했어요. "멀어서 비싸"').waitFor();
+  await shot(kid, '59-kid-wish-counter');
+  await haggle.getByRole('button', { name: '다시 제안하기' }).click();
+  await kid.getByRole('dialog').getByLabel('가격 (코인)').fill('200');
+  await kid.getByRole('dialog').getByRole('button', { name: '이 가격으로 제안하기' }).click();
+  await region(kid, '가격 협상').waitFor({ state: 'detached' });
+  check('다시 제안하면 내 신청 한 줄로 들어감', await kid.getByRole('button', { name: '내 신청 보기: 제안 대기 1개', exact: true }).isVisible());
+  await park.getByText('제안 3/3번째', { exact: false }).waitFor();
+  check('횟수를 다 쓰면 부모는 수락이나 거절만', (await park.getByRole('button', { name: '다른 가격 제안' }).count()) === 0 && (await park.locator('.coin-inline', { hasText: '200' }).isVisible()));
+  const coinsBeforeWish = await coins(kid);
+  await park.getByRole('button', { name: '200코인으로 상점에 올리기' }).click();
+  await region(kid, '보상 목록').locator('article', { hasText: '놀이공원 가기' }).waitFor();
+  check('합의한 가격으로 상점에 올라가고 코인은 그대로', (await region(kid, '보상 목록').locator('article', { hasText: '놀이공원 가기' }).locator('.coin-inline', { hasText: '200' }).isVisible()) && (await coins(kid)) === coinsBeforeWish);
+  check('끝난 제안은 내 신청 줄에서 빠짐', (await kid.getByRole('button', { name: /내 신청 보기/ }).count()) === 0);
+
   // ── 8-1. 상점: 신청, 코인 묶임, 구매 제한, 승인과 거절, 보관함 ────────────
   const base = afterBonus + 20; // 지금 딸의 코인
   await kid.getByRole('link', { name: '상점' }).click();
@@ -403,7 +451,7 @@ try {
   const myOrders = (text) => kid.getByRole('button', { name: `내 신청 보기: ${text}`, exact: true });
   check('상점에 목표 저금통: 게임 30분까지', await region(kid, '목표 저금통').getByText(/앞으로 \d+코인|다 모았어요/).isVisible());
   check('신청이 없으면 내 신청 줄도 없음', (await kid.getByRole('button', { name: /내 신청 보기/ }).count()) === 0);
-  check('보상 5개', (await list.locator('article').count()) === 5);
+  check('보상 6개(예시 5개 + 합의한 제안 1개)', (await list.locator('article').count()) === 6);
   check('살 수 있는 보상은 바꾸기, 비싼 보상은 부족분 표시', (await list.locator('article', { hasText: '게임 30분' }).getByRole('button', { name: /바꾸기/ }).isVisible()) && (await list.locator('article', { hasText: '주말 영화 보기' }).getByText(`${150 - base}코인 더!`).isVisible()));
   await shot(kid, '19-kid-shop', false);
   await list.locator('article', { hasText: '게임 30분' }).getByRole('button').click();
@@ -480,6 +528,50 @@ try {
   await more(kid, '코인 기록');
   await kid.getByRole('heading', { name: '코인 기록' }).waitFor();
   check('기록에 보상 사용 -50', await kid.getByRole('main').locator('article', { hasText: '게임 30분' }).getByText('-50').isVisible());
+
+  // ── 8-1b. 보상 제안: 새로 제안하기, 3개 제한, 그만두기, 부모의 거절 ────────────
+  await kid.locator('.tabbar').getByRole('link', { name: '상점' }).click();
+  await kid.getByRole('button', { name: '+ 보상 제안' }).click();
+  const wishForm = kid.getByRole('dialog');
+  check('제안 창: 지금 0/3개 제안 중', await wishForm.getByText('지금 0/3개 제안 중', { exact: false }).isVisible());
+  await wishForm.getByRole('button', { name: '부모님께 제안하기' }).click();
+  await toast(kid, '이름을 적어 주세요');
+  await kid.getByLabel('갖고 싶은 보상').fill('보드게임 사기');
+  await wishForm.getByRole('radio', { name: '게임' }).click();
+  await kid.getByLabel('내가 생각하는 가격 (코인)').fill('80');
+  await kid.locator('.toast').waitFor({ state: 'detached', timeout: 6000 }).catch(() => {});
+  await shot(kid, '57-wish-form');
+  await wishForm.getByRole('button', { name: '부모님께 제안하기' }).click();
+  await toast(kid, '부모님께 제안했어요');
+  await kid.getByRole('button', { name: /내 신청 보기: .*제안 대기 1개/ }).waitFor();
+  for (const name of ['둘째 제안', '셋째 제안']) {
+    await kid.getByRole('button', { name: '+ 보상 제안' }).click();
+    await kid.getByLabel('갖고 싶은 보상').fill(name);
+    await kid.getByRole('dialog').getByRole('button', { name: '부모님께 제안하기' }).click();
+    await kid.getByRole('dialog').waitFor({ state: 'detached' });
+  }
+  await kid.getByRole('button', { name: /내 신청 보기: .*제안 대기 3개/ }).waitFor();
+  await kid.getByRole('button', { name: '+ 보상 제안' }).click();
+  check('제안은 한 번에 3개까지', (await kid.getByRole('dialog').getByText('제안은 한 번에 3개까지 걸어 둘 수 있어요.', { exact: false }).isVisible()) && (await kid.getByRole('dialog').getByRole('button', { name: '부모님께 제안하기' }).count()) === 0);
+  await kid.getByRole('dialog').getByRole('button', { name: '닫기' }).click();
+  await kid.getByRole('button', { name: /내 신청 보기/ }).click();
+  await region(kid, '내가 제안한 보상').getByRole('button', { name: '셋째 제안 제안 그만두기' }).click();
+  await region(kid, '내가 제안한 보상').locator('article', { hasText: '셋째 제안' }).waitFor({ state: 'detached' });
+  check('기다리는 제안은 자녀가 그만둘 수 있음', (await region(kid, '내가 제안한 보상').locator('article').count()) === 2);
+  await kid.getByRole('dialog').getByRole('button', { name: '닫기' }).click();
+
+  await dad.getByRole('link', { name: '승인' }).click();
+  await wishBox.locator('article', { hasText: '보드게임 사기' }).waitFor();
+  check('부모 화면에 새 제안 2건', (await wishBox.locator('article').count()) === 2);
+  await wishBox.locator('article', { hasText: '보드게임 사기' }).getByRole('button', { name: '거절' }).click();
+  await dad.getByRole('dialog').getByLabel('한마디 (안 적어도 돼요)').fill('생일 때 사 줄게');
+  await dad.getByRole('dialog').getByRole('button', { name: '거절하기' }).click();
+  await kid.getByRole('button', { name: /내 신청 보기: .*제안 대기 1개 · 제안 거절 1개/ }).click();
+  check('거절된 제안은 이유와 함께 보임', await region(kid, '내가 제안한 보상').getByText('이번에는 안 된대요. "생일 때 사 줄게"').isVisible());
+  await kid.getByRole('dialog').getByRole('button', { name: '닫기' }).click();
+  await wishBox.locator('article', { hasText: '둘째 제안' }).getByRole('button', { name: '50코인으로 상점에 올리기' }).click();
+  await region(kid, '보상 목록').locator('article', { hasText: '둘째 제안' }).waitFor();
+  check('부모가 바로 수락하면 제안한 가격으로 올라감', (await region(kid, '보상 목록').locator('article', { hasText: '보드게임 사기' }).count()) === 0);
 
   // ── 8-2. 뭐먹지: 첫 화면은 먹고 싶은 메뉴만, 나머지는 버튼 안에 ────────────
   await kid.locator('.tabbar').getByRole('link', { name: '뭐먹지' }).click();
@@ -764,6 +856,12 @@ try {
   await kid.getByRole('button', { name: /^위치 공유/ }).click();
   check('더보기의 위치 공유: 켜짐과 설명', await kid.getByRole('dialog').getByText('위치 공유가 켜져 있어요.', { exact: false }).isVisible());
   await kid.getByRole('dialog').getByRole('button', { name: '닫기' }).click();
+  const feedback = kid.getByRole('button', { name: /^효과음과 진동/ });
+  check('효과음과 진동은 기본이 켜짐', (await feedback.getAttribute('aria-pressed')) === 'true' && (await feedback.getByText('켜짐', { exact: false }).isVisible()));
+  await feedback.click();
+  check('누르면 꺼짐', (await feedback.getAttribute('aria-pressed')) === 'false' && (await feedback.getByText('꺼짐').isVisible()));
+  await feedback.click();
+  check('다시 누르면 켜짐', (await feedback.getAttribute('aria-pressed')) === 'true');
 
   // ── 8-4. 가족 캘린더 ─────────────────────────────────────────────────────
   await kid.locator('.tabbar').getByRole('link', { name: '캘린더' }).click();
@@ -943,6 +1041,11 @@ try {
   await sp.getByRole('heading', { name: '보상 목록' }).waitFor();
   await sp.screenshot({ path: `${OUT}/26-small-shop.png` });
   check('320px 상점 가로 넘침 없음', (await overflow(sp)) <= 0 && (await inner()) <= 0);
+  await sp.getByRole('button', { name: '+ 보상 제안' }).click();
+  await sp.screenshot({ path: `${OUT}/61-small-wish-form.png` });
+  const wishOver = await sp.evaluate(() => { const s = document.querySelector('.sheet'); return s.scrollWidth - s.clientWidth; });
+  check('320px 보상 제안 창 가로 넘침 없음', wishOver <= 0, String(wishOver));
+  await sp.getByRole('dialog').getByRole('button', { name: '닫기' }).click();
   await sp.locator('.tabbar').getByRole('link', { name: '캘린더' }).click();
   await sp.getByRole('grid').waitFor();
   await sp.screenshot({ path: `${OUT}/53-small-calendar.png`, fullPage: true });
@@ -993,6 +1096,24 @@ try {
   await sp.getByRole('navigation', { name: '설정 항목' }).getByRole('link', { name: /^위치 공유 코인/ }).click();
   await sp.getByRole('heading', { name: '위치 공유 코인' }).waitFor();
   check('320px 설정 안쪽 화면 가로 넘침 없음', (await overflow(sp)) <= 0 && (await inner()) <= 0);
+
+  // 앱을 꺼 둔 사이 받은 코인: 다시 들어오면 모아서 보여 준다.
+  await sp.locator('.tabbar').getByRole('link', { name: '승인' }).click();
+  await sp.getByRole('button', { name: /^더 보기/ }).click();
+  await sp.getByRole('dialog').getByRole('button', { name: '칭찬 코인 주기' }).click();
+  await sp.getByRole('dialog').getByRole('button', { name: '고마워!' }).click();
+  await sp.getByRole('dialog').getByRole('button', { name: '딸에게 코인 주기' }).click();
+  await sp.locator('.toast').first().waitFor();
+  await switchUser(sp, '딸');
+  const away = sp.locator('.celebrate.is-away');
+  await away.waitFor({ timeout: 8000 });
+  check('꺼 둔 사이 받은 코인을 다음에 열 때 모아서 보여 줌', (await away.getByText('그동안 받은 코인').isVisible()) && (await away.getByText('+5 코인!').isVisible()) && (await away.getByText('칭찬 코인 +5').isVisible()));
+  await sp.screenshot({ path: `${OUT}/62-small-away.png` });
+  await away.click();
+  await away.waitFor({ state: 'detached', timeout: 2000 });
+  check('화면을 누르면 바로 닫힘', true);
+  await sp.waitForFunction(() => document.querySelector('.coin-pill span')?.textContent === '35', null, { timeout: 5000 }).catch(() => {});
+  check('받은 코인이 잔액에 들어 있음', (await sp.locator('.coin-pill span').innerText()) === '35');
 
   // ── 11. 진짜 터치로 밀기(브라우저가 위아래 스크롤과 좌우 밀기를 구분하는지) ──
   const touch = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, locale: 'ko-KR', timezoneId: 'Asia/Seoul', serviceWorkers: 'block' });

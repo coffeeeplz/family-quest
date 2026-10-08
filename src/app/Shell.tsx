@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
 import { HashRouter, Link, MemoryRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { ApprovalsPage } from '../features/approvals/ApprovalsPage';
 import { CalendarPage } from '../features/calendar/CalendarPage';
+import { Celebrations } from '../features/celebrate/Celebrations';
 import { FamilyPage } from '../features/family/FamilyPage';
 import { FoodCategoriesPage } from '../features/food/FoodCategoriesPage';
 import { FoodPage } from '../features/food/FoodPage';
@@ -17,7 +17,8 @@ import { SettingsSectionPage } from '../features/settings/SettingsSections';
 import { RewardFormPage } from '../features/shop/RewardFormPage';
 import { ShopAdminPage } from '../features/shop/ShopAdminPage';
 import { ShopPage } from '../features/shop/ShopPage';
-import type { LedgerEntry, Order } from '../backend/types';
+import { useWishes } from '../features/wishes/useWishes';
+import { splitMyWishes, wishesForParent } from '../domain/wishes';
 import type { IconName } from '../lib/sprites';
 import { Icon } from '../ui/Sprite';
 import { useFamilyData } from './familyData';
@@ -44,12 +45,15 @@ const MORE_PATHS = ['/family', '/log', '/settings'];
  * 탭은 휴대폰에서 다섯 개까지만 둔다.
  */
 export function Shell() {
-  const { isParent } = useSession();
+  const { isParent, me } = useSession();
   const { pending, offersForParent, ordersForParent } = useFamilyData();
+  const { wishes } = useWishes();
+  // 보상 제안 가운데 내가 답할 차례인 것: 부모는 승인 탭에, 자녀는 상점 탭에 숫자로 보인다.
+  const wishesForMe = isParent ? wishesForParent(wishes).length : splitMyWishes(wishes, me.uid, () => false).toAnswer.length;
 
   const tabs: TabDef[] = isParent
     ? [
-        { to: '/approve', label: '승인', icon: 'check_inbox', count: pending.length + offersForParent.length + ordersForParent.length },
+        { to: '/approve', label: '승인', icon: 'check_inbox', count: pending.length + offersForParent.length + ordersForParent.length + wishesForMe },
         { to: '/quests', label: '퀘스트', icon: 'quest' },
         { to: '/calendar', label: '캘린더', icon: 'calendar' },
         { to: '/food', label: '뭐먹지', icon: 'food' },
@@ -58,7 +62,7 @@ export function Shell() {
       ]
     : [
         { to: '/quests', label: '퀘스트', icon: 'quest' },
-        { to: '/shop', label: '상점', icon: 'shop' },
+        { to: '/shop', label: '상점', icon: 'shop', count: wishesForMe },
         { to: '/calendar', label: '캘린더', icon: 'calendar' },
         { to: '/food', label: '뭐먹지', icon: 'food' },
         { to: '/more', label: '더보기', icon: 'more', also: MORE_PATHS },
@@ -98,8 +102,7 @@ export function Shell() {
       <TabBar tabs={tabs} />
 
       {!isParent && <LocationAuto />}
-      <CoinCelebration />
-      <RewardCelebration />
+      <Celebrations />
     </Router>
   );
 }
@@ -124,90 +127,5 @@ function TabBar({ tabs }: { tabs: TabDef[] }) {
         );
       })}
     </nav>
-  );
-}
-
-/** 내 장부에 코인이 새로 들어오는 순간(승인, 보너스, 칭찬 코인) 획득 연출을 보여 준다. */
-function CoinCelebration() {
-  const { me } = useSession();
-  const { ledger, loading } = useFamilyData();
-  const seen = useRef<Set<string> | null>(null);
-  const [gain, setGain] = useState<LedgerEntry[] | null>(null);
-
-  useEffect(() => {
-    if (loading) return;
-    const mine = ledger.filter((entry) => entry.uid === me.uid && entry.amount > 0);
-    if (seen.current === null) {
-      // 처음 불러온 기록은 이미 본 것으로 친다.
-      seen.current = new Set(mine.map((entry) => entry.id));
-      return;
-    }
-    const fresh = mine.filter((entry) => !seen.current!.has(entry.id));
-    if (fresh.length === 0) return;
-    fresh.forEach((entry) => seen.current!.add(entry.id));
-    setGain(fresh);
-  }, [ledger, loading, me.uid]);
-
-  useEffect(() => {
-    if (!gain) return;
-    const timer = window.setTimeout(() => setGain(null), 2800);
-    return () => window.clearTimeout(timer);
-  }, [gain]);
-
-  if (!gain) return null;
-  const total = gain.reduce((sum, entry) => sum + entry.amount, 0);
-  const notes = gain.map((entry) => entry.note).filter(Boolean);
-  return (
-    <div className="celebrate" key={gain[0].id} role="status">
-      <Icon name="coin" size={96} className="coin" />
-      <div className="t-title" style={{ fontSize: 36, lineHeight: '40px' }}>
-        +{total} 코인!
-      </div>
-      {gain.map((entry) => (
-        <div key={entry.id} className="t-capb">
-          {entry.memo} +{entry.amount}
-        </div>
-      ))}
-      {notes.length > 0 && <div className="t-body celebrate-note">"{notes[0]}"</div>}
-    </div>
-  );
-}
-
-/** 내가 신청한 보상이 승인되는 순간 알려 준다. */
-function RewardCelebration() {
-  const { me } = useSession();
-  const { orders, loading } = useFamilyData();
-  const seen = useRef<Set<string> | null>(null);
-  const [won, setWon] = useState<Order | null>(null);
-
-  useEffect(() => {
-    if (loading) return;
-    const approved = orders.filter((order) => order.uid === me.uid && order.status !== 'requested' && order.status !== 'rejected');
-    if (seen.current === null) {
-      seen.current = new Set(approved.map((order) => order.id));
-      return;
-    }
-    const fresh = approved.filter((order) => !seen.current!.has(order.id));
-    if (fresh.length === 0) return;
-    fresh.forEach((order) => seen.current!.add(order.id));
-    setWon(fresh[0]);
-  }, [orders, loading, me.uid]);
-
-  useEffect(() => {
-    if (!won) return;
-    const timer = window.setTimeout(() => setWon(null), 2800);
-    return () => window.clearTimeout(timer);
-  }, [won]);
-
-  if (!won) return null;
-  return (
-    <div className="celebrate" key={won.id} role="status">
-      <Icon name={won.icon as IconName} size={96} className="coin" />
-      <div className="t-title" style={{ fontSize: 36, lineHeight: '40px' }}>
-        보상 획득!
-      </div>
-      <div className="t-body celebrate-note">{won.rewardTitle}</div>
-      <div className="t-capb">부모님께 말하면 받을 수 있어요</div>
-    </div>
   );
 }
