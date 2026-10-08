@@ -5,6 +5,7 @@ import { CoinPill } from '../../ui/kit';
 import { HomeEvents } from '../calendar/TodayEvents';
 import { CheckinButton } from '../location/CheckinButton';
 import { NotesBlock } from '../notes/NotesBlock';
+import { PushNudge } from '../notify/PushNudge';
 import { QuestCards, useMyBoard } from '../quests/QuestCards';
 
 /**
@@ -45,6 +46,8 @@ export function HomePage() {
           </div>
         </Link>
       )}
+
+      <PushNudge />
 
       <NotesBlock />
 

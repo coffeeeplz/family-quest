@@ -1304,3 +1304,32 @@ button.today-line {
 .today-line.is-next {
   background: var(--card);
 }
+
+/* 알림 설정 */
+.notify-box {
+  padding: 14px;
+  background: var(--sky-soft);
+}
+.notify-steps {
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  line-height: 22px;
+}
+.chip-like {
+  flex-shrink: 0;
+  min-width: 56px;
+  padding: 6px 8px;
+  text-align: center;
+  font-family: var(--font-title);
+  font-size: 12px;
+  background: var(--card);
+  box-shadow: var(--px-shadow);
+}
+.chip-like.on {
+  background: var(--mint);
+}
+.push-nudge .today-line {
+  background: var(--pink-soft);
+}

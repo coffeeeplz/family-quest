@@ -14,3 +14,9 @@ export const firebaseConfig = {
 };
 
 export const isFirebaseConfigured = firebaseConfig.apiKey !== '' && firebaseConfig.projectId !== '';
+
+/**
+ * 웹 푸시 공개 키(Firebase 콘솔 > 프로젝트 설정 > 클라우드 메시징 > 웹 푸시 인증서).
+ * 공개되어도 되는 값이다. 알림을 보내는 비밀 키는 Firebase 서버에만 있다.
+ */
+export const webPushKey = 'BOu_69wtH0qfp4F3GJUDihksF34oNctxa7CtNeRZWFf919Vx9Gv-b3T7y0GXFSNZ3Nqtm_-eBoBdbB5VraVWyN4';

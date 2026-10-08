@@ -348,7 +348,7 @@ try {
   await shot(dad, '09-parent-bonus');
   await dad.getByRole('dialog').getByRole('button', { name: '한마디 없이 승인' }).click();
   const afterBonus = isSaturday ? 50 : 60;
-  if (!isSaturday) check('연속 달성 보너스는 더 크게 축하', await kid.locator('.celebrate.is-big').getByText('연속 달성 보너스!').isVisible().catch(() => false));
+  if (!isSaturday) check('연속 달성 보너스는 더 크게 축하', await kid.locator('.celebrate.is-big', { hasText: '연속 달성 보너스!' }).waitFor({ timeout: 5000 }).then(() => true, () => false));
   await kid.locator('.celebrate', { hasText: '목표 달성!' }).waitFor({ timeout: 8000 });
   check('목표 저금통을 채우면 목표 달성 장면이 이어짐', await kid.locator('.celebrate').getByText('코인을 다 모았어요. 상점에서 바꿀 수 있어요!').isVisible());
   await shot(kid, '60-goal-reached');
@@ -468,7 +468,7 @@ try {
   check('자녀 더보기에는 가족 설정이 없음', await (async () => {
     await kid.getByRole('link', { name: '더보기' }).click();
     await kid.getByRole('navigation', { name: '더보기 메뉴' }).waitFor();
-    return (await kid.getByRole('navigation', { name: '더보기 메뉴' }).getByRole('link').count()) === 2;
+    return (await kid.getByRole('navigation', { name: '더보기 메뉴' }).getByRole('link').count()) === 3; // 가족, 코인 기록, 알림
   })());
   await more(kid, '코인 기록');
   await kid.getByRole('heading', { name: '코인 기록' }).waitFor();
@@ -941,6 +941,26 @@ try {
   await feedback.click();
   check('다시 누르면 켜짐', (await feedback.getAttribute('aria-pressed')) === 'true');
 
+  // 알림 설정: 체험 모드에서는 알림이 오지 않지만 종류와 시각은 정할 수 있다.
+  await kid.getByRole('navigation', { name: '더보기 메뉴' }).getByRole('link', { name: /^알림/ }).click();
+  await kid.getByRole('heading', { name: '알림', exact: true }).waitFor();
+  check('알림: 체험 모드 안내, 켜기 버튼 없음', (await kid.getByText('체험 모드에서는 알림이 오지 않아요.', { exact: false }).first().isVisible()) && (await kid.getByRole('button', { name: '이 기기에서 알림 받기' }).count()) === 0);
+  const kinds = await kid.getByRole('region', { name: '받을 알림' }).getByRole('button').count();
+  check('자녀가 받을 알림 7종류(저녁 할 일 포함)', kinds === 7, String(kinds));
+  const noteKind = kid.getByRole('button', { name: /^가족 메모 알림/ });
+  await noteKind.click();
+  check('종류를 누르면 꺼짐', (await noteKind.getAttribute('aria-pressed')) === 'false');
+  await kid.getByLabel('조용한 시간 시작').fill('21:30');
+  await kid.getByLabel('저녁 할 일 알림 시각').fill('19:00');
+  await kid.locator('.toast').waitFor({ state: 'detached', timeout: 6000 }).catch(() => {});
+  await shot(kid, '68-notify', true);
+  await kid.getByRole('button', { name: '알림 설정 저장하기' }).click();
+  await toast(kid, '알림 설정을 저장했어요');
+  await kid.locator('.tabbar').getByRole('link', { name: '더보기' }).click();
+  await kid.getByRole('navigation', { name: '더보기 메뉴' }).getByRole('link', { name: /^알림/ }).click();
+  await kid.getByLabel('저녁 할 일 알림 시각').waitFor();
+  check('저장한 알림 설정이 다시 열어도 남아 있음', (await kid.getByLabel('저녁 할 일 알림 시각').inputValue()) === '19:00' && (await kid.getByLabel('조용한 시간 시작').inputValue()) === '21:30' && (await kid.getByRole('button', { name: /^가족 메모 알림/ }).getAttribute('aria-pressed')) === 'false');
+
   // ── 8-4. 가족 캘린더 ─────────────────────────────────────────────────────
   await kid.locator('.tabbar').getByRole('link', { name: '캘린더' }).click();
   const now0 = dayAt(0);
@@ -1180,6 +1200,13 @@ try {
   await sp.getByRole('heading', { name: '가족 설정' }).waitFor();
   await sp.screenshot({ path: `${OUT}/56-small-settings.png`, fullPage: true });
   check('320px 설정 가로 넘침 없음', (await overflow(sp)) <= 0 && (await inner()) <= 0);
+  await more(sp, '알림');
+  await sp.getByRole('heading', { name: '알림', exact: true }).waitFor();
+  check('부모가 받을 알림 5종류(저녁 할 일 없음)', (await sp.getByRole('region', { name: '받을 알림' }).getByRole('button').count()) === 5 && (await sp.getByLabel('저녁 할 일 알림 시각').count()) === 0);
+  await sp.screenshot({ path: `${OUT}/69-small-notify.png`, fullPage: true });
+  check('320px 알림 설정 가로 넘침 없음', (await overflow(sp)) <= 0 && (await inner()) <= 0);
+  await more(sp, '가족 설정');
+  await sp.getByRole('heading', { name: '가족 설정' }).waitFor();
   await sp.getByRole('navigation', { name: '설정 항목' }).getByRole('link', { name: /^위치 공유 코인/ }).click();
   await sp.getByRole('heading', { name: '위치 공유 코인' }).waitFor();
   check('320px 설정 안쪽 화면 가로 넘침 없음', (await overflow(sp)) <= 0 && (await inner()) <= 0);

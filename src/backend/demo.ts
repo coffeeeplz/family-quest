@@ -19,6 +19,7 @@ import {
   normalizeSettings,
 } from '../domain/settings';
 import { MAX_NOTES, canEditNote, cleanNoteInput, isNoteFor } from '../domain/notes';
+import { normalizePushPrefs, type PushPrefs } from '../domain/push';
 import { MAX_REWARDS, buyBlockReason, cleanRewardInput } from '../domain/shop';
 import { MAX_DECLINE_NOTE, MAX_OPEN_WISHES, WISH_KEEP_DAYS, canCounterWish, checkWishTurn, cleanWishInput, cleanWishPrice, openWishCount } from '../domain/wishes';
 import { addDays, dateKey, dayNumber } from '../lib/dates';
@@ -56,7 +57,7 @@ interface DemoUser {
 }
 
 interface DemoState {
-  v: 9;
+  v: 10;
   currentUid: string | null;
   users: Record<string, DemoUser>;
   families: Record<string, Family>;
@@ -74,6 +75,7 @@ interface DemoState {
   events: Record<string, Record<string, CalendarEvent>>;
   wishes: Record<string, Record<string, Wish>>;
   notes: Record<string, Record<string, Note>>;
+  pushPrefs: Record<string, Record<string, PushPrefs>>;
   invites: Record<string, Invite>;
 }
 
@@ -82,7 +84,7 @@ export interface KeyValueStore {
   setItem(key: string, value: string): void;
 }
 
-const STORAGE_KEY = 'family-quest-demo-v9';
+const STORAGE_KEY = 'family-quest-demo-v10';
 const FAMILY = 'demo-family';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -229,7 +231,7 @@ function seed(now: number = Date.now()): DemoState {
   });
 
   return {
-    v: 9,
+    v: 10,
     currentUid: null,
     users: {
       'demo-dad': { uid: 'demo-dad', email: 'dad@example.com', label: '아빠', hint: '퀘스트를 만들고 승인해요', familyId: FAMILY },
@@ -343,6 +345,7 @@ function seed(now: number = Date.now()): DemoState {
         'n-clean': { id: 'n-clean', text: '토요일 10시에 가족 대청소', toUids: [], until: '', createdBy: 'demo-dad', createdAt: now - 5 * 3_600_000, readBy: ['demo-kid'] },
       },
     },
+    pushPrefs: { [FAMILY]: {} },
     // 자녀가 상점에 올려 달라고 제안한 보상: 부모의 답을 기다리는 중
     wishes: {
       [FAMILY]: {
@@ -395,7 +398,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       const raw = store?.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as DemoState;
-        if (parsed.v === 9) return parsed;
+        if (parsed.v === 10) return parsed;
       }
     } catch {
       // 저장소를 못 읽으면 새로 시작한다.
@@ -569,6 +572,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       state.events[id] = {};
       state.wishes[id] = {};
       state.notes[id] = {};
+      state.pushPrefs[id] = {};
       state.users[uid].familyId = id;
       commit();
       return id;
@@ -1267,6 +1271,30 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       delete state.places[familyId][placeId];
       commit();
     },
+
+    watchPushPrefs(familyId, uid, cb) {
+      return watch(() => normalizePushPrefs(state.pushPrefs[familyId]?.[uid]), cb);
+    },
+
+    async savePushPrefs(familyId, uid, prefs) {
+      requireSelf(uid);
+      requireMember(familyId);
+      state.pushPrefs[familyId][uid] = normalizePushPrefs(prefs);
+      commit();
+    },
+
+    // 체험 모드에서는 알림을 보내는 서버가 없다.
+    async pushStatus() {
+      return 'demo';
+    },
+
+    async enablePush() {
+      throw new AppError('체험 모드에서는 알림이 오지 않아요. 실제 앱에서 켜 주세요.');
+    },
+
+    async disablePush() {},
+
+    async refreshPush() {},
 
     watchNotes(familyId, cb) {
       return watch(() => Object.values(state.notes[familyId] ?? {}).map((note) => ({ ...note, toUids: [...note.toUids], readBy: [...note.readBy] })), cb);

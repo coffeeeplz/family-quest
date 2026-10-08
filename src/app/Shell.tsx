@@ -2,6 +2,8 @@ import { HashRouter, Link, MemoryRouter, Navigate, Route, Routes, useLocation } 
 import { ApprovalsPage } from '../features/approvals/ApprovalsPage';
 import { CalendarPage } from '../features/calendar/CalendarPage';
 import { HomePage } from '../features/home/HomePage';
+import { NotifyPage } from '../features/notify/NotifyPage';
+import { PushSync } from '../features/notify/PushSync';
 import { useNotes } from '../features/notes/useNotes';
 import { useMyBoard } from '../features/quests/QuestCards';
 import { isUnreadFor, visibleNotes } from '../domain/notes';
@@ -41,7 +43,7 @@ interface TabDef {
 }
 
 /** 더보기 탭 안쪽에 있는 화면들 */
-const MORE_PATHS = ['/family', '/log', '/settings'];
+const MORE_PATHS = ['/family', '/log', '/settings', '/notify'];
 
 /**
  * 로그인 뒤의 화면 틀: 주소에 따라 화면을 바꾸고 아래에 탭을 둔다.
@@ -109,6 +111,7 @@ export function Shell() {
         <Route path="/more" element={<MorePage />} />
         <Route path="/log" element={<LedgerPage />} />
         <Route path="/family" element={<FamilyPage />} />
+        <Route path="/notify" element={<NotifyPage />} />
         <Route path="*" element={<Navigate to={tabs[0].to} replace />} />
       </Routes>
 
@@ -116,6 +119,7 @@ export function Shell() {
 
       {!isParent && <LocationAuto />}
       <Celebrations />
+      <PushSync />
     </Router>
   );
 }

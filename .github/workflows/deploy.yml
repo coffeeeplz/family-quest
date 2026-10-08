@@ -1,4 +1,5 @@
-# main 가지에 코드가 올라오면 자동으로 검사하고, 빌드해서 GitHub Pages 주소에 배포하고, Firestore 규칙도 함께 게시한다.
+# main 가지에 코드가 올라오면 자동으로 검사하고, 빌드해서 GitHub Pages 주소에 배포하고,
+# Firestore 규칙과 알림 서버(Cloud Functions)도 함께 올린다.
 name: 배포
 
 on:
@@ -55,6 +56,58 @@ jobs:
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/sa.json"
           GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json" \
             npx --yes firebase-tools@15 deploy --only firestore:rules --project family-quest-22c44 --non-interactive
+      - name: 키 파일 지우기
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sa.json"
+
+  # 알림 서버(functions/)를 Firebase Cloud Functions 에 배포한다. 키가 없으면 건너뛴다.
+  # 실패하면 오류 내용을 실행 기록의 주석(annotation)으로 남긴다.
+  functions:
+    name: 알림 서버 배포
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 키가 없으면 알림
+        if: ${{ env.FIREBASE_SERVICE_ACCOUNT == '' }}
+        run: echo "::warning::FIREBASE_SERVICE_ACCOUNT 가 없어 알림 서버 배포를 건너뜁니다."
+      - name: 알림 서버 빌드
+        if: ${{ env.FIREBASE_SERVICE_ACCOUNT != '' }}
+        working-directory: functions
+        run: |
+          npm ci
+          npm run build
+      - name: 키 파일 준비
+        if: ${{ env.FIREBASE_SERVICE_ACCOUNT != '' }}
+        run: printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/sa.json"
+      # 새 프로젝트는 함수를 빌드하는 계정에 권한이 없어 첫 배포가 실패하는 경우가 있어 미리 준다(실패해도 계속).
+      - name: 빌드 계정 권한 확인
+        if: ${{ env.FIREBASE_SERVICE_ACCOUNT != '' }}
+        continue-on-error: true
+        run: |
+          gcloud auth activate-service-account --key-file="$RUNNER_TEMP/sa.json" --quiet
+          NUM=$(gcloud projects describe family-quest-22c44 --format='value(projectNumber)')
+          gcloud projects add-iam-policy-binding family-quest-22c44 \
+            --member="serviceAccount:${NUM}-compute@developer.gserviceaccount.com" \
+            --role=roles/cloudbuild.builds.builder --condition=None --quiet > /dev/null
+      - name: 알림 서버 배포
+        if: ${{ env.FIREBASE_SERVICE_ACCOUNT != '' }}
+        run: |
+          set -o pipefail
+          GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json" \
+            npx --yes firebase-tools@15 deploy --only functions --project family-quest-22c44 --non-interactive --force 2>&1 | tee "$RUNNER_TEMP/deploy.log"
+      - name: 배포 오류 기록
+        if: failure()
+        run: |
+          if [ -f "$RUNNER_TEMP/deploy.log" ]; then
+            MSG=$(grep -iE "error|denied|permission|failed|requires|enable|billing" "$RUNNER_TEMP/deploy.log" | tail -n 30 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=알림 서버 배포 실패::${MSG}"
+          fi
       - name: 키 파일 지우기
         if: always()
         run: rm -f "$RUNNER_TEMP/sa.json"

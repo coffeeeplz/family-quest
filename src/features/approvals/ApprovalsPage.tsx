@@ -17,6 +17,7 @@ import { Button, CoinInline, Empty, Field, FieldGroup, Sheet } from '../../ui/ki
 import { useAction } from '../../ui/toast';
 import { HomeEvents } from '../calendar/TodayEvents';
 import { NotesBlock } from '../notes/NotesBlock';
+import { PushNudge } from '../notify/PushNudge';
 import { OfferSheet } from '../negotiation/OfferSheet';
 import { WishInbox } from '../wishes/WishInbox';
 import { useWishes } from '../wishes/useWishes';
@@ -303,6 +304,8 @@ export function ApprovalsPage() {
           <Icon name="more" size={24} />
         </Button>
       </header>
+
+      <PushNudge />
 
       <NotesBlock />
 

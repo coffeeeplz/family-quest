@@ -30,6 +30,8 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,woff2,png,svg}'],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
+        // 알림을 받아 보여 주는 코드(public/push-sw.js)를 서비스 워커에 함께 넣는다.
+        importScripts: ['push-sw.js'],
       },
     }),
   ],

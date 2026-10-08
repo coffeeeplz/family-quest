@@ -405,6 +405,21 @@ service cloud.firestore {
         allow update: if isParent(fid) && validRewardShape();
       }
 
+      // 알림 설정: 가족은 읽을 수 있고(서버가 쓰는 "오늘 보냄" 표시 포함), 고치는 것은 본인만.
+      match /pushPrefs/{uid} {
+        allow read: if isMember(fid);
+        allow create, update: if isMember(fid) && uid == request.auth.uid;
+      }
+
+      // 알림을 받을 기기(토큰). 본인 것만 읽고 쓴다. 알림을 보내는 서버는 이 규칙과 상관없이 읽는다.
+      match /pushDevices/{did} {
+        allow read, delete: if isMember(fid) && resource.data.uid == request.auth.uid;
+        allow create, update: if isMember(fid)
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.token is string
+          && request.resource.data.token.size() > 0 && request.resource.data.token.size() <= 4096;
+      }
+
       match /notes/{nid} {
         allow read: if isMember(fid);
         allow create: if isMember(fid) && validNote()

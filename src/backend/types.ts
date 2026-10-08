@@ -1,3 +1,5 @@
+import type { PushPrefs } from '../domain/push';
+
 /**
  * 앱 전체가 공유하는 데이터 모양과, 서버 구현이 지켜야 할 약속(Backend).
  * 화면 코드는 이 파일의 타입만 알고, 실제 저장소가 Firebase 인지 체험용 저장소인지는 모른다.
@@ -237,6 +239,12 @@ export interface Reward extends RewardInput {
   createdBy: string;
   createdAt: number;
 }
+
+/**
+ * 이 기기의 알림 상태. unsupported=이 브라우저는 알림을 받을 수 없음, install=아이폰에서 홈 화면에 추가해야 함,
+ * denied=알림을 막아 둠, off=받을 수 있지만 꺼져 있음, on=켜져 있음, demo=체험 모드
+ */
+export type PushStatus = 'unsupported' | 'install' | 'denied' | 'off' | 'on' | 'demo';
 
 export interface NoteInput {
   text: string;
@@ -483,6 +491,18 @@ export interface Backend {
   createReward(familyId: string, input: RewardInput, byUid: string): Promise<string>;
   updateReward(familyId: string, rewardId: string, input: RewardInput): Promise<void>;
   archiveReward(familyId: string, rewardId: string): Promise<void>;
+  // 알림(푸시)
+  /** 이 사람의 알림 설정. 저장된 것이 없으면 기본값 */
+  watchPushPrefs(familyId: string, uid: string, cb: (prefs: PushPrefs) => void, onError?: () => void): Unsub;
+  savePushPrefs(familyId: string, uid: string, prefs: PushPrefs): Promise<void>;
+  /** 이 기기에서 알림을 받을 수 있는지와 켜져 있는지 */
+  pushStatus(familyId: string, uid: string): Promise<PushStatus>;
+  /** 알림 권한을 묻고 이 기기를 등록한다. 사람이 버튼을 누른 순간에 불러야 한다. */
+  enablePush(familyId: string, uid: string): Promise<void>;
+  disablePush(familyId: string, uid: string): Promise<void>;
+  /** 앱을 열 때 이 기기의 알림 주소가 바뀌었으면 새로 적어 둔다. */
+  refreshPush(familyId: string, uid: string): Promise<void>;
+
   // 가족 메모
   watchNotes(familyId: string, cb: (notes: Note[]) => void, onError?: () => void): Unsub;
   createNote(familyId: string, input: NoteInput, byUid: string): Promise<string>;

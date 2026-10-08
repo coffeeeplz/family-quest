@@ -55,7 +55,9 @@ import {
   type Firestore,
   type Query,
 } from 'firebase/firestore';
-import { firebaseConfig } from '../config/firebase';
+import { firebaseConfig, webPushKey } from '../config/firebase';
+import { deviceId, isIos, isPushMarkedOn, isStandalone, markPushOff, markPushOn, pushCapable, serviceWorkerReady } from '../lib/pushDevice';
+import { normalizePushPrefs } from '../domain/push';
 import { INVITE_TTL_MS, isInviteCodeShape, newInviteCode, normalizeInviteCode } from '../domain/invites';
 import { cleanEventInput } from '../domain/calendar';
 import { cleanNoteInput } from '../domain/notes';
@@ -194,6 +196,18 @@ export function createFirebaseBackend(): Backend {
   const eventsCol = (fid: string) => collection(db, 'families', fid, 'events');
   const wishesCol = (fid: string) => collection(db, 'families', fid, 'wishes');
   const notesCol = (fid: string) => collection(db, 'families', fid, 'notes');
+  const pushPrefsRef = (fid: string, uid: string) => doc(db, 'families', fid, 'pushPrefs', uid);
+  const pushDeviceRef = (fid: string) => doc(db, 'families', fid, 'pushDevices', deviceId());
+
+  /** 알림 주소(토큰)를 받아 이 기기 문서에 적는다. 알림 기능은 필요할 때만 불러온다. */
+  async function savePushToken(fid: string, uid: string): Promise<void> {
+    const { getMessaging, getToken, isSupported } = await import('firebase/messaging');
+    if (!(await isSupported())) throw new AppError('이 브라우저에서는 알림을 받을 수 없어요.');
+    const registration = await serviceWorkerReady();
+    const token = await getToken(getMessaging(app), { vapidKey: webPushKey, serviceWorkerRegistration: registration });
+    if (!token) throw new AppError('알림 주소를 받지 못했어요. 잠시 뒤에 다시 해 주세요.');
+    await setDoc(pushDeviceRef(fid), { uid, token, ua: navigator.userAgent.slice(0, 200), updatedAt: Date.now() });
+  }
 
   const onListenError = (what: string) => (error: Error) => console.error(`[${what}]`, error);
 
@@ -1124,6 +1138,63 @@ export function createFirebaseBackend(): Backend {
       guard(async () => {
         await deleteDoc(doc(placesCol(familyId), placeId));
       }),
+
+    watchPushPrefs(familyId, uid, cb, onError) {
+      return onSnapshot(
+        pushPrefsRef(familyId, uid),
+        (snap) => cb(normalizePushPrefs(snap.data())),
+        (error) => {
+          console.error('[pushPrefs]', error);
+          onError?.();
+        },
+      );
+    },
+
+    savePushPrefs: (familyId, uid, prefs) =>
+      guard(async () => {
+        const clean = normalizePushPrefs(prefs);
+        // 서버가 적어 두는 "오늘 보냄" 표시는 건드리지 않도록 합쳐서 저장한다.
+        await setDoc(pushPrefsRef(familyId, uid), { ...clean, updatedAt: Date.now() }, { merge: true });
+      }),
+
+    async pushStatus(familyId, uid) {
+      if (isIos() && !isStandalone()) return 'install';
+      if (!pushCapable()) return 'unsupported';
+      if (Notification.permission === 'denied') return 'denied';
+      if (Notification.permission === 'granted' && isPushMarkedOn(familyId, uid)) return 'on';
+      return 'off';
+    },
+
+    enablePush: (familyId, uid) =>
+      guard(async () => {
+        if (isIos() && !isStandalone()) throw new AppError('아이폰은 홈 화면에 추가한 앱에서만 알림을 켤 수 있어요.');
+        if (!pushCapable()) throw new AppError('이 브라우저에서는 알림을 받을 수 없어요.');
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') throw new AppError('알림이 허용되지 않았어요. 휴대폰 설정에서 이 앱의 알림을 허용해 주세요.');
+        await savePushToken(familyId, uid);
+        markPushOn(familyId, uid);
+      }),
+
+    disablePush: (familyId, _uid) =>
+      guard(async () => {
+        markPushOff();
+        try {
+          const { deleteToken, getMessaging, isSupported } = await import('firebase/messaging');
+          if (await isSupported()) await deleteToken(getMessaging(app));
+        } catch (error) {
+          console.warn('[push] deleteToken', error);
+        }
+        await deleteDoc(pushDeviceRef(familyId));
+      }),
+
+    async refreshPush(familyId, uid) {
+      if (!pushCapable() || Notification.permission !== 'granted' || !isPushMarkedOn(familyId, uid)) return;
+      try {
+        await savePushToken(familyId, uid);
+      } catch (error) {
+        console.warn('[push] refresh', error);
+      }
+    },
 
     watchNotes(familyId, cb, onError) {
       return onSnapshot(

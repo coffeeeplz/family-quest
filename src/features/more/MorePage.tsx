@@ -6,6 +6,7 @@ import type { IconName } from '../../lib/sprites';
 import { AvatarFrame, Icon } from '../../ui/Sprite';
 import { Button } from '../../ui/kit';
 import { LocationInfoRow } from '../location/CheckinButton';
+import { usePushStatus } from '../notify/usePush';
 
 interface MenuItem {
   to: string;
@@ -21,11 +22,14 @@ interface MenuItem {
 export function MorePage() {
   const backend = useBackend();
   const { family, me, isParent } = useSession();
+  const { status } = usePushStatus();
+  const pushHint = status === 'on' ? '이 기기에서 받는 중 · 종류와 시각 정하기' : status === 'demo' ? '체험 모드에서는 알림이 오지 않아요' : '이 기기에서 알림 켜기, 종류와 시각 정하기';
 
   const items: MenuItem[] = [
     ...(isParent ? [{ to: '/shop', icon: 'shop' as IconName, title: '상점 관리', hint: '자녀가 코인으로 바꿀 보상 올리기와 고치기' }] : []),
     { to: '/family', icon: 'home', title: '가족', hint: isParent ? '구성원, 가족 초대, 내 캐릭터 바꾸기' : '구성원, 내 캐릭터 바꾸기' },
     { to: '/log', icon: 'log', title: '코인 기록', hint: isParent ? '누가 언제 코인을 받고 썼는지' : '내가 모으고 쓴 코인' },
+    { to: '/notify', icon: 'heart', title: '알림', hint: pushHint },
     ...(isParent
       ? [{ to: '/settings', icon: 'star' as IconName, title: '가족 설정', hint: '코인 협상, 연속 달성 보너스, 칭찬 한마디, 자주 쓰는 퀘스트' }]
       : []),
