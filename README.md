@@ -34,8 +34,8 @@
 | 체험 모드 (서버 없이 이 기기에만 저장) | 완료, 동작 확인함 |
 | Firebase 연결 (로그인, 기기 간 동기화) | 배포해서 사용 중. `firestore.rules` 는 GitHub 에 올릴 때 자동으로 게시됨 |
 | 주간 요약 | 다음 후보 |
-| 푸시 알림 | 예정 |
-| 가족 채팅 | 예정 (푸시 알림 다음) |
+| 푸시 알림(알림 서버, 기기 등록, 종류별 설정, 조용한 시간, 저녁·아침 알림) | 앱 쪽 완료. **알림 서버 첫 배포는 배포 계정 권한이 모자라 막혀 있음** |
+| 가족 채팅 | 예정 |
 
 `src/config/firebase.ts` 가 비어 있는 동안은 체험 모드로 동작합니다.
 
@@ -86,6 +86,14 @@
   "먹었어요"를 누르면 그날이 기록되고(하루 한 번) 보관함으로 가며, 바로 별점을 물어봄(건너뛸 수 있음).
   보관함에서 "또 먹고 싶어"를 누르면 다시 올라감. 같은 이름을 다시 적으면 새로 만들지 않고 있던 메뉴를 올림.
   고치기와 지우기는 올린 사람과 부모만. 링크는 웹 주소(http, https)만 받고 새 창으로 열림.
+- 알림(푸시): 각자 더보기 > 알림에서 이 기기의 알림을 켜고, 받을 종류와 시각을 정함(기기마다 한 번씩 켬).
+  부모: 완료 요청, 코인 제안, 보상 신청과 제안, 가족 메모, 아침 일정. 자녀: 새 퀘스트, 승인과 코인(칭찬 코인 포함), 협상 내 차례,
+  보상, 가족 메모, 저녁 할 일(아직 안 한 "꼭" 할 일), 아침 일정.
+  조용한 시간(기본 밤 10시~아침 7시)에는 보내지 않음. 저녁 할 일(기본 8시)과 아침 일정(기본 7시 반)은 정한 시각에 옴.
+  아이폰은 iOS 16.4 이상에서 홈 화면에 추가한 앱으로 열었을 때만 켤 수 있음(앱이 안내함). 브라우저 규칙상 받은 알림은 반드시 보여 주므로
+  앱을 보고 있는 동안에도 알림이 올 수 있음.
+  알림 서버는 `functions/`(Firebase Cloud Functions, 서울). 무엇을 누구에게 보낼지는 `src/domain/pushMessages.ts`,
+  시각 규칙은 `src/domain/push.ts` 에 있고 앱과 같은 규칙을 그대로 묶어 올림. 15분마다 저녁·아침 알림을 보낼 사람을 살핌.
 - 위치: 자녀가 "지금 여기예요"를 누르면 그 순간의 위치가 가족에게 전해지고, 가족 설정에 정한 코인(기본 1)을
   하루 정한 횟수(기본 3번)까지 바로 받음. 횟수를 넘겨도 위치는 전해지고 코인만 없음.
   위치 권한을 허용해 둔 기기에서는 앱을 열 때(15분 간격)와 퀘스트를 끝낼 때도 위치가 자동으로 남음(코인 없음).
@@ -121,6 +129,9 @@
   저장소 Settings > Secrets and variables > Actions 의 `FIREBASE_SERVICE_ACCOUNT` 에 배포 전용 서비스 계정
   (역할: Firebase Rules Admin, Service Usage Consumer)의 JSON 키가 들어 있어야 한다. 없으면 이 단계만 건너뛴다.
   이 키는 Secrets 에만 두고 저장소 파일이나 PC 폴더에는 절대 넣지 않는다. 규칙에 문법 오류가 있으면 이 단계가 실패한다.
+- 알림 서버도 같은 키로 "알림 서버 배포" 단계에서 올라간다. Firebase 가 Blaze(종량제)여야 하고, 배포 계정에
+  편집자(Editor)와 프로젝트 IAM 관리자(Project IAM Admin) 역할이 있어야 한다(첫 배포 때 서비스 에이전트에 역할을 주기 때문).
+  실패하면 오류가 실행 기록의 주석으로 남고, "권한 살피기" 단계가 배포 계정의 역할을 주석으로 남긴다.
 
 ## 폴더 구조
 
@@ -131,11 +142,13 @@ src/
   domain/              규칙과 계산 (세 구역 나누기, 절반 지급, 협상 차례, 연속 달성, 설정, 초대코드)
   app/                 로그인 상태, 가족 데이터 구독, 화면 틀과 탭
   features/            화면. 기능마다 폴더 하나
-    auth/ onboarding/ avatar/ quests/ approvals/ negotiation/ home/ notes/ shop/ wishes/ celebrate/ food/ location/ calendar/ ledger/ family/ settings/ more/
+    auth/ onboarding/ avatar/ quests/ approvals/ negotiation/ home/ notes/ notify/ shop/ wishes/ celebrate/ food/ location/ calendar/ ledger/ family/ settings/ more/
   ui/                  도트 그림, 버튼, 창, 알림, 좌우로 넘기는 화면 묶음 같은 공용 부품
   styles/tokens.css    색, 글꼴, 치수 (분위기를 바꾸려면 여기만)
   assets/sprites.json  아바타와 아이콘의 도트 그림 데이터
 firestore.rules        서버 보안 규칙 (누가 무엇을 할 수 있는지)
+functions/             알림 서버 (Firebase Cloud Functions). src/index.ts 가 앱의 src/domain 규칙을 불러 쓴다
+public/push-sw.js      서비스 워커에서 알림을 보여 주고, 누르면 앱을 여는 코드
 tests/                 규칙과 저장소 동작 자동 검사
 tools/                 아이콘 생성, 화면 흐름 검사 스크립트
 ```
@@ -164,6 +177,8 @@ tools/                 아이콘 생성, 화면 흐름 검사 스크립트
 | `families/{fid}/locations/{id}` | 위치 기록 (누구, 좌표, 오차, 시각, 직접 알림/자동, 받은 코인) |
 | `families/{fid}/places/{id}` | 이름을 붙여 둔 장소 (이름, 좌표, 반경) |
 | `families/{fid}/events/{id}` | 캘린더 일정 (이름, 날짜, 시각, 누구, 반복, 메모, 올린 사람) |
+| `families/{fid}/pushPrefs/{uid}` | 알림 설정 (종류별 켜기, 조용한 시간, 저녁·아침 알림 시각, 서버가 적는 오늘 보냄 표시) |
+| `families/{fid}/pushDevices/{기기id}` | 알림을 받을 기기 (누구, 알림 주소 토큰) |
 | `families/{fid}/notes/{id}` | 가족 메모 (내용, 받을 사람, 사라질 날짜, 쓴 사람, 확인한 사람들) |
 | `families/{fid}/wishes/{id}` | 자녀의 보상 제안 (이름, 그림, 마지막 가격, 누구 차례, 주고받은 가격, 상태) |
 
