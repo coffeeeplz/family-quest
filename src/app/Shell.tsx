@@ -4,6 +4,7 @@ import { CalendarPage } from '../features/calendar/CalendarPage';
 import { HomePage } from '../features/home/HomePage';
 import { NotifyPage } from '../features/notify/NotifyPage';
 import { UpdatesPage } from '../features/more/UpdatesPage';
+import { InventoryPage } from '../features/inventory/InventoryPage';
 import { useHasNewUpdate } from '../lib/updates';
 import { PushSync } from '../features/notify/PushSync';
 import { useNotes } from '../features/notes/useNotes';
@@ -80,7 +81,7 @@ export function Shell() {
         { to: '/more', label: '더보기', icon: 'more', badge: moreBadge, also: [...MORE_PATHS, '/shop'] },
       ]
     : [
-        { to: '/home', label: '홈', icon: 'home', count: unreadNotes },
+        { to: '/home', label: '홈', icon: 'home', count: unreadNotes, also: ['/inventory'] },
         // 상점은 퀘스트 화면의 버튼으로 들어간다.
         { to: '/quests', label: '퀘스트', icon: 'quest', count: remaining + offersForMe + wishesForMe, also: ['/shop'] },
         { to: '/calendar', label: '캘린더', icon: 'calendar' },
@@ -109,6 +110,7 @@ export function Shell() {
             <Route path="/home" element={<HomePage />} />
             <Route path="/quests" element={<TodayPage />} />
             <Route path="/shop" element={<ShopPage />} />
+            <Route path="/inventory" element={<InventoryPage />} />
           </>
         )}
         <Route path="/calendar" element={<CalendarPage />} />

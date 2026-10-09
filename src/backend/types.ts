@@ -297,7 +297,7 @@ export interface WishInput {
   price: number;
 }
 
-/** requested=신청함(코인 묶임), approved=승인되어 받을 보상, delivered=받음, rejected=거절됨 */
+/** requested=신청함(코인 묶임), approved=승인되어 인벤토리에 있음, delivered=사용함, rejected=거절됨 */
 export type OrderStatus = 'requested' | 'approved' | 'delivered' | 'rejected';
 
 /** 보상 신청 한 건 */
@@ -315,9 +315,17 @@ export interface Order {
   decidedBy: string | null;
   decidedAt: number | null;
   rejectReason: string;
+  /** 사용 완료를 누른 사람과 시각(예전에는 부모가 "줬어요"를 눌렀다) */
   deliveredBy: string | null;
   deliveredAt: number | null;
+  /**
+   * 쓰는 방식. inPerson=부모 앞에서 쓰고 자녀가 "사용 완료"를 누름(부모가 올린 현실 보상),
+   * instant=허락 없이 바로 쓰고 부모에게 알림(나중에 생길 앱 안 상품: 이모티콘, 꾸미기)
+   */
+  useMode: OrderUseMode;
 }
+
+export type OrderUseMode = 'inPerson' | 'instant';
 
 export interface FoodInput {
   name: string;
@@ -531,6 +539,8 @@ export interface Backend {
 
   /** 진행 중인 신청과, sinceDay 이후의 신청 기록 */
   watchOrders(familyId: string, sinceDay: string, cb: (orders: Order[]) => void): Unsub;
+  /** 이 자녀가 다 쓴 보상 전체(인벤토리의 지난 기록) */
+  watchUsedOrders(familyId: string, uid: string, cb: (orders: Order[]) => void, onError?: () => void): Unsub;
   /** 보상을 신청한다. 승인 전까지 그만큼의 코인이 묶인다. */
   requestReward(familyId: string, reward: Reward, uid: string, today: string): Promise<string>;
   cancelOrder(familyId: string, orderId: string): Promise<void>;
@@ -538,7 +548,8 @@ export interface Backend {
   approveOrder(familyId: string, orderId: string, byUid: string): Promise<void>;
   rejectOrder(familyId: string, orderId: string, byUid: string, reason: string): Promise<void>;
   /** 승인한 보상을 실제로 줬을 때 마무리한다. */
-  deliverOrder(familyId: string, orderId: string, byUid: string): Promise<void>;
+  /** 인벤토리의 보상을 사용 완료로. 산 자녀 본인(또는 부모)만 */
+  redeemOrder(familyId: string, orderId: string, byUid: string): Promise<void>;
   /** 목표 저금통으로 삼을 보상을 정한다(null 이면 없앰). */
   setGoal(familyId: string, uid: string, rewardId: string | null): Promise<void>;
 

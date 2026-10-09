@@ -125,6 +125,7 @@ try {
   check('아래 탭: 홈 퀘스트 캘린더 뭐먹지 더보기', (await tabNames(kid)) === '홈,퀘스트,캘린더,뭐먹지,더보기', await tabNames(kid));
   check('첫 화면은 홈이고 오늘 퀘스트 진행이 맨 위에', (await kid.locator('.tab.active').innerText()).includes('홈') && (await kid.getByText('오늘 퀘스트 3개 중 0개 완료').isVisible()) && (await kid.getByRole('link', { name: '오늘 진행: 3개 중 0개 완료. 할 일 보러 가기' }).isVisible()));
   check('코인 아래에 작은 여기예요 버튼', (await kid.getByRole('button', { name: /^지금 여기예요/ }).innerText()).includes('여기예요'));
+  check('여기예요 옆에 가방 그림 인벤토리 버튼', await kid.locator('.head-btns').getByRole('link', { name: '인벤토리', exact: true }).isVisible());
   const kidNotes = region(kid, '가족 메모');
   const momNote = kidNotes.locator('article', { hasText: '학원 끝나면 바로 전화해 줘!' });
   check('확인 안 한 메모는 큰 카드로(누가 누구에게)', (await momNote.getByText(/^엄마 → 딸 · /).isVisible()) && (await momNote.getByRole('button', { name: '엄마의 메모 확인했어요' }).isVisible()));
@@ -566,20 +567,39 @@ try {
   await kid.locator('.celebrate').getByText('보상 획득!').waitFor({ timeout: 5000 });
   await shot(kid, '22-kid-reward-won');
   await expectCoins(kid, base - 50, '승인되면 50코인 차감');
-  await myOrders('받을 보상 1개 · 승인 대기 1개').waitFor();
-  check('받을 보상이 한 줄 요약에 들어옴', true);
+  await myOrders('승인 대기 1개').waitFor();
+  check('승인되면 상점의 인벤토리 버튼에 개수', await kid.getByRole('link', { name: '인벤토리: 보상 1개' }).isVisible());
   await asks.locator('article', { hasText: '먹고 싶은 간식' }).getByRole('button', { name: '거절' }).click();
   await dad.getByRole('dialog').getByLabel('한마디 (안 적어도 돼요)').fill('저녁 먹고 나서');
   await dad.getByRole('dialog').getByRole('button', { name: '거절하기' }).click();
-  await myOrders('받을 보상 1개 · 거절 1개').click();
+  await myOrders('거절 1개').click();
   await kid.getByRole('dialog').getByText('이번에는 안 된대요. "저녁 먹고 나서" 코인은 그대로예요.').waitFor();
-  check('내 신청 창: 받을 보상과 거절 이유', await region(kid, '받을 보상').getByText('게임 30분').isVisible());
   check('묶인 코인 안내가 사라짐', (await kid.getByText(/묶여 있어요/).count()) === 0);
   await kid.getByRole('dialog').getByRole('button', { name: '닫기' }).click();
   await expectCoins(kid, base - 50, '거절되면 코인 그대로');
-  await region(dad, '줄 보상').getByRole('button', { name: '게임 30분 줬어요' }).click();
-  await myOrders('거절 1개').waitFor();
-  check('줬어요 하면 받을 보상에서 빠짐', true);
+  check('부모 홈에 "줄 보상"이 없음(자녀가 인벤토리에서 씀)', (await region(dad, '줄 보상').count()) === 0);
+
+  // 인벤토리: 사용권을 부모님께 보여 주고 자녀가 사용 완료
+  await kid.getByRole('link', { name: '인벤토리: 보상 1개' }).click();
+  await kid.getByRole('heading', { name: '인벤토리' }).waitFor();
+  const owned = region(kid, '가지고 있는 보상');
+  check('인벤토리에 승인된 보상', await owned.locator('article', { hasText: '게임 30분' }).isVisible());
+  await shot(kid, '22b-inventory');
+  await owned.getByRole('button', { name: '게임 30분 쓰기' }).click();
+  const ticketSheet = kid.getByRole('dialog');
+  check('사용권 화면: 부모님께 보여 주기 안내', await ticketSheet.getByText('부모님께 이 화면을 보여 주세요', { exact: false }).isVisible());
+  await shot(kid, '22c-inventory-ticket');
+  await ticketSheet.getByRole('button', { name: '사용 완료' }).click();
+  await ticketSheet.getByRole('button', { name: /정말 썼나요/ }).click();
+  await toast(kid, '사용 완료');
+  await owned.getByText('아직 가진 보상이 없어요').waitFor();
+  check('다 쓴 보상은 지난 기록으로', (await kid.getByRole('button', { name: /^지난 기록/ }).innerText()).includes('1개 사용'));
+  await kid.getByRole('button', { name: /^지난 기록/ }).click();
+  check('지난 기록에 달과 사용한 보상', await region(kid, '지난 기록').getByText('게임 30분').isVisible());
+  await kid.getByRole('button', { name: '‹ 돌아가기' }).click();
+  await kid.getByRole('heading', { name: '보상 목록' }).waitFor();
+  await expectCoins(kid, base - 50, '쓸 때는 코인이 다시 빠지지 않음');
+  check('돌아가기로 상점에, 인벤토리 숫자 사라짐', await kid.getByRole('link', { name: '인벤토리', exact: true }).isVisible());
   await shot(kid, '23-kid-shop-after', false);
 
   // 목표 저금통 바꾸기

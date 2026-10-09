@@ -1025,6 +1025,10 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       );
     },
 
+    watchUsedOrders(familyId, uid, cb) {
+      return watch(() => Object.values(state.orders[familyId] ?? {}).filter((o) => o.uid === uid && o.status === 'delivered').map((o) => ({ ...o })), cb);
+    },
+
     async requestReward(familyId, reward, uid, today) {
       requireSelf(uid);
       const member = requireMember(familyId);
@@ -1048,6 +1052,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
         rejectReason: '',
         deliveredBy: null,
         deliveredAt: null,
+        useMode: 'inPerson',
       };
       commit();
       return id;
@@ -1104,12 +1109,13 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       commit();
     },
 
-    async deliverOrder(familyId, orderId, byUid) {
+    async redeemOrder(familyId, orderId, byUid) {
       requireSelf(byUid);
-      requireParent(familyId);
+      const member = requireMember(familyId);
       const order = state.orders[familyId]?.[orderId];
-      if (!order) throw new AppError('보상 신청을 찾을 수 없어요.');
-      if (order.status !== 'approved') throw new AppError('승인된 보상만 마무리할 수 있어요.');
+      if (!order) throw new AppError('보상을 찾을 수 없어요.');
+      if (order.uid !== byUid && member.role !== 'parent') throw new AppError('내 인벤토리의 보상만 쓸 수 있어요.');
+      if (order.status !== 'approved') throw new AppError('인벤토리에 있는 보상만 쓸 수 있어요.');
       state.orders[familyId][orderId] = { ...order, status: 'delivered', deliveredBy: byUid, deliveredAt: Date.now() };
       commit();
     },

@@ -183,7 +183,7 @@ export function Celebrations() {
         <Icon name={current.order.icon as IconName} size={96} className="coin" />
         <div className="t-title celebrate-title">보상 획득!</div>
         <div className="t-body celebrate-note">{current.order.rewardTitle}</div>
-        <div className="t-capb">부모님께 말하면 받을 수 있어요</div>
+        <div className="t-capb">인벤토리에 들어갔어요</div>
       </div>
     );
   }

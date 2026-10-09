@@ -59,11 +59,16 @@ export function orderNotices(oid: string, before: Doc | undefined, after: Doc | 
     return [{ to: 'parents', type: 'shop', msg: { title: '보상 신청', body: clip(`${buyerName}: ${after.rewardTitle} (${coins(after.price)})`), url: '#/home', tag } }];
   }
   if (before?.status === 'requested' && after.status === 'approved') {
-    return [{ to: [after.uid], type: 'shop', msg: { title: '보상 획득!', body: clip(`${after.rewardTitle} · 부모님께 말하면 받을 수 있어요`), url: '#/shop', tag } }];
+    return [{ to: [after.uid], type: 'shop', msg: { title: '보상 획득!', body: clip(`${after.rewardTitle} · 인벤토리에 들어갔어요`), url: '#/inventory', tag } }];
   }
   if (before?.status === 'requested' && after.status === 'rejected') {
     const reason = after.rejectReason ? ` "${after.rejectReason}"` : '';
     return [{ to: [after.uid], type: 'shop', msg: { title: '보상 신청', body: clip(`${after.rewardTitle}: 이번에는 안 된대요.${reason}`), url: '#/shop', tag } }];
+  }
+  // 앱 안 상품(이모티콘, 꾸미기)은 허락 없이 바로 쓰고, 썼다는 것만 부모에게 알린다.
+  // 부모 앞에서 쓰는 현실 보상은 알리지 않는다.
+  if (before?.status === 'approved' && after.status === 'delivered' && after.useMode === 'instant') {
+    return [{ to: 'parents', type: 'shop', msg: { title: '보상 사용', body: clip(`${buyerName}이(가) ${after.rewardTitle}을(를) 썼어요`), url: '#/home', tag } }];
   }
   return [];
 }

@@ -3,6 +3,7 @@ import { useSession } from '../../app/session';
 import { AvatarFrame, Icon } from '../../ui/Sprite';
 import { CoinPill } from '../../ui/kit';
 import { HomeEvents } from '../calendar/TodayEvents';
+import { InventoryButton } from '../inventory/InventoryButton';
 import { CheckinButton } from '../location/CheckinButton';
 import { NotesBlock } from '../notes/NotesBlock';
 import { PushNudge } from '../notify/PushNudge';
@@ -33,7 +34,10 @@ export function HomePage() {
         </div>
         <div className="head-side">
           <CoinPill amount={me.coins} />
-          <CheckinButton compact />
+          <div className="head-btns">
+            <CheckinButton compact />
+            <InventoryButton compact />
+          </div>
         </div>
       </header>
 

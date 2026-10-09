@@ -451,19 +451,22 @@ service cloud.firestore {
       match /orders/{oid} {
         allow read: if isMember(fid);
         allow create: if isMember(fid) && validOrder(fid);
-        allow update: if isParent(fid) && (
-          // 신청을 승인하거나 거절
-          (resource.data.status == 'requested'
+        allow update: if
+          // 부모가 신청을 승인하거나 거절
+          (isParent(fid)
+            && resource.data.status == 'requested'
             && request.resource.data.status in ['approved', 'rejected']
             && request.resource.data.decidedBy == request.auth.uid
             && request.resource.data.diff(resource.data).affectedKeys()
                  .hasOnly(['status', 'decidedBy', 'decidedAt', 'rejectReason']))
-          // 승인한 보상을 실제로 준 뒤 마무리
-          || (resource.data.status == 'approved'
+          // 인벤토리의 보상을 사용 완료로: 산 자녀 본인 또는 부모
+          || (isMember(fid)
+            && (resource.data.uid == request.auth.uid || isParent(fid))
+            && resource.data.status == 'approved'
             && request.resource.data.status == 'delivered'
+            && request.resource.data.deliveredBy == request.auth.uid
             && request.resource.data.diff(resource.data).affectedKeys()
-                 .hasOnly(['status', 'deliveredBy', 'deliveredAt']))
-        );
+                 .hasOnly(['status', 'deliveredBy', 'deliveredAt']));
         // 승인 전에는 신청한 본인이 취소할 수 있다.
         allow delete: if isMember(fid)
           && resource.data.uid == request.auth.uid

@@ -1383,3 +1383,32 @@ button.today-line {
 .new-tag {
   color: #c2334d;
 }
+
+/* 인벤토리 */
+.head-btns {
+  display: flex;
+  gap: 8px;
+}
+.head-btns > .btn:first-child {
+  flex: 1;
+}
+a.btn.inventory-btn {
+  text-decoration: none;
+}
+.btn.compact.inventory-btn {
+  padding: 0 8px;
+  flex-shrink: 0;
+}
+.inv-icon {
+  position: relative;
+  display: inline-flex;
+}
+.ticket {
+  padding: 20px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  background: var(--yellow-soft);
+  box-shadow: 0 -2px 0 0 var(--ink), 0 2px 0 0 var(--ink), -2px 0 0 0 var(--ink), 2px 0 0 0 var(--ink);
+}

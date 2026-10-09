@@ -299,6 +299,7 @@ export function createFirebaseBackend(): Backend {
     rejectReason: d.rejectReason ?? '',
     deliveredBy: d.deliveredBy ?? null,
     deliveredAt: d.deliveredAt ?? null,
+    useMode: d.useMode === 'instant' ? 'instant' : 'inPerson',
   });
 
   const toMember = (uid: string, d: DocumentData): Member => ({
@@ -892,6 +893,17 @@ export function createFirebaseBackend(): Backend {
       );
     },
 
+    watchUsedOrders(familyId, uid, cb, onError) {
+      return onSnapshot(
+        query(ordersCol(familyId), where('uid', '==', uid), where('status', '==', 'delivered')),
+        (snap) => cb(snap.docs.map((s) => toOrder(s.id, s.data()))),
+        (error) => {
+          console.error('[used orders]', error);
+          onError?.();
+        },
+      );
+    },
+
     requestReward: (familyId, reward, uid, today) =>
       guard(async () => {
         // 묶인 코인과 구매 제한을 확인한다. 최종 잔액 확인은 승인할 때 다시 한다.
@@ -967,13 +979,13 @@ export function createFirebaseBackend(): Backend {
         });
       }),
 
-    deliverOrder: (familyId, orderId, byUid) =>
+    redeemOrder: (familyId, orderId, byUid) =>
       guard(async () => {
         const ref = doc(ordersCol(familyId), orderId);
         await runTransaction(db, async (tx) => {
           const snap = await tx.get(ref);
-          if (!snap.exists()) throw new AppError('보상 신청을 찾을 수 없어요.');
-          if (snap.data().status !== 'approved') throw new AppError('승인된 보상만 마무리할 수 있어요.');
+          if (!snap.exists()) throw new AppError('보상을 찾을 수 없어요.');
+          if (snap.data().status !== 'approved') throw new AppError('인벤토리에 있는 보상만 쓸 수 있어요.');
           tx.update(ref, { status: 'delivered', deliveredBy: byUid, deliveredAt: Date.now() });
         });
       }),

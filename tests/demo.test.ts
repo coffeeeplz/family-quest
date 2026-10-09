@@ -413,15 +413,20 @@ describe('상점', () => {
     expect(orders().find((o) => o.id === id)!.status).toBe('approved');
   });
 
-  it('승인은 한 번만 되고, 준 뒤에는 마무리할 수 있다', async () => {
+  it('승인은 한 번만 되고, 승인된 보상은 인벤토리에서 자녀가 직접 사용 완료한다', async () => {
     const id = await buy('r-snack');
+    await expect(backend.redeemOrder(FAMILY, id, 'demo-kid')).rejects.toThrow('인벤토리에 있는 보상만'); // 아직 승인 전
     as('demo-dad');
     await backend.approveOrder(FAMILY, id, 'demo-dad');
     await expect(backend.approveOrder(FAMILY, id, 'demo-dad')).rejects.toThrow('이미');
     expect(kid().coins).toBe(0);
-    await backend.deliverOrder(FAMILY, id, 'demo-dad');
-    expect(orders().find((o) => o.id === id)).toMatchObject({ status: 'delivered', deliveredBy: 'demo-dad' });
-    await expect(backend.deliverOrder(FAMILY, id, 'demo-dad')).rejects.toThrow('승인된 보상만');
+    expect(orders().find((o) => o.id === id)).toMatchObject({ status: 'approved', useMode: 'inPerson' });
+    await expect(backend.redeemOrder(FAMILY, id, 'demo-kid')).rejects.toThrow('본인만'); // 아빠로 들어와 있으면 딸 대신 누를 수 없다
+    as('demo-kid');
+    await backend.redeemOrder(FAMILY, id, 'demo-kid');
+    expect(orders().find((o) => o.id === id)).toMatchObject({ status: 'delivered', deliveredBy: 'demo-kid' });
+    expect(kid().coins).toBe(0); // 쓸 때는 코인이 다시 빠지지 않는다
+    await expect(backend.redeemOrder(FAMILY, id, 'demo-kid')).rejects.toThrow('인벤토리에 있는 보상만');
   });
 
   it('코인이 모자라면 신청할 수 없고, 신청 중인 코인은 묶인다', async () => {
@@ -463,7 +468,7 @@ describe('상점', () => {
     await expect(buy('r-game')).rejects.toThrow('오늘은 더 바꿀 수 없어요');
     as('demo-dad');
     await backend.approveOrder(FAMILY, id, 'demo-dad');
-    await backend.deliverOrder(FAMILY, id, 'demo-dad');
+    await backend.redeemOrder(FAMILY, id, 'demo-dad');
     await expect(buy('r-game')).rejects.toThrow('오늘은 더 바꿀 수 없어요'); // 받은 뒤에도 오늘은 끝
   });
 

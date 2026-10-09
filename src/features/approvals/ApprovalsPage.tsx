@@ -33,7 +33,7 @@ const QUICK_REASONS = ['조금만 더 해 보자', '다시 확인해 줘', '끝�
 export function ApprovalsPage() {
   const backend = useBackend();
   const { me, family, members, kids } = useSession();
-  const { pending, offersForParent, ordersForParent, orders, proposals, quests, runs, today, loading } = useFamilyData();
+  const { pending, offersForParent, ordersForParent, proposals, quests, runs, today, loading } = useFamilyData();
   const { busy, run } = useAction();
   const [approveTarget, setApproveTarget] = useState<Run | null>(null);
   const [rejectTarget, setRejectTarget] = useState<Run | null>(null);
@@ -56,7 +56,6 @@ export function ApprovalsPage() {
   const wishesOnKid = wishes.filter((wish) => wishTurn(wish) === 'child');
   const waitingCount = pending.length + offersForParent.length + ordersForParent.length + wishInbox.length;
   // 승인했지만 아직 주지 않은 보상
-  const toGive = orders.filter((o) => o.status === 'approved').sort((a, b) => (a.decidedAt ?? 0) - (b.decidedAt ?? 0));
 
   /** 이 승인으로 연속 달성이 이어지는지 미리 계산한다. */
   const streakFor = (target: Run) => {
@@ -189,29 +188,6 @@ export function ApprovalsPage() {
 
       <WishInbox wishes={wishInbox} />
 
-      {toGive.length > 0 && (
-        <section className="stack" aria-label="줄 보상">
-          <h2 className="t-title">줄 보상</h2>
-          {toGive.map((order) => (
-            <article key={order.id} className="card is-done card-row">
-              <Icon name={order.icon as IconName} size={36} />
-              <div className="card-main">
-                <h3 className="t-body item-title">{order.rewardTitle}</h3>
-                <p className="t-cap">{nameOf(order.uid)} · 승인함, 아직 안 줌</p>
-              </div>
-              <Button
-                tone="plain"
-                disabled={busy}
-                aria-label={`${order.rewardTitle} 줬어요`}
-                onClick={() => void run(() => backend.deliverOrder(family.id, order.id, me.uid), '보상을 준 것으로 표시했어요.')}
-              >
-                줬어요
-              </Button>
-            </article>
-          ))}
-        </section>
-      )}
-
       {pending.length > 0 && (
         <section className="stack" aria-label="승인 대기">
           <h2 className="t-title">승인 대기</h2>
@@ -251,7 +227,7 @@ export function ApprovalsPage() {
         </section>
       )}
 
-      {!loading && waitingCount === 0 && toGive.length === 0 && (
+      {!loading && waitingCount === 0 && (
         <Empty icon={<Icon name="check_inbox" size={48} />} title="답할 일이 없어요" hint="완료 요청이나 신청이 오면 여기에 나타나요." />
       )}
 

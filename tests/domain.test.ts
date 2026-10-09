@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CalendarEvent, Food, LedgerEntry, Member, Note, Order, Place, Proposal, Quest, Reward, Run, Wish } from '../src/backend/types';
+import { inventoryGroups, ownedCount, usedByMonth } from '../src/domain/inventory';
 import { activeNoteCount, canEditNote, cleanNoteInput, isUnreadFor, noteDays, noteReceiptText, noteTargetText, noteUntilText, notesOnDay, visibleNotes } from '../src/domain/notes';
 import { coinScene, gainsOf, goalJustReached, latestAt, missedGains } from '../src/domain/celebrate';
 import { canAddWish, canCounterWish, cleanWishInput, splitMyWishes, wishTurn, wishesForParent } from '../src/domain/wishes';
@@ -419,9 +420,32 @@ describe('shop', () => {
     rejectReason: '',
     deliveredBy: null,
     deliveredAt: null,
+    useMode: 'inPerson',
     ...over,
   });
   const rich = { ...kid(), coins: 120 };
+
+  it('인벤토리: 승인된 보상을 같은 보상끼리 묶고, 다 쓴 것은 달별로', () => {
+    const list = [
+      order({ id: 'a', status: 'approved', decidedAt: 3 }),
+      order({ id: 'b', status: 'approved', decidedAt: 1 }),
+      order({ id: 'c', status: 'approved', rewardId: 'r2', rewardTitle: '간식', decidedAt: 2 }),
+      order({ id: 'd', status: 'requested' }),
+      order({ id: 'e', status: 'approved', uid: 'other' }),
+      order({ id: 'f', status: 'delivered', deliveredAt: new Date(2026, 8, 30).getTime() }),
+      order({ id: 'g', status: 'delivered', deliveredAt: new Date(2026, 9, 2).getTime() }),
+    ];
+    const groups = inventoryGroups(list, 'kid');
+    expect(groups.map((g) => [g.title, g.orders.map((o) => o.id)])).toEqual([
+      ['게임 30분', ['b', 'a']], // 먼저 받은 것부터 쓴다
+      ['간식', ['c']],
+    ]);
+    expect(ownedCount(list, 'kid')).toBe(3);
+    expect(usedByMonth(list, 'kid').map((m) => [m.month, m.orders.map((o) => o.id)])).toEqual([
+      ['2026-10', ['g']],
+      ['2026-09', ['f']],
+    ]);
+  });
 
   it('weeks start on Monday', () => {
     expect(weekStart(TODAY)).toBe('2026-10-05'); // 화 → 월

@@ -76,7 +76,11 @@ describe('보낼 알림 정하기', () => {
     const o = { rewardTitle: '게임 30분', price: 50, uid: 'kid' };
     expect(orderNotices('o1', undefined, { ...o, status: 'requested' }, '딸')[0]).toMatchObject({ to: 'parents', type: 'shop' });
     expect(orderNotices('o1', { ...o, status: 'requested' }, { ...o, status: 'approved' }, '딸')[0]).toMatchObject({ to: ['kid'], msg: { title: '보상 획득!' } });
-    expect(orderNotices('o1', { ...o, status: 'approved' }, { ...o, status: 'delivered' }, '딸')).toEqual([]);
+    expect(orderNotices('o1', { ...o, status: 'approved' }, { ...o, status: 'delivered' }, '딸')).toEqual([]); // 현실 보상은 알리지 않음
+    const used = orderNotices('o1', { ...o, status: 'approved', useMode: 'instant' }, { ...o, status: 'delivered', useMode: 'instant' }, '딸');
+    expect(used).toHaveLength(1);
+    expect(used[0]).toMatchObject({ to: 'parents', type: 'shop' });
+    expect(used[0].msg.body).toContain('썼어요');
     const w = { title: '놀이공원', ownerUid: 'kid' };
     expect(wishNotices('w1', undefined, { ...w, status: 'negotiating', lastRole: 'child', lastPrice: 150, offerCount: 1 }, '딸')[0]).toMatchObject({ to: 'parents', type: 'shop' });
     expect(wishNotices('w1', { ...w, status: 'negotiating', offerCount: 1 }, { ...w, status: 'negotiating', lastRole: 'parent', lastPrice: 300, offerCount: 2 }, '딸')[0]).toMatchObject({ to: ['kid'], type: 'offer' });

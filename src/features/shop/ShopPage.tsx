@@ -9,6 +9,7 @@ import type { IconName } from '../../lib/sprites';
 import { Icon } from '../../ui/Sprite';
 import { BackLink, Button, CoinInline, CoinPill, Empty, Sheet } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
+import { InventoryButton } from '../inventory/InventoryButton';
 import { MyWishCard } from '../wishes/MyWishCard';
 import { WishFormSheet } from '../wishes/WishFormSheet';
 import { useWishes } from '../wishes/useWishes';
@@ -27,16 +28,14 @@ export function ShopPage() {
 
   const mine = orders.filter((o) => o.uid === me.uid);
   const requested = mine.filter((o) => o.status === 'requested').sort((a, b) => a.requestedAt - b.requestedAt);
-  const toReceive = mine.filter((o) => o.status === 'approved').sort((a, b) => (a.decidedAt ?? 0) - (b.decidedAt ?? 0));
   // 오늘 거절된 신청은 이유와 함께 하루 동안 보여 준다.
   const rejectedToday = mine.filter((o) => o.status === 'rejected' && dateKey(new Date(o.decidedAt ?? 0)) === today);
   const reserved = reservedCoins(orders, me.uid);
   // 내가 상점에 올려 달라고 한 보상: 내가 답할 것은 화면에, 나머지는 "내 신청" 안에 둔다.
   const myWishes = splitMyWishes(wishes, me.uid, (at) => dateKey(new Date(at)) === today);
-  const mineCount = requested.length + toReceive.length + rejectedToday.length + myWishes.waiting.length + myWishes.declinedToday.length;
+  const mineCount = requested.length + rejectedToday.length + myWishes.waiting.length + myWishes.declinedToday.length;
   // 첫 화면에는 한 줄만: 자세한 내용은 눌러서 본다.
   const summary = [
-    toReceive.length > 0 ? `받을 보상 ${toReceive.length}개` : '',
     requested.length > 0 ? `승인 대기 ${requested.length}개` : '',
     rejectedToday.length > 0 ? `거절 ${rejectedToday.length}개` : '',
     myWishes.waiting.length > 0 ? `제안 대기 ${myWishes.waiting.length}개` : '',
@@ -68,6 +67,8 @@ export function ShopPage() {
         </div>
         <CoinPill amount={me.coins} />
       </header>
+
+      <InventoryButton />
 
       {mineCount > 0 && (
         <button type="button" className="px today-line" aria-label={`내 신청 보기: ${summary}`} onClick={() => setShowMine(true)}>
@@ -134,21 +135,6 @@ export function ShopPage() {
               신청한 보상에 {reserved}코인이 묶여 있어요. 지금 쓸 수 있는 코인은 {me.coins - reserved}개예요.
             </p>
           )}
-          {toReceive.length > 0 && (
-            <section className="stack" aria-label="받을 보상">
-              <h3 className="t-title" style={{ fontSize: 15 }}>받을 보상</h3>
-              {toReceive.map((order) => (
-                <article key={order.id} className="card is-done card-row">
-                  <Icon name={order.icon as IconName} size={36} />
-                  <div className="card-main">
-                    <h3 className="t-body item-title">{order.rewardTitle}</h3>
-                    <p className="t-cap">승인됐어요. 부모님께 말하면 받을 수 있어요.</p>
-                  </div>
-                </article>
-              ))}
-            </section>
-          )}
-
           {(requested.length > 0 || rejectedToday.length > 0) && (
             <section className="stack" aria-label="신청한 보상">
               <h3 className="t-title" style={{ fontSize: 15 }}>신청한 보상</h3>
