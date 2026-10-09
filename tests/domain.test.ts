@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CalendarEvent, Food, LedgerEntry, Member, Note, Order, Place, Proposal, Quest, Reward, Run, Wish } from '../src/backend/types';
-import { canEditNote, cleanNoteInput, isUnreadFor, noteReceiptText, noteTargetText, noteUntilText, visibleNotes } from '../src/domain/notes';
+import { activeNoteCount, canEditNote, cleanNoteInput, isUnreadFor, noteDays, noteReceiptText, noteTargetText, noteUntilText, notesOnDay, visibleNotes } from '../src/domain/notes';
 import { coinScene, gainsOf, goalJustReached, latestAt, missedGains } from '../src/domain/celebrate';
 import { canAddWish, canCounterWish, cleanWishInput, splitMyWishes, wishTurn, wishesForParent } from '../src/domain/wishes';
 import {
@@ -957,7 +957,23 @@ describe('가족 메모', () => {
   const person = (uid: string, displayName: string, role: 'parent' | 'child' = 'parent') =>
     ({ uid, displayName, role, avatar: { id: 'bear', color: 'brown' }, coins: 0 }) as unknown as Member;
   const family = [person('dad', '아빠'), person('mom', '엄마'), person('kid', '딸', 'child')];
-  const note = (id: string, extra: Partial<Note> = {}): Note => ({ id, text: id, toUids: [], until: '', createdBy: 'dad', createdAt: 0, readBy: [], ...extra });
+  const note = (id: string, extra: Partial<Note> = {}): Note => ({ id, text: id, toUids: [], until: '', createdBy: 'dad', createdAt: 0, readBy: [], hiddenAt: 0, ...extra });
+
+  it('홈에서 내린 메모는 홈에서 빠지고 캘린더 기록에는 남는다', () => {
+    const at = new Date(2026, 9, 7, 19).getTime();
+    const notes = [
+      note('all', { createdAt: at }),
+      note('hidden', { createdAt: at + 1, hiddenAt: at + 2 }),
+      note('toMom', { createdAt: at + 2, toUids: ['mom'], createdBy: 'kid' }),
+      note('other', { createdAt: new Date(2026, 9, 8, 9).getTime() }),
+    ];
+    expect(visibleNotes(notes, 'dad', '2026-10-09').map((n) => n.id)).toEqual(['other', 'all']);
+    expect(activeNoteCount(notes, '2026-10-09')).toBe(3);
+    // 그날 기록: 부모는 다른 사람에게 보낸 메모도 보고, 자녀는 자기와 관계있는 것만 본다.
+    expect(notesOnDay(notes, '2026-10-07', 'dad', true).map((n) => n.id)).toEqual(['all', 'hidden', 'toMom']);
+    expect(notesOnDay(notes, '2026-10-07', 'kid2', false).map((n) => n.id)).toEqual(['all', 'hidden']);
+    expect([...noteDays(notes, 'kid2', false)].sort()).toEqual(['2026-10-07', '2026-10-08']);
+  });
 
   it('입력값을 다듬는다', () => {
     const uids = ['dad', 'mom', 'kid'];

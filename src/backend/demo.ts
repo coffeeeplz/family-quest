@@ -18,11 +18,11 @@ import {
   halfReward,
   normalizeSettings,
 } from '../domain/settings';
-import { MAX_NOTES, canEditNote, cleanNoteInput, isNoteFor } from '../domain/notes';
+import { MAX_NOTES, activeNoteCount, canEditNote, cleanNoteInput, isNoteFor } from '../domain/notes';
 import { normalizePushPrefs, type PushPrefs } from '../domain/push';
 import { MAX_REWARDS, buyBlockReason, cleanRewardInput } from '../domain/shop';
 import { MAX_DECLINE_NOTE, MAX_OPEN_WISHES, WISH_KEEP_DAYS, canCounterWish, checkWishTurn, cleanWishInput, cleanWishPrice, openWishCount } from '../domain/wishes';
-import { addDays, dateKey, dayNumber } from '../lib/dates';
+import { addDays, dateKey, dayNumber, parseDateKey } from '../lib/dates';
 import {
   AppError,
   type AuthUser,
@@ -57,7 +57,7 @@ interface DemoUser {
 }
 
 interface DemoState {
-  v: 10;
+  v: 11;
   currentUid: string | null;
   users: Record<string, DemoUser>;
   families: Record<string, Family>;
@@ -84,7 +84,7 @@ export interface KeyValueStore {
   setItem(key: string, value: string): void;
 }
 
-const STORAGE_KEY = 'family-quest-demo-v10';
+const STORAGE_KEY = 'family-quest-demo-v11';
 const FAMILY = 'demo-family';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -231,7 +231,7 @@ function seed(now: number = Date.now()): DemoState {
   });
 
   return {
-    v: 10,
+    v: 11,
     currentUid: null,
     users: {
       'demo-dad': { uid: 'demo-dad', email: 'dad@example.com', label: '아빠', hint: '퀘스트를 만들고 승인해요', familyId: FAMILY },
@@ -341,8 +341,10 @@ function seed(now: number = Date.now()): DemoState {
     // 가족 메모: 딸이 아직 확인하지 않은 엄마의 메모와, 딸은 확인한 아빠의 메모
     notes: {
       [FAMILY]: {
-        'n-call': { id: 'n-call', text: '학원 끝나면 바로 전화해 줘! 오늘 저녁은 할머니 댁에서 먹어요.', toUids: ['demo-kid'], until: today, createdBy: 'demo-mom', createdAt: now - 20 * 60_000, readBy: [] },
-        'n-clean': { id: 'n-clean', text: '토요일 10시에 가족 대청소', toUids: [], until: '', createdBy: 'demo-dad', createdAt: now - 5 * 3_600_000, readBy: ['demo-kid'] },
+        'n-call': { id: 'n-call', text: '학원 끝나면 바로 전화해 줘! 오늘 저녁은 할머니 댁에서 먹어요.', toUids: ['demo-kid'], until: today, createdBy: 'demo-mom', createdAt: now - 20 * 60_000, readBy: [], hiddenAt: 0 },
+        'n-clean': { id: 'n-clean', text: '토요일 10시에 가족 대청소', toUids: [], until: '', createdBy: 'demo-dad', createdAt: now - 5 * 3_600_000, readBy: ['demo-kid'], hiddenAt: 0 },
+        // 그저께 남겼다가 홈에서 내린 메모: 캘린더의 그날에서 볼 수 있다.
+        'n-old': { id: 'n-old', text: '현관 비밀번호 바꿨어요. 저녁에 알려 줄게요.', toUids: [], until: '', createdBy: 'demo-mom', createdAt: parseDateKey(twoDaysAgo).getTime() + 19 * 3_600_000, readBy: ['demo-dad', 'demo-kid'], hiddenAt: parseDateKey(yesterday).getTime() + 8 * 3_600_000 },
       },
     },
     pushPrefs: { [FAMILY]: {} },
@@ -398,7 +400,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       const raw = store?.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as DemoState;
-        if (parsed.v === 10) return parsed;
+        if (parsed.v === 11) return parsed;
       }
     } catch {
       // 저장소를 못 읽으면 새로 시작한다.
@@ -1304,11 +1306,11 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       requireSelf(byUid);
       requireMember(familyId);
       const clean = cleanNoteInput(input, Object.keys(state.members[familyId]), byUid, dateKey());
-      if (Object.keys(state.notes[familyId]).length >= MAX_NOTES) {
-        throw new AppError(`메모는 ${MAX_NOTES}개까지 남길 수 있어요. 지난 메모를 지워 주세요.`);
+      if (activeNoteCount(Object.values(state.notes[familyId]), dateKey()) >= MAX_NOTES) {
+        throw new AppError(`홈에는 메모를 ${MAX_NOTES}개까지 둘 수 있어요. 지난 메모를 지워 주세요.`);
       }
       const id = newId('n');
-      state.notes[familyId][id] = { id, ...clean, createdBy: byUid, createdAt: Date.now(), readBy: [] };
+      state.notes[familyId][id] = { id, ...clean, createdBy: byUid, createdAt: Date.now(), readBy: [], hiddenAt: 0 };
       commit();
       return id;
     },
@@ -1333,10 +1335,18 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       commit();
     },
 
-    async deleteNote(familyId, noteId) {
+    async hideNote(familyId, noteId, hidden) {
       const member = requireMember(familyId);
       const note = requireNote(familyId, noteId);
       if (!canEditNote(note, member.uid, member.role === 'parent')) throw new AppError('메모는 쓴 사람과 부모만 지울 수 있어요.');
+      state.notes[familyId][noteId] = { ...note, hiddenAt: hidden ? Date.now() : 0 };
+      commit();
+    },
+
+    async deleteNote(familyId, noteId) {
+      const member = requireMember(familyId);
+      requireNote(familyId, noteId);
+      if (member.role !== 'parent') throw new AppError('기록에서 완전히 지우는 것은 부모만 할 수 있어요.');
       delete state.notes[familyId][noteId];
       commit();
     },

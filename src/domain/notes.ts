@@ -1,8 +1,8 @@
 import { AppError, type Member, type Note, type NoteInput } from '../backend/types';
-import { formatShortDay, isDateKey } from '../lib/dates';
+import { dateKey, formatShortDay, isDateKey } from '../lib/dates';
 
 export const MAX_NOTE_TEXT = 100;
-/** 가족이 남겨 둘 수 있는 메모의 수 */
+/** 홈에 함께 둘 수 있는 메모의 수(내린 메모는 세지 않는다) */
 export const MAX_NOTES = 30;
 /** 홈에서 한 줄로 보여 주는 메모의 수. 넘는 것은 접어 둔다. */
 export const NOTE_LINES = 5;
@@ -33,11 +33,39 @@ export function isNoteExpired(note: Note, today: string): boolean {
   return note.until !== '' && note.until < today;
 }
 
-/** 이 사람의 홈에 보일 메모: 내가 썼거나 나에게 온 것 중 아직 사라지지 않은 것. 새 것부터 */
+/** 홈에 떠 있는 메모인지: 내리지 않았고 사라질 날짜도 지나지 않았다 */
+export function isNoteOnHome(note: Note, today: string): boolean {
+  return note.hiddenAt === 0 && !isNoteExpired(note, today);
+}
+
+/** 홈에 떠 있는 메모의 수 */
+export function activeNoteCount(notes: Note[], today: string): number {
+  return notes.filter((note) => isNoteOnHome(note, today)).length;
+}
+
+/** 이 사람의 홈에 보일 메모: 내가 썼거나 나에게 온 것 중 홈에 떠 있는 것. 새 것부터 */
 export function visibleNotes(notes: Note[], uid: string, today: string): Note[] {
   return notes
-    .filter((note) => !isNoteExpired(note, today) && (note.createdBy === uid || isNoteFor(note, uid)))
+    .filter((note) => isNoteOnHome(note, today) && (note.createdBy === uid || isNoteFor(note, uid)))
     .sort((a, b) => b.createdAt - a.createdAt);
+}
+
+/** 기록(캘린더)에서 볼 수 있는 메모인지: 쓴 사람, 받은 사람, 그리고 부모 */
+export function canSeeNoteRecord(note: Note, uid: string, isParent: boolean): boolean {
+  return isParent || note.createdBy === uid || isNoteFor(note, uid);
+}
+
+/** 메모를 남긴 날(YYYY-MM-DD) */
+export const noteDay = (note: Note): string => dateKey(new Date(note.createdAt));
+
+/** 그날 남긴 메모 중 이 사람이 볼 수 있는 것. 먼저 쓴 것부터 */
+export function notesOnDay(notes: Note[], day: string, uid: string, isParent: boolean): Note[] {
+  return notes.filter((note) => noteDay(note) === day && canSeeNoteRecord(note, uid, isParent)).sort((a, b) => a.createdAt - b.createdAt);
+}
+
+/** 이 사람이 볼 수 있는 메모가 있는 날들(달력의 점) */
+export function noteDays(notes: Note[], uid: string, isParent: boolean): Set<string> {
+  return new Set(notes.filter((note) => canSeeNoteRecord(note, uid, isParent)).map(noteDay));
 }
 
 /** 내가 아직 확인하지 않은, 남이 보낸 메모인지 */
@@ -72,7 +100,7 @@ export function noteReceiptText(note: Note, members: Member[]): string {
     .join(' · ');
 }
 
-/** 고치기와 지우기는 쓴 사람과 부모만 */
+/** 고치기와 (홈에서) 지우기는 쓴 사람과 부모만 */
 export function canEditNote(note: Note, uid: string, isParent: boolean): boolean {
   return isParent || note.createdBy === uid;
 }

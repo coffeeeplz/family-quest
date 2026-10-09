@@ -7,7 +7,7 @@ import { NOTE_LINES, canEditNote, isUnreadFor, noteReceiptText, noteTargetText, 
 import { formatWhen } from '../../lib/dates';
 import { Avatar, Icon } from '../../ui/Sprite';
 import { Button, Fold, Sheet } from '../../ui/kit';
-import { useAction } from '../../ui/toast';
+import { useAction, useToast } from '../../ui/toast';
 import { NoteSheet } from './NoteSheet';
 import { useNotes } from './useNotes';
 
@@ -23,7 +23,19 @@ export function NotesBlock() {
   const { today } = useFamilyData();
   const { notes, failed } = useNotes();
   const { busy, run } = useAction();
+  const notify = useToast();
   const [open, setOpen] = useState<Open>(null);
+
+  /** 지우기 = 홈에서 내리기. 기록(캘린더)에는 남고, 잠깐 동안 되돌릴 수 있다. */
+  async function remove(note: Note) {
+    const ok = await run(() => backend.hideNote(family.id, note.id, true));
+    if (!ok) return;
+    setOpen(null);
+    notify('메모를 지웠어요. 캘린더에는 남아요.', {
+      label: '되돌리기',
+      run: () => void run(() => backend.hideNote(family.id, note.id, false), '메모를 되돌렸어요.'),
+    });
+  }
 
   const mine = visibleNotes(notes, me.uid, today);
   const unread = mine.filter((note) => isUnreadFor(note, me.uid));
@@ -109,9 +121,14 @@ export function NotesBlock() {
             {noteReceiptText(viewing, members) ? ` · ${noteReceiptText(viewing, members)}` : ''}
           </p>
           {canEditNote(viewing, me.uid, isParent) ? (
-            <Button big block onClick={() => setOpen({ kind: 'edit', note: viewing })}>
-              고치거나 지우기
-            </Button>
+            <div className="action-row">
+              <Button big onClick={() => setOpen({ kind: 'edit', note: viewing })}>
+                고치기
+              </Button>
+              <Button tone="plain" big disabled={busy} onClick={() => void remove(viewing)}>
+                지우기
+              </Button>
+            </div>
           ) : (
             <p className="t-cap">메모는 쓴 사람과 부모님만 고치거나 지울 수 있어요.</p>
           )}

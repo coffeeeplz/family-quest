@@ -175,7 +175,8 @@ service cloud.firestore {
       return d.text is string && d.text.size() > 0 && d.text.size() <= 100
         && d.toUids is list && d.toUids.size() <= 30
         && d.until is string && d.until.size() <= 10
-        && d.readBy is list && d.readBy.size() <= 30;
+        && d.readBy is list && d.readBy.size() <= 30
+        && (!('hiddenAt' in d) || d.hiddenAt is int);
     }
 
     // 메모를 받은 사람이 "확인했어요"를 누르는 변경: 확인한 사람 목록에 자기만 더할 수 있다.
@@ -429,8 +430,8 @@ service cloud.firestore {
         allow update: if isMember(fid) && validNote()
           && request.resource.data.createdBy == resource.data.createdBy
           && (resource.data.createdBy == request.auth.uid || isParent(fid) || noteMarkedRead());
-        allow delete: if isMember(fid)
-          && (resource.data.createdBy == request.auth.uid || isParent(fid));
+        // 메모는 가족의 기록으로 남는다. 기록에서 완전히 지우는 것은 부모만.
+        allow delete: if isParent(fid);
       }
 
       match /wishes/{wid} {

@@ -23,7 +23,6 @@ export function NoteSheet({ note, onClose }: Props) {
   const [toUids, setToUids] = useState<string[]>(note?.toUids ?? []);
   const [dated, setDated] = useState(Boolean(note?.until));
   const [until, setUntil] = useState(note?.until || today);
-  const [confirmDelete, setConfirmDelete] = useState(false);
 
   // 받을 사람은 메모를 쓴 사람을 뺀 가족
   const authorUid = note?.createdBy ?? me.uid;
@@ -35,12 +34,6 @@ export function NoteSheet({ note, onClose }: Props) {
     const ok = note
       ? await run(() => backend.updateNote(family.id, note.id, input), '메모를 고쳤어요.')
       : await run(() => backend.createNote(family.id, input, me.uid), '메모를 남겼어요.');
-    if (ok) onClose();
-  }
-
-  async function remove() {
-    if (!note) return;
-    const ok = await run(() => backend.deleteNote(family.id, note.id), '메모를 지웠어요.');
     if (ok) onClose();
   }
 
@@ -86,7 +79,7 @@ export function NoteSheet({ note, onClose }: Props) {
         </div>
       </FieldGroup>
       {dated && (
-        <Field label="이날까지 보이고 사라져요">
+        <Field label="이날까지 홈에 보여요(캘린더에는 남아요)">
           {(id) => <input id={id} className="input" type="date" value={until} min={today} onChange={(event) => setUntil(event.target.value)} />}
         </Field>
       )}
@@ -95,16 +88,6 @@ export function NoteSheet({ note, onClose }: Props) {
         {note ? '고친 내용 저장하기' : '메모 남기기'}
       </Button>
       {note && <p className="t-cap center">내용을 고치면 받은 사람이 다시 확인해요.</p>}
-      {note &&
-        (confirmDelete ? (
-          <Button tone="plain" big block disabled={busy} onClick={() => void remove()}>
-            정말 지울까요? 한 번 더 누르면 지워요
-          </Button>
-        ) : (
-          <button type="button" className="link" onClick={() => setConfirmDelete(true)}>
-            이 메모 지우기
-          </button>
-        ))}
       <Button tone="plain" big block onClick={onClose}>
         닫기
       </Button>

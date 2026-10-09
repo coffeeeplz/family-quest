@@ -523,6 +523,24 @@ textarea.input {
   text-align: center;
   z-index: 20;
 }
+.toast.with-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 6px 6px 14px;
+  text-align: left;
+}
+.toast-action {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  background: var(--yellow);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  flex-shrink: 0;
+}
 
 /* 축하 장면: 코인 획득, 목표 달성, 보상 획득 */
 .celebrate {
@@ -1143,6 +1161,20 @@ a.chip {
   align-items: center;
   gap: 4px;
 }
+.cal-day {
+  position: relative;
+  padding-top: 7px;
+}
+/* 메모가 있는 날: 숫자 위의 작은 점 */
+.cal-day .memo-dot {
+  position: absolute;
+  top: 1px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  background: var(--ink);
+}
 .cal-day .num {
   min-width: 24px;
   padding: 2px 0;
@@ -1208,6 +1240,9 @@ a.chip {
 }
 .cal-item .card-main > span {
   display: block;
+}
+.cal-item.memo .note-text {
+  white-space: normal;
 }
 
 /* 버튼 모서리에 붙는 작은 표시(받을 코인 등) */

@@ -10,6 +10,9 @@ import { colorHex } from '../../lib/sprites';
 import { Avatar, Icon } from '../../ui/Sprite';
 import { Button, CoinInline, Sheet } from '../../ui/kit';
 import { useSwipe } from '../../ui/useSwipe';
+import { noteDays } from '../../domain/notes';
+import { DayNotes } from '../notes/DayNotes';
+import { useNotes } from '../notes/useNotes';
 import { EventSheet } from './EventSheet';
 import { useEvents } from './useEvents';
 
@@ -33,9 +36,11 @@ type Open = { kind: 'new' } | { kind: 'event'; event: CalendarEvent } | { kind: 
  */
 export function CalendarPage() {
   const backend = useBackend();
-  const { members, isParent } = useSession();
+  const { me, members, isParent } = useSession();
   const { today, quests } = useFamilyData();
   const { events, failed } = useEvents();
+  const { notes } = useNotes();
+  const memoDays = useMemo(() => noteDays(notes, me.uid, isParent), [notes, me.uid, isParent]);
   const [view, setView] = useState(() => ({ year: Number(today.slice(0, 4)), month: Number(today.slice(5, 7)) }));
   const [selected, setSelected] = useState(today);
   const [whoFilter, setWhoFilter] = useState('all');
@@ -154,9 +159,11 @@ export function CalendarPage() {
               else if (weekday === 6) classes.push('sat');
               if (day === today) classes.push('today');
               const count = occurrences.length + due.length;
-              const label = `${formatDay(day)}${dayHoliday ? `, ${dayHoliday}` : ''}${count > 0 ? `, 일정 ${count}개` : ''}`;
+              const hasMemo = memoDays.has(day);
+              const label = `${formatDay(day)}${dayHoliday ? `, ${dayHoliday}` : ''}${count > 0 ? `, 일정 ${count}개` : ''}${hasMemo ? ', 메모 있음' : ''}`;
               return (
                 <button key={day} type="button" role="gridcell" className={classes.join(' ')} aria-label={label} aria-selected={day === selected} onClick={() => setSelected(day)}>
+                  {hasMemo && <i className="memo-dot" aria-hidden="true" />}
                   <span className="num">{parseDateKey(day).getDate()}</span>
                   <span className="dots" aria-hidden="true">
                     {occurrences.slice(0, MAX_DOTS).map((o) => (
@@ -232,6 +239,8 @@ export function CalendarPage() {
           );
         })}
       </section>
+
+      <DayNotes day={selected} notes={notes} />
 
       {open?.kind === 'menu' && (
         <Sheet title="캘린더 메뉴" onClose={() => setOpen(null)}>

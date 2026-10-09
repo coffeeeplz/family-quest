@@ -147,7 +147,7 @@ try {
   check('글자 수 표시', await noteForm.getByText(`${noteText.length}/100자`).isVisible());
   await noteForm.getByRole('button', { name: '아빠' }).click();
   await noteForm.getByRole('radio', { name: '날짜 정하기' }).click();
-  check('사라질 날짜를 정할 수 있음(기본은 오늘)', (await kid.getByLabel('이날까지 보이고 사라져요').inputValue()) === new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10));
+  check('사라질 날짜를 정할 수 있음(기본은 오늘)', (await kid.getByLabel('이날까지 홈에 보여요(캘린더에는 남아요)').inputValue()) === new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10));
   await noteForm.getByRole('radio', { name: '지울 때까지' }).click();
   await kid.locator('.toast').waitFor({ state: 'detached', timeout: 6000 }).catch(() => {});
   await shot(kid, '64-note-form');
@@ -240,15 +240,24 @@ try {
   check('부모가 확인하면 자녀 화면에 바로 보임', (await dad.locator('.tab-count').innerText()) === '6');
   // 부모는 자녀가 쓴 메모도 고칠 수 있다. 고치면 다시 확인받는다.
   await dadNotes.getByRole('button', { name: /^딸의 메모: 준비물로 색종이/ }).click();
-  await dad.getByRole('dialog').getByRole('button', { name: '고치거나 지우기' }).click();
+  check('메모 창에 고치기와 지우기가 따로', (await dad.getByRole('dialog').getByRole('button', { name: '지우기', exact: true }).isVisible()));
+  await dad.getByRole('dialog').getByRole('button', { name: '고치기', exact: true }).click();
+  check('고치는 창에는 지우기가 없음', (await dad.getByRole('dialog').getByText('이 메모 지우기').count()) === 0);
   await dad.getByLabel('메모', { exact: true }).fill('색종이 샀어. 가방에 넣어 둘게');
   await dad.getByRole('dialog').getByRole('button', { name: '고친 내용 저장하기' }).click();
   await toast(dad, '메모를 고쳤어요');
   check('부모가 고친 메모가 자녀 화면에 반영(고친 사람은 확인한 것으로 남음)', await kidNotes.getByRole('button', { name: /^딸의 메모: 색종이 샀어/ }).getByText('아빠 확인').isVisible().catch(() => false));
+  // 지우기는 한 번에: 확인 없이 홈에서 내리고, 잠깐 '되돌리기'가 뜬다.
   await dadNotes.getByRole('button', { name: /^딸의 메모: 색종이 샀어/ }).click();
-  await dad.getByRole('dialog').getByRole('button', { name: '고치거나 지우기' }).click();
-  await dad.getByRole('dialog').getByRole('button', { name: '이 메모 지우기' }).click();
-  await dad.getByRole('dialog').getByRole('button', { name: /정말 지울까요/ }).click();
+  await dad.getByRole('dialog').getByRole('button', { name: '지우기', exact: true }).click();
+  await toast(dad, '메모를 지웠어요');
+  await dadNotes.getByRole('button', { name: /^딸의 메모/ }).waitFor({ state: 'detached' });
+  await shot(dad, '15b-note-undo');
+  await dad.locator('.toast').getByRole('button', { name: '되돌리기' }).click();
+  await dadNotes.getByRole('button', { name: /^딸의 메모: 색종이 샀어/ }).waitFor();
+  check('지운 메모를 되돌리기로 다시 홈에', true);
+  await dadNotes.getByRole('button', { name: /^딸의 메모: 색종이 샀어/ }).click();
+  await dad.getByRole('dialog').getByRole('button', { name: '지우기', exact: true }).click();
   await dadNotes.getByRole('button', { name: /^딸의 메모/ }).waitFor({ state: 'detached' });
   check('지운 메모는 모두의 화면에서 사라짐', (await kidNotes.getByRole('button', { name: /^딸의 메모/ }).count()) === 0);
   await toQuests(kid);
@@ -967,8 +976,17 @@ try {
   await kid.getByRole('heading', { name: `${now0.year}년 ${now0.month}월` }).waitFor();
   check('캘린더: 오늘이 골라져 있고 오늘 일정이 아래에', (await kid.locator('.cal-day.today').getAttribute('aria-selected')) === 'true' && (await dayList(kid).getByRole('button', { name: '치과, 오후 3:30' }).isVisible()));
   check('달력은 6주 이하, 한 주에 7칸', (await kid.locator('.cal-week').nth(1).locator('.cal-day').count()) === 7);
+  // 메모 기록: 메모가 있는 날은 숫자 위에 점, 고른 날 아래에 그날의 메모(홈에서 지운 것도)
+  const dayNotes = region(kid, '이날의 메모');
+  check('메모가 있는 날은 숫자 위에 점', (await kid.locator('.cal-day.today .memo-dot').count()) === 1 && (await kid.locator('.cal-day.today').getAttribute('aria-label')).includes('메모 있음'));
+  check('홈에서 지운 메모도 그날의 메모로 남음', (await dayNotes.getByRole('button', { name: /^딸의 메모: 색종이 샀어/ }).isVisible()) && (await dayNotes.getByRole('button', { name: /^엄마의 메모: 학원 끝나면/ }).getByText('홈에 있음').isVisible()));
   await kid.locator('.toast').waitFor({ state: 'detached', timeout: 6000 }).catch(() => {});
   await shot(kid, '49-calendar', true);
+  await pickDay(kid, -2);
+  await dayNotes.getByRole('button', { name: /^엄마의 메모: 현관 비밀번호/ }).click();
+  check('지난 날 메모: 자녀는 보기만(완전 삭제는 부모만)', (await kid.getByRole('dialog').getByText('엄마 → 가족 모두', { exact: false }).isVisible()) && (await kid.getByRole('dialog').getByText('기록에서 완전히 지우기').count()) === 0);
+  await shot(kid, '49b-calendar-memo');
+  await kid.getByRole('dialog').getByRole('button', { name: '닫기' }).click();
 
   // 공휴일: 해마다 같은 날과 음력 명절
   await gotoMonth(kid, now0.year, 12);

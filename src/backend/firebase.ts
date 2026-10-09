@@ -335,6 +335,7 @@ export function createFirebaseBackend(): Backend {
     createdBy: d.createdBy,
     createdAt: d.createdAt ?? 0,
     readBy: [...((d.readBy as string[] | undefined) ?? [])],
+    hiddenAt: typeof d.hiddenAt === 'number' ? d.hiddenAt : 0,
   });
 
   /** 가족 구성원의 uid 목록(메모를 받을 사람을 검사할 때 쓴다) */
@@ -1211,7 +1212,7 @@ export function createFirebaseBackend(): Backend {
       guard(async () => {
         const clean = cleanNoteInput(input, await readMemberUids(familyId), byUid, dateKey());
         const ref = doc(notesCol(familyId));
-        await setDoc(ref, { ...clean, createdBy: byUid, createdAt: Date.now(), readBy: [] });
+        await setDoc(ref, { ...clean, createdBy: byUid, createdAt: Date.now(), readBy: [], hiddenAt: 0 });
         return ref.id;
       }),
 
@@ -1230,6 +1231,11 @@ export function createFirebaseBackend(): Backend {
     markNoteRead: (familyId, noteId, uid) =>
       guard(async () => {
         await updateDoc(doc(notesCol(familyId), noteId), { readBy: arrayUnion(uid) });
+      }),
+
+    hideNote: (familyId, noteId, hidden) =>
+      guard(async () => {
+        await updateDoc(doc(notesCol(familyId), noteId), { hiddenAt: hidden ? Date.now() : 0 });
       }),
 
     deleteNote: (familyId, noteId) => guard(() => deleteDoc(doc(notesCol(familyId), noteId))),

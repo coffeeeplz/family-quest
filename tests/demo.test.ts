@@ -803,7 +803,7 @@ describe('가족 메모', () => {
   const input = { text: '준비물로 색종이가 필요해요', toUids: ['demo-dad', 'demo-mom'], until: '' };
 
   it('부모도 자녀도 메모를 남긴다. 받는 사람에서 자기 자신은 빠진다', async () => {
-    expect(notes()).toHaveLength(2);
+    expect(notes()).toHaveLength(3) // 홈에서 내린 지난 메모 하나 포함;
     as('demo-kid');
     const id = await backend.createNote(FAMILY, { ...input, toUids: ['demo-dad', 'demo-kid', '없는사람'] }, 'demo-kid');
     expect(noteById(id)).toMatchObject({ text: '준비물로 색종이가 필요해요', toUids: ['demo-dad'], until: '', createdBy: 'demo-kid', readBy: [] });
@@ -836,19 +836,24 @@ describe('가족 메모', () => {
   it('고치기와 지우기는 쓴 사람과 부모만. 고치면 다시 확인받는다', async () => {
     as('demo-kid');
     await expect(backend.updateNote(FAMILY, 'n-clean', { text: '안 해요', toUids: [], until: '' })).rejects.toThrow('쓴 사람과 부모만');
-    await expect(backend.deleteNote(FAMILY, 'n-call')).rejects.toThrow('쓴 사람과 부모만');
+    await expect(backend.hideNote(FAMILY, 'n-call', true)).rejects.toThrow('쓴 사람과 부모만');
     const mine = await backend.createNote(FAMILY, input, 'demo-kid');
     await backend.updateNote(FAMILY, mine, { ...input, text: '색종이와 풀이 필요해요' });
     expect(noteById(mine)!.text).toBe('색종이와 풀이 필요해요');
+    // 지우기는 홈에서 내리기: 기록에는 남고 되돌릴 수 있다.
+    await backend.hideNote(FAMILY, mine, true);
+    expect(noteById(mine)!.hiddenAt).toBeGreaterThan(0);
+    await backend.hideNote(FAMILY, mine, false);
+    expect(noteById(mine)!.hiddenAt).toBe(0);
+    await expect(backend.deleteNote(FAMILY, mine)).rejects.toThrow('부모만');
     as('demo-dad');
     await backend.updateNote(FAMILY, 'n-clean', { text: '토요일 11시로 바꿔요', toUids: [], until: '' });
     expect(noteById('n-clean')).toMatchObject({ text: '토요일 11시로 바꿔요', readBy: [], createdBy: 'demo-dad' });
-    // 부모는 자녀가 쓴 메모도 고치고 지울 수 있다(쓴 사람은 그대로).
+    // 부모는 자녀가 쓴 메모도 고치고, 기록에서 완전히 지울 수 있다(쓴 사람은 그대로).
     await backend.updateNote(FAMILY, mine, { ...input, text: '색종이 샀어' });
     expect(noteById(mine)).toMatchObject({ text: '색종이 샀어', createdBy: 'demo-kid' });
     await backend.deleteNote(FAMILY, mine);
     expect(noteById(mine)).toBeUndefined();
-    as('demo-kid');
     await expect(backend.deleteNote(FAMILY, mine)).rejects.toThrow('찾을 수 없어요');
   });
 });

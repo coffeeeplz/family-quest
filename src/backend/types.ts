@@ -261,6 +261,8 @@ export interface Note extends NoteInput {
   createdAt: number;
   /** 확인한 사람들 */
   readBy: string[];
+  /** 홈에서 내린 시각(0 이면 홈에 보임). 내려도 기록으로 남아 캘린더에서 볼 수 있다. */
+  hiddenAt: number;
 }
 
 /** negotiating=가격 협상 중, agreed=합의되어 상점에 올라감, declined=부모가 거절함 */
@@ -509,6 +511,9 @@ export interface Backend {
   /** 내용을 고치면 확인 표시는 처음으로 돌아간다(고친 사람의 표시만 남는다). */
   updateNote(familyId: string, noteId: string, input: NoteInput): Promise<void>;
   markNoteRead(familyId: string, noteId: string, uid: string): Promise<void>;
+  /** 홈에서 내리거나(hidden=true) 다시 올린다. 쓴 사람과 부모만 */
+  hideNote(familyId: string, noteId: string, hidden: boolean): Promise<void>;
+  /** 기록에서도 완전히 지운다. 부모만 */
   deleteNote(familyId: string, noteId: string): Promise<void>;
 
   // 자녀의 보상 제안과 가격 협상
