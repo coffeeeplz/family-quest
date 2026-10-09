@@ -12,6 +12,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '1.11.1',
+    date: '2026-10-09',
+    items: [
+      '앱 아이콘의 숫자는 아직 확인하지 않은 것만 세요(답할 승인, 안 읽은 메모, 내 차례인 협상)',
+      '앱을 열면 휴대폰 알림창에 쌓인 가족 퀘스트 알림을 지워요',
+    ],
+  },
+  {
     version: '1.11.0',
     date: '2026-10-09',
     items: [

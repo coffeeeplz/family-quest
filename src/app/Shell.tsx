@@ -7,6 +7,7 @@ import { UpdatesPage } from '../features/more/UpdatesPage';
 import { InventoryPage } from '../features/inventory/InventoryPage';
 import { useHasNewUpdate } from '../lib/updates';
 import { PushSync } from '../features/notify/PushSync';
+import { AppBadge } from '../features/notify/AppBadge';
 import { useNotes } from '../features/notes/useNotes';
 import { useMyBoard } from '../features/quests/QuestCards';
 import { isUnreadFor, visibleNotes } from '../domain/notes';
@@ -70,6 +71,11 @@ export function Shell() {
   // 보상 제안 가운데 내가 답할 차례인 것: 부모는 홈 탭에, 자녀는 퀘스트 탭에 숫자로 보인다.
   const wishesForMe = isParent ? wishesForParent(wishes).length : splitMyWishes(wishes, me.uid, () => false).toAnswer.length;
 
+  // 앱 아이콘 숫자: 아직 확인하지 않은 것만(알려 주기만 하는 알림과 남은 퀘스트는 세지 않는다)
+  const badgeCount = isParent
+    ? pending.length + offersForParent.length + ordersForParent.length + wishesForMe + unreadNotes
+    : unreadNotes + offersForMe + wishesForMe;
+
   const tabs: TabDef[] = isParent
     ? [
         // 부모의 홈: 가족 메모와 일정, 그리고 답해야 할 승인 카드
@@ -130,6 +136,7 @@ export function Shell() {
       {!isParent && <LocationAuto />}
       <Celebrations />
       <PushSync />
+      <AppBadge count={badgeCount} />
     </Router>
   );
 }
