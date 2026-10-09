@@ -73,7 +73,7 @@ export function Shell() {
   const tabs: TabDef[] = isParent
     ? [
         // 부모의 홈: 가족 메모와 일정, 그리고 답해야 할 승인 카드
-        { to: '/home', label: '홈', icon: 'home', count: pending.length + offersForParent.length + ordersForParent.length + wishesForMe + unreadNotes },
+        { to: '/home', label: '홈', icon: 'home', count: pending.length + offersForParent.length + ordersForParent.length + wishesForMe + unreadNotes, also: ['/inventory'] },
         { to: '/quests', label: '퀘스트', icon: 'quest' },
         { to: '/calendar', label: '캘린더', icon: 'calendar' },
         { to: '/food', label: '뭐먹지', icon: 'food' },
@@ -104,6 +104,7 @@ export function Shell() {
             <Route path="/shop/new" element={<RewardFormPage />} />
             <Route path="/shop/:rewardId" element={<RewardFormPage />} />
             <Route path="/food/categories" element={<FoodCategoriesPage />} />
+            <Route path="/inventory/:uid" element={<InventoryPage />} />
           </>
         ) : (
           <>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useFamilyData } from '../../app/familyData';
 import { useBackend, useSession } from '../../app/session';
 import type { Order } from '../../backend/types';
@@ -19,15 +19,19 @@ import { useUsedOrders } from './useUsedOrders';
 export function InventoryPage() {
   const backend = useBackend();
   const navigate = useNavigate();
-  const { family, me } = useSession();
+  const { family, me, members } = useSession();
   const { orders, today } = useFamilyData();
-  const { used } = useUsedOrders(me.uid);
+  // /inventory/:uid 는 부모가 자녀의 인벤토리를 보기만 하는 화면
+  const { uid: viewUid } = useParams();
+  const owner = members.find((m) => m.uid === (viewUid ?? me.uid)) ?? me;
+  const readOnly = owner.uid !== me.uid;
+  const { used } = useUsedOrders(owner.uid);
   const { busy, run } = useAction();
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
 
-  const groups = inventoryGroups(orders, me.uid);
-  const months = usedByMonth(used, me.uid);
+  const groups = inventoryGroups(orders, owner.uid);
+  const months = usedByMonth(used, owner.uid);
   const usedTotal = used.length;
   const opened = groups.find((group) => group.key === openKey);
   // 같은 보상이 여러 개면 먼저 받은 것부터 쓴다.
@@ -51,8 +55,8 @@ export function InventoryPage() {
       <header className="screen-head">
         <Icon name="bag" size={48} />
         <div className="grow">
-          <h1 className="t-title">인벤토리</h1>
-          <p className="t-cap">상점에서 바꾼 보상을 모아 둬요</p>
+          <h1 className="t-title">{readOnly ? `${owner.displayName}의 인벤토리` : '인벤토리'}</h1>
+          <p className="t-cap">{readOnly ? '보여 주면 보상을 주고, 자녀 휴대폰에서 사용 완료를 눌러요' : '상점에서 바꾼 보상을 모아 둬요'}</p>
         </div>
       </header>
 
@@ -61,9 +65,11 @@ export function InventoryPage() {
         {groups.length === 0 ? (
           <>
             <Empty icon={<Icon name="bag" size={48} />} title="아직 가진 보상이 없어요" hint="상점에서 코인으로 바꾸고 승인받으면 여기에 들어와요." />
-            <Link className="btn plain big block" to="/shop">
-              상점 가기
-            </Link>
+            {!readOnly && (
+              <Link className="btn plain big block" to="/shop">
+                상점 가기
+              </Link>
+            )}
           </>
         ) : (
           <div className="shop-grid">
@@ -78,9 +84,13 @@ export function InventoryPage() {
                   )}
                 </span>
                 <h3 className="t-body item-title center">{group.title}</h3>
-                <Button tone="mint" block aria-label={`${group.title} 쓰기`} onClick={() => setOpenKey(group.key)}>
-                  쓰기
-                </Button>
+                {readOnly ? (
+                  <p className="t-cap">{group.orders.length}개 가지고 있어요</p>
+                ) : (
+                  <Button tone="mint" block aria-label={`${group.title} 쓰기`} onClick={() => setOpenKey(group.key)}>
+                    쓰기
+                  </Button>
+                )}
               </article>
             ))}
           </div>
@@ -106,7 +116,7 @@ export function InventoryPage() {
         ))}
       </Fold>
 
-      {opened && ticket && (
+      {!readOnly && opened && ticket && (
         <Sheet title="사용권" onClose={close}>
           <div className="ticket">
             <Icon name={ticket.icon as IconName} size={96} />
@@ -136,25 +146,5 @@ export function InventoryPage() {
         </Sheet>
       )}
     </main>
-  );
-}
-
-/** 부모가 자녀 현황에서 보는 자녀의 인벤토리(보기만) */
-export function InventorySummary({ uid }: { uid: string }) {
-  const { orders } = useFamilyData();
-  const groups = inventoryGroups(orders, uid);
-  const total = groups.reduce((sum, group) => sum + group.orders.length, 0);
-  return (
-    <Fold title="인벤토리" summary={total > 0 ? `${total}개` : '없음'}>
-      {groups.length === 0 && <p className="t-cap">가지고 있는 보상이 없어요.</p>}
-      {groups.map((group) => (
-        <div key={group.key} className="px history-row">
-          <Icon name={group.icon as IconName} size={24} />
-          <span className="t-body item-title grow">{group.title}</span>
-          <span className="t-capb">×{group.orders.length}</span>
-        </div>
-      ))}
-      <p className="t-cap">자녀가 보여 주면 보상을 주고, 자녀 휴대폰에서 사용 완료를 누르면 돼요.</p>
-    </Fold>
   );
 }

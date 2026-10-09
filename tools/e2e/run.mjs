@@ -286,6 +286,7 @@ try {
   check('자녀 현황: 놓친 일과 다가오는 일', (await region(dad, '놓친 일').locator('article').count()) === 1 && (await region(dad, '다가오는 일').getByText('준비물 챙기기').isVisible()));
   check('자녀 현황: 목표 저금통과 최근 기록', (await region(dad, '목표 저금통').getByText('앞으로 20코인').isVisible()) && (await region(dad, '최근 코인 기록').locator('.history-row').count()) === 3);
   check('자녀 현황은 읽기 전용(완료 버튼 없음)', (await status.getByRole('button', { name: /했어요/ }).count()) === 0);
+  check('자녀 현황 맨 위에 자녀의 인벤토리 버튼', await region(dad, '딸 요약').getByRole('link', { name: '딸의 인벤토리' }).isVisible());
   await dad.waitForTimeout(300); // 넘어오는 움직임이 끝난 뒤에 찍는다
   await shot(dad, '27-parent-kid-status', true);
   await swipe(dad, -160);
@@ -600,6 +601,13 @@ try {
   await kid.getByRole('heading', { name: '보상 목록' }).waitFor();
   await expectCoins(kid, base - 50, '쓸 때는 코인이 다시 빠지지 않음');
   check('돌아가기로 상점에, 인벤토리 숫자 사라짐', await kid.getByRole('link', { name: '인벤토리', exact: true }).isVisible());
+  // 부모는 자녀 현황의 가방 버튼으로 자녀의 인벤토리를 본다(보기만).
+  await toHome(dad);
+  await dad.getByRole('tab', { name: '딸 현황' }).click();
+  await region(dad, '딸 요약').getByRole('link', { name: '딸의 인벤토리' }).click();
+  await dad.getByRole('heading', { name: '딸의 인벤토리' }).waitFor();
+  check('부모가 보는 자녀 인벤토리: 지난 기록, 쓰기 버튼 없음', (await dad.getByRole('button', { name: /^지난 기록/ }).innerText()).includes('1개 사용') && (await dad.getByRole('button', { name: /쓰기$/ }).count()) === 0);
+  await toHome(dad);
   await shot(kid, '23-kid-shop-after', false);
 
   // 목표 저금통 바꾸기

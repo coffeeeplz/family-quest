@@ -12,6 +12,11 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '1.9.1',
+    date: '2026-10-09',
+    items: ['부모는 자녀 현황 맨 위의 가방 버튼으로 자녀의 인벤토리를 바로 볼 수 있어요(보기만)'],
+  },
+  {
     version: '1.9.0',
     date: '2026-10-09',
     items: [

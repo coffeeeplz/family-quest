@@ -11,7 +11,7 @@ import type { IconName } from '../../lib/sprites';
 import { AvatarFrame, Icon } from '../../ui/Sprite';
 import { Button, CoinInline, CoinPill, Fold } from '../../ui/kit';
 import { KidLocation } from '../location/KidLocation';
-import { InventorySummary } from '../inventory/InventoryPage';
+import { InventoryButton } from '../inventory/InventoryButton';
 import { GoalCard } from '../shop/GoalCard';
 
 const STATE_TEXT: Record<BoardItem['state'], string> = {
@@ -92,7 +92,10 @@ export function KidStatus({ kid, onGift }: Props) {
             </p>
           )}
         </div>
-        <CoinPill amount={kid.coins} />
+        <div className="head-side">
+          <CoinPill amount={kid.coins} />
+          <InventoryButton compact uid={kid.uid} name={kid.displayName} />
+        </div>
       </section>
 
       {reserved > 0 && (
@@ -150,8 +153,6 @@ export function KidStatus({ kid, onGift }: Props) {
           <GoalCard member={kid} />
         </Fold>
       )}
-
-      <InventorySummary uid={kid.uid} />
 
       <Fold title="최근 코인 기록" summary={recent.length > 0 ? `${recent.length}건` : '없음'}>
         {recent.length === 0 && <p className="t-cap">아직 기록이 없어요.</p>}
