@@ -1,0 +1,382 @@
+[
+  {
+    "id": "basic",
+    "name": "기본 팩",
+    "price": 50,
+    "stickers": [
+      {
+        "id": "heart",
+        "label": "하트",
+        "rows": [
+          "................",
+          "...KKK....KKK...",
+          "..KRRRK..KRRRK..",
+          ".KRRWRRKKRRRRRK.",
+          ".KRWRRRRRRRRRRK.",
+          ".KRRRRRRRRRRRRK.",
+          ".KRRRRRRRRRRRRK.",
+          "..KRRRRRRRRRRK..",
+          "...KRRRRRRRRK...",
+          "....KRRRRRRK....",
+          ".....KRRRRK.....",
+          "......KRRK......",
+          ".......KK.......",
+          "................",
+          "................",
+          "................"
+        ]
+      },
+      {
+        "id": "good",
+        "label": "좋아요",
+        "rows": [
+          "................",
+          "......KK........",
+          ".....KCCK.......",
+          ".....KCCK.......",
+          "....KCCCK.......",
+          "...KCCCCKKKKKK..",
+          "KKKKCCCCCCCCCCK.",
+          "KBBKCCCCCKKKKK..",
+          "KBBKCCCCCCCCCCK.",
+          "KBBKCCCCCKKKKK..",
+          "KBBKCCCCCCCCCK..",
+          "KBBKCCCCCKKKK...",
+          "KBBKCCCCCCCCK...",
+          "KKKKKKKKKKKK....",
+          "................",
+          "................"
+        ]
+      },
+      {
+        "id": "laugh",
+        "label": "웃음",
+        "rows": [
+          "................",
+          ".....KKKKKK.....",
+          "...KKYYYYYYKK...",
+          "..KYYYYYYYYYYK..",
+          ".KYYYYYYYYYYYYK.",
+          ".KYYYKYYYYKYYYK.",
+          "KYYYKYKYYKYKYYYK",
+          "KYYYYYYYYYYYYYYK",
+          "KYYKKKKKKKKKKYYK",
+          "KYYKRRRRRRRRKYYK",
+          ".KYYKRRRRRRKYYK.",
+          ".KYYYKKKKKKYYYK.",
+          "..KYYYYYYYYYYK..",
+          "...KKYYYYYYKK...",
+          ".....KKKKKK.....",
+          "................"
+        ]
+      },
+      {
+        "id": "cry",
+        "label": "엉엉",
+        "rows": [
+          "................",
+          ".....KKKKKK.....",
+          "...KKYYYYYYKK...",
+          "..KYYYYYYYYYYK..",
+          ".KYYYYYYYYYYYYK.",
+          ".KYKKKYYYYKKKYK.",
+          "KYYYYYYYYYYYYYYK",
+          "KYBYYYYYYYYYYBYK",
+          "KYBYYYKKKKYYYBYK",
+          "KYBYYKYYYYKYYBYK",
+          ".KBYYYYYYYYYYBK.",
+          ".KYYYYYYYYYYYYK.",
+          "..KYYYYYYYYYYK..",
+          "...KKYYYYYYKK...",
+          ".....KKKKKK.....",
+          "................"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "animal",
+    "name": "동물 팩",
+    "price": 100,
+    "stickers": [
+      {
+        "id": "cat",
+        "label": "고양이",
+        "rows": [
+          "................",
+          ".KK..........KK.",
+          ".KOK........KOK.",
+          ".KOOKKKKKKKKOOK.",
+          ".KOOOOOOOOOOOOK.",
+          "KOOOOOOOOOOOOOOK",
+          "KOOKKOOOOOOKKOOK",
+          "KOOKKOOOOOOKKOOK",
+          "KOOOOOOKKOOOOOOK",
+          "KPPOOOOOOOOOOPPK",
+          "KOOOOKOOOOKOOOOK",
+          ".KOOOOKKKKOOOOK.",
+          "..KOOOOOOOOOOK..",
+          "...KKKKKKKKKK...",
+          "................",
+          "................"
+        ]
+      },
+      {
+        "id": "dog",
+        "label": "강아지",
+        "rows": [
+          "................",
+          "...KKKKKKKKKK...",
+          ".KKNNNNNNNNNNKK.",
+          "KGGKNNNNNNNNKGGK",
+          "KGGKNNNNNNNNKGGK",
+          "KGGKNKKNNKKNKGGK",
+          "KGGKNKKNNKKNKGGK",
+          ".KKKNNNNNNNNKKK.",
+          "...KNNNKKNNNK...",
+          "...KNNNKKNNNK...",
+          "...KNNNNNNNNK...",
+          "...KNNKPPKNNK...",
+          "....KNNPPNNK....",
+          ".....KKKKKK.....",
+          "................",
+          "................"
+        ]
+      },
+      {
+        "id": "rabbit",
+        "label": "토끼",
+        "rows": [
+          "....KKK..KKK....",
+          "....KPK..KPK....",
+          "....KPK..KPK....",
+          "....KPK..KPK....",
+          "...KKKKKKKKKK...",
+          "..KWWWWWWWWWWK..",
+          ".KWWWWWWWWWWWWK.",
+          ".KWWKKWWWWKKWWK.",
+          ".KWWKKWWWWKKWWK.",
+          ".KPPWWWKKWWWPPK.",
+          ".KWWWWKWWKWWWWK.",
+          "..KWWWWWWWWWWK..",
+          "...KKKKKKKKKK...",
+          "................",
+          "................",
+          "................"
+        ]
+      },
+      {
+        "id": "chick",
+        "label": "병아리",
+        "rows": [
+          "................",
+          ".......K........",
+          "......KYK.......",
+          ".....KKKKKK.....",
+          "...KKYYYYYYKK...",
+          "..KYYYYYYYYYYK..",
+          "..KYYKYYYYKYYK..",
+          ".KYYYKYYYYKYYYK.",
+          ".KYYYYYOOYYYYYK.",
+          ".KYYYYOOOOYYYYK.",
+          "KYYYYYYOOYYYYYYK",
+          "KYYYYYYYYYYYYYYK",
+          ".KYYYYYYYYYYYYK.",
+          "..KKYYYYYYYYKK..",
+          "....KKKKKKKK....",
+          ".....O....O....."
+        ]
+      }
+    ]
+  },
+  {
+    "id": "food",
+    "name": "음식 팩",
+    "price": 100,
+    "stickers": [
+      {
+        "id": "chicken",
+        "label": "치킨",
+        "rows": [
+          "................",
+          "......KKKKK.....",
+          "....KKNNNNNK....",
+          "...KNNONNNNNK...",
+          "..KNNOONNNNNNK..",
+          "..KNNNNNNNNNNK..",
+          "..KNNNNNNNNNNK..",
+          "...KNNNNNNNNK...",
+          "....KNNNNNNK....",
+          ".....KKNNKK.....",
+          "......KWWK......",
+          "......KWWK......",
+          ".....KWWWWK.....",
+          ".....KWKKWK.....",
+          "......K..K......",
+          "................"
+        ]
+      },
+      {
+        "id": "pizza",
+        "label": "피자",
+        "rows": [
+          "................",
+          ".KKKKKKKKKKKKKK.",
+          ".KOOOOOOOOOOOOK.",
+          ".KKKKKKKKKKKKKK.",
+          "..KYYYYYYYYYYK..",
+          "..KYRRYYYYRRYK..",
+          "...KRRYYYYRRK...",
+          "...KYYYYYYYYK...",
+          "....KYYRRYYK....",
+          "....KYYRRYYK....",
+          ".....KYYYYK.....",
+          ".....KYYYYK.....",
+          "......KYYK......",
+          ".......KK.......",
+          "................",
+          "................"
+        ]
+      },
+      {
+        "id": "icecream",
+        "label": "아이스크림",
+        "rows": [
+          "................",
+          ".....KKKKKK.....",
+          "....KPPPPPPK....",
+          "...KPPWPPPPPK...",
+          "...KPPPPPPPPK...",
+          "...KKKKKKKKKK...",
+          "...KOYOYOYOYK...",
+          "....KYOYOYOK....",
+          "....KOYOYOYK....",
+          ".....KYOYOK.....",
+          ".....KOYOYK.....",
+          "......KYOK......",
+          "......KOYK......",
+          ".......KK.......",
+          "................",
+          "................"
+        ]
+      },
+      {
+        "id": "donut",
+        "label": "도넛",
+        "rows": [
+          "................",
+          ".....KKKKKK.....",
+          "...KKPPPPPPKK...",
+          "..KPPYPPPBPPPK..",
+          ".KPPPPPPPPPYPPK.",
+          ".KPBPPKKKKPPPPK.",
+          "KPPPPK....KPPRPK",
+          "KPPYPK....KPPPPK",
+          "KOPPPPKKKKPPPPOK",
+          "KOOPPPPPPPPPPOOK",
+          ".KOOOPPPPPPOOOK.",
+          ".KOOOOOOOOOOOOK.",
+          "..KKOOOOOOOOKK..",
+          "....KKKKKKKK....",
+          "................",
+          "................"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "cheer",
+    "name": "응원 팩",
+    "price": 100,
+    "stickers": [
+      {
+        "id": "best",
+        "label": "최고",
+        "rows": [
+          "................",
+          "...KKKKKKKKKK...",
+          ".KKKYWYYYYYYKKK.",
+          "K.KKYWYYYYYYKK.K",
+          "K..KYYYYYYYYK..K",
+          ".K.KYYYYYYYYK.K.",
+          "..KKYYYYYYYYKK..",
+          "....KYYYYYYK....",
+          ".....KYYYYK.....",
+          "......KYYK......",
+          "......KYYK......",
+          ".....KKKKKK.....",
+          "....KOOOOOOK....",
+          "....KKKKKKKK....",
+          "................",
+          "................"
+        ]
+      },
+      {
+        "id": "star",
+        "label": "잘했어",
+        "rows": [
+          "................",
+          ".......KK.......",
+          "......KYYK......",
+          "......KYYK......",
+          ".....KYYYYK.....",
+          "KKKKKKYYYYKKKKKK",
+          ".KYYYYYYYYYYYYK.",
+          "..KYYYKYYKYYYK..",
+          "...KYYKYYKYYK...",
+          "....KYYYYYYK....",
+          "...KYYYYYYYYK...",
+          "..KYYYKKKKYYYK..",
+          "..KYYK....KYYK..",
+          ".KYKK......KKYK.",
+          ".KK..........KK.",
+          "................"
+        ]
+      },
+      {
+        "id": "thanks",
+        "label": "고마워",
+        "rows": [
+          "................",
+          "................",
+          "................",
+          "KKKKKKKKKKKKKKKK",
+          "KKCCCCCCCCCCCCKK",
+          "KCKCCCCCCCCCCKCK",
+          "KCCKKCCCCCCKKCCK",
+          "KCCCCKRRRRKCCCCK",
+          "KCCCCRRRRRRCCCCK",
+          "KCCCCCRRRRCCCCCK",
+          "KCCCCCCRRCCCCCCK",
+          "KCCCCCCCCCCCCCCK",
+          "KKKKKKKKKKKKKKKK",
+          "................",
+          "................",
+          "................"
+        ]
+      },
+      {
+        "id": "sorry",
+        "label": "미안해",
+        "rows": [
+          ".............K..",
+          ".....KKKKKK.KBK.",
+          "...KKYYYYYYKKBBK",
+          "..KYYYYYYYYYKKK.",
+          ".KYYYYYYYYYYYYK.",
+          ".KYYKYYYYYYKYYK.",
+          "KYYYKYYYYYYKYYYK",
+          "KYYYYYYYYYYYYYYK",
+          "KYPPYYYYYYYYPPYK",
+          "KYYYYKYKYKYYYYYK",
+          ".KYYYYYKYKYYYYK.",
+          ".KYYYYYYYYYYYYK.",
+          "..KYYYYYYYYYYK..",
+          "...KKYYYYYYKK...",
+          ".....KKKKKK.....",
+          "................"
+        ]
+      }
+    ]
+  }
+]

@@ -7,6 +7,7 @@ import { NOTE_LINES, canEditNote, isUnreadFor, noteReceiptText, noteTargetText, 
 import { formatWhen } from '../../lib/dates';
 import { Avatar, Icon } from '../../ui/Sprite';
 import { Button, Fold, Sheet } from '../../ui/kit';
+import { Sticker } from '../../ui/Sticker';
 import { useAction, useToast } from '../../ui/toast';
 import { NoteSheet } from './NoteSheet';
 import { useNotes } from './useNotes';
@@ -55,6 +56,11 @@ export function NotesBlock() {
         {author ? <Avatar avatar={author.avatar} size={24} /> : <Icon name="log" size={24} />}
         <span className="t-capb">{nameOf(note.createdBy)}</span>
         <span className="t-cap grow">{note.text}</span>
+        {note.sticker && (
+          <span className="note-sticker">
+            <Sticker id={note.sticker} size={24} />
+          </span>
+        )}
         {stateOf(note) && <span className="t-cap note-state">{stateOf(note)}</span>}
       </button>
     );
@@ -87,6 +93,11 @@ export function NotesBlock() {
                 </p>
                 <p className="t-body note-text">{note.text}</p>
               </div>
+              {note.sticker && (
+                <span className="note-sticker">
+                  <Sticker id={note.sticker} size={64} label />
+                </span>
+              )}
             </div>
             <div className="stack" style={{ marginTop: 14 }}>
               <Button tone="mint" block disabled={busy} aria-label={`${nameOf(note.createdBy)}의 메모 확인했어요`} onClick={() => void run(() => backend.markNoteRead(family.id, note.id, me.uid))}>
@@ -115,6 +126,11 @@ export function NotesBlock() {
               </p>
               <p className="t-body note-text">{viewing.text}</p>
             </div>
+            {viewing.sticker && (
+              <span className="note-sticker">
+                <Sticker id={viewing.sticker} size={64} label />
+              </span>
+            )}
           </div>
           <p className="t-cap">
             {noteUntilText(viewing, today)}

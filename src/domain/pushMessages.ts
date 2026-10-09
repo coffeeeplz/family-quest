@@ -107,7 +107,12 @@ export function noteNotices(nid: string, note: Doc | undefined, authorName: stri
 }
 
 /** 칭찬 코인(퀘스트와 상관없이 부모가 바로 준 코인) */
-export function ledgerNotices(lid: string, entry: Doc | undefined): Notice[] {
+export function ledgerNotices(lid: string, entry: Doc | undefined, buyerName = '자녀'): Notice[] {
+  // 앱 안 상품(스티커)은 승인 없이 사므로, 샀다는 것을 부모에게 알린다.
+  if (entry?.type === 'sticker') {
+    const what = String(entry.memo ?? '스티커').replace(/^스티커: /, '');
+    return [{ to: 'parents', type: 'shop', msg: { title: '스티커 구매', body: clip(`${buyerName}이(가) ${what}을(를) 샀어요 (${-Number(entry.amount)}코인)`), url: '#/home', tag: `sticker-${lid}` } }];
+  }
   if (!entry || entry.type !== 'gift' || !(Number(entry.amount) > 0)) return [];
   return [{ to: [entry.uid], type: 'result', msg: { title: `칭찬 코인 +${entry.amount}`, body: clip(entry.note ? `"${entry.note}"` : String(entry.memo ?? '칭찬 코인')), url: '#/home', tag: `gift-${lid}` } }];
 }

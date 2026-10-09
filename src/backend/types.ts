@@ -85,6 +85,8 @@ export interface Member {
   /** 목표 저금통: 모으고 있는 보상의 id */
   goalRewardId: string | null;
   checkin: Checkin | null;
+  /** 산 스티커 팩의 id(자녀). 부모는 사지 않아도 모든 스티커를 쓴다. */
+  stickerPacks: string[];
 }
 
 export type Repeat =
@@ -133,7 +135,14 @@ export interface Run {
 }
 
 /** quest=퀘스트 완료, bonus=연속 달성 보너스, gift=칭찬 코인, reward=상점 사용, checkin=위치 공유, adjust=조정 */
-export type LedgerType = 'quest' | 'bonus' | 'gift' | 'reward' | 'checkin' | 'adjust';
+export type LedgerType = 'quest' | 'bonus' | 'gift' | 'reward' | 'checkin' | 'adjust' | 'sticker';
+
+/** 부모가 상점 관리에서 정한 스티커 팩의 가격과 숨김 */
+export interface StickerPrice {
+  packId: string;
+  price: number;
+  hidden: boolean;
+}
 
 /** 코인 장부 한 줄. 잔액은 이 내역의 합과 같아야 한다. */
 export interface LedgerEntry {
@@ -252,6 +261,8 @@ export interface NoteInput {
   toUids: string[];
   /** 이날까지 보인다(YYYY-MM-DD). 빈 문자열이면 지울 때까지 */
   until: string;
+  /** 붙인 스티커('팩id/스티커id'). 없거나 빈 문자열이면 없음 */
+  sticker?: string;
 }
 
 /** 가족 메모: 홈 화면 맨 위에 보이는 한 방향 알림. 받은 사람이 "확인했어요"를 누르면 readBy 에 들어간다. */
@@ -261,6 +272,7 @@ export interface Note extends NoteInput {
   createdAt: number;
   /** 확인한 사람들 */
   readBy: string[];
+  sticker: string;
   /** 홈에서 내린 시각(0 이면 홈에 보임). 내려도 기록으로 남아 캘린더에서 볼 수 있다. */
   hiddenAt: number;
 }
@@ -521,6 +533,11 @@ export interface Backend {
   markNoteRead(familyId: string, noteId: string, uid: string): Promise<void>;
   /** 홈에서 내리거나(hidden=true) 다시 올린다. 쓴 사람과 부모만 */
   hideNote(familyId: string, noteId: string, hidden: boolean): Promise<void>;
+  /** 스티커 팩의 가격과 숨김(부모가 정한 것) */
+  watchStickerPrices(familyId: string, cb: (prices: StickerPrice[]) => void, onError?: () => void): Unsub;
+  setStickerPrice(familyId: string, packId: string, price: number, hidden: boolean): Promise<void>;
+  /** 자녀가 스티커 팩을 코인으로 바로 산다(승인 없음, 부모에게 알림) */
+  buyStickerPack(familyId: string, uid: string, packId: string): Promise<void>;
   /** 기록에서도 완전히 지운다. 부모만 */
   deleteNote(familyId: string, noteId: string): Promise<void>;
 

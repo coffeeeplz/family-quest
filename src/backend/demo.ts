@@ -20,7 +20,8 @@ import {
 } from '../domain/settings';
 import { MAX_NOTES, activeNoteCount, canEditNote, cleanNoteInput, isNoteFor } from '../domain/notes';
 import { normalizePushPrefs, type PushPrefs } from '../domain/push';
-import { MAX_REWARDS, buyBlockReason, cleanRewardInput } from '../domain/shop';
+import { MAX_REWARDS, availableCoins, buyBlockReason, cleanRewardInput } from '../domain/shop';
+import { MAX_STICKER_PRICE, canUsePack, findPack, findSticker, packOffer, stickerLedgerId } from '../domain/stickers';
 import { MAX_DECLINE_NOTE, MAX_OPEN_WISHES, WISH_KEEP_DAYS, canCounterWish, checkWishTurn, cleanWishInput, cleanWishPrice, openWishCount } from '../domain/wishes';
 import { addDays, dateKey, dayNumber, parseDateKey } from '../lib/dates';
 import {
@@ -43,6 +44,7 @@ import {
   type Quest,
   type Reward,
   type Run,
+  type StickerPrice,
   type Unsub,
   type UserProfile,
   type Wish,
@@ -57,7 +59,7 @@ interface DemoUser {
 }
 
 interface DemoState {
-  v: 11;
+  v: 12;
   currentUid: string | null;
   users: Record<string, DemoUser>;
   families: Record<string, Family>;
@@ -76,6 +78,7 @@ interface DemoState {
   wishes: Record<string, Record<string, Wish>>;
   notes: Record<string, Record<string, Note>>;
   pushPrefs: Record<string, Record<string, PushPrefs>>;
+  stickerPrices: Record<string, Record<string, StickerPrice>>;
   invites: Record<string, Invite>;
 }
 
@@ -84,7 +87,7 @@ export interface KeyValueStore {
   setItem(key: string, value: string): void;
 }
 
-const STORAGE_KEY = 'family-quest-demo-v11';
+const STORAGE_KEY = 'family-quest-demo-v12';
 const FAMILY = 'demo-family';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -155,6 +158,7 @@ function seed(now: number = Date.now()): DemoState {
     streak: null,
     goalRewardId: null,
     checkin: null,
+    stickerPacks: [],
   });
 
   const event = (id: string, title: string, startDay: string, over: Partial<CalendarEvent> = {}): CalendarEvent => ({
@@ -231,7 +235,7 @@ function seed(now: number = Date.now()): DemoState {
   });
 
   return {
-    v: 11,
+    v: 12,
     currentUid: null,
     users: {
       'demo-dad': { uid: 'demo-dad', email: 'dad@example.com', label: '아빠', hint: '퀘스트를 만들고 승인해요', familyId: FAMILY },
@@ -341,13 +345,14 @@ function seed(now: number = Date.now()): DemoState {
     // 가족 메모: 딸이 아직 확인하지 않은 엄마의 메모와, 딸은 확인한 아빠의 메모
     notes: {
       [FAMILY]: {
-        'n-call': { id: 'n-call', text: '학원 끝나면 바로 전화해 줘! 오늘 저녁은 할머니 댁에서 먹어요.', toUids: ['demo-kid'], until: today, createdBy: 'demo-mom', createdAt: now - 20 * 60_000, readBy: [], hiddenAt: 0 },
-        'n-clean': { id: 'n-clean', text: '토요일 10시에 가족 대청소', toUids: [], until: '', createdBy: 'demo-dad', createdAt: now - 5 * 3_600_000, readBy: ['demo-kid'], hiddenAt: 0 },
+        'n-call': { id: 'n-call', text: '학원 끝나면 바로 전화해 줘! 오늘 저녁은 할머니 댁에서 먹어요.', toUids: ['demo-kid'], until: today, createdBy: 'demo-mom', createdAt: now - 20 * 60_000, readBy: [], hiddenAt: 0, sticker: 'animal/cat' },
+        'n-clean': { id: 'n-clean', text: '토요일 10시에 가족 대청소', toUids: [], until: '', createdBy: 'demo-dad', createdAt: now - 5 * 3_600_000, readBy: ['demo-kid'], hiddenAt: 0, sticker: '' },
         // 그저께 남겼다가 홈에서 내린 메모: 캘린더의 그날에서 볼 수 있다.
-        'n-old': { id: 'n-old', text: '현관 비밀번호 바꿨어요. 저녁에 알려 줄게요.', toUids: [], until: '', createdBy: 'demo-mom', createdAt: parseDateKey(twoDaysAgo).getTime() + 19 * 3_600_000, readBy: ['demo-dad', 'demo-kid'], hiddenAt: parseDateKey(yesterday).getTime() + 8 * 3_600_000 },
+        'n-old': { id: 'n-old', text: '현관 비밀번호 바꿨어요. 저녁에 알려 줄게요.', toUids: [], until: '', createdBy: 'demo-mom', createdAt: parseDateKey(twoDaysAgo).getTime() + 19 * 3_600_000, readBy: ['demo-dad', 'demo-kid'], hiddenAt: parseDateKey(yesterday).getTime() + 8 * 3_600_000, sticker: 'basic/good' },
       },
     },
     pushPrefs: { [FAMILY]: {} },
+    stickerPrices: { [FAMILY]: {} },
     // 자녀가 상점에 올려 달라고 제안한 보상: 부모의 답을 기다리는 중
     wishes: {
       [FAMILY]: {
@@ -400,7 +405,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       const raw = store?.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as DemoState;
-        if (parsed.v === 11) return parsed;
+        if (parsed.v === 12) return parsed;
       }
     } catch {
       // 저장소를 못 읽으면 새로 시작한다.
@@ -515,6 +520,13 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
     return member;
   }
 
+  function requireStickerOwned(familyId: string, uid: string, sticker: string) {
+    if (!sticker) return;
+    const found = findSticker(sticker);
+    const member = state.members[familyId][uid];
+    if (!found || !member || !canUsePack(member, found.pack.id)) throw new AppError('가지고 있는 스티커만 붙일 수 있어요.');
+  }
+
   function addLedger(familyId: string, entry: LedgerEntry) {
     const member = state.members[familyId][entry.uid];
     if (!member) throw new AppError('구성원을 찾을 수 없어요.');
@@ -560,7 +572,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       const id = newId('fam');
       const now = Date.now();
       state.families[id] = { id, name, createdBy: uid, createdAt: now, settings: { ...DEFAULT_SETTINGS } };
-      state.members[id] = { [uid]: { uid, role: 'parent', ...clean, coins: 0, joinedAt: now, streak: null, goalRewardId: null, checkin: null } };
+      state.members[id] = { [uid]: { uid, role: 'parent', ...clean, coins: 0, joinedAt: now, streak: null, goalRewardId: null, checkin: null, stickerPacks: [] } };
       state.quests[id] = {};
       state.runs[id] = {};
       state.ledger[id] = [];
@@ -598,6 +610,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
         streak: null,
         goalRewardId: null,
         checkin: null,
+        stickerPacks: [],
       };
       state.users[uid].familyId = invite.familyId;
       commit();
@@ -1312,6 +1325,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       requireSelf(byUid);
       requireMember(familyId);
       const clean = cleanNoteInput(input, Object.keys(state.members[familyId]), byUid, dateKey());
+      requireStickerOwned(familyId, byUid, clean.sticker);
       if (activeNoteCount(Object.values(state.notes[familyId]), dateKey()) >= MAX_NOTES) {
         throw new AppError(`홈에는 메모를 ${MAX_NOTES}개까지 둘 수 있어요. 지난 메모를 지워 주세요.`);
       }
@@ -1326,6 +1340,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       const note = requireNote(familyId, noteId);
       if (!canEditNote(note, member.uid, member.role === 'parent')) throw new AppError('메모는 쓴 사람과 부모만 고칠 수 있어요.');
       const clean = cleanNoteInput(input, Object.keys(state.members[familyId]), note.createdBy, dateKey());
+      if (clean.sticker !== note.sticker) requireStickerOwned(familyId, member.uid, clean.sticker);
       // 내용이 바뀌었으므로 다시 확인받는다(고친 사람이 이미 확인했다면 그 표시는 남긴다).
       state.notes[familyId][noteId] = { ...note, ...clean, readBy: note.readBy.filter((uid) => uid === member.uid) };
       commit();
@@ -1338,6 +1353,36 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       if (note.createdBy === uid || !isNoteFor(note, uid)) throw new AppError('나에게 온 메모만 확인할 수 있어요.');
       if (note.readBy.includes(uid)) return;
       state.notes[familyId][noteId] = { ...note, readBy: [...note.readBy, uid] };
+      commit();
+    },
+
+    watchStickerPrices(familyId, cb) {
+      return watch(() => Object.values(state.stickerPrices[familyId] ?? {}).map((p) => ({ ...p })), cb);
+    },
+
+    async setStickerPrice(familyId, packId, price, hidden) {
+      requireParent(familyId);
+      if (!findPack(packId)) throw new AppError('스티커 팩을 찾을 수 없어요.');
+      if (!Number.isInteger(price) || price < 1 || price > MAX_STICKER_PRICE) throw new AppError(`가격은 1부터 ${MAX_STICKER_PRICE} 사이로 적어 주세요.`);
+      state.stickerPrices[familyId][packId] = { packId, price, hidden };
+      commit();
+    },
+
+    async buyStickerPack(familyId, uid, packId) {
+      requireSelf(uid);
+      const member = requireMember(familyId);
+      const pack = findPack(packId);
+      if (!pack) throw new AppError('스티커 팩을 찾을 수 없어요.');
+      if (member.role === 'parent') throw new AppError('부모는 사지 않아도 모든 스티커를 쓸 수 있어요.');
+      if (member.stickerPacks.includes(packId)) throw new AppError('이미 가지고 있는 팩이에요.');
+      const offer = packOffer(pack, Object.values(state.stickerPrices[familyId] ?? {}));
+      if (offer.hidden) throw new AppError('지금은 살 수 없는 팩이에요.');
+      const free = availableCoins(member, Object.values(state.orders[familyId] ?? {}));
+      if (free < offer.price) throw new AppError(`코인이 ${offer.price - free}개 모자라요.`);
+      const id = stickerLedgerId(uid, packId);
+      addLedger(familyId, { id, uid, amount: -offer.price, type: 'sticker', refId: packId, memo: `스티커: ${pack.name}`, note: '', by: uid, at: Date.now() });
+      const after = state.members[familyId][uid];
+      state.members[familyId][uid] = { ...after, stickerPacks: [...after.stickerPacks, packId] };
       commit();
     },
 

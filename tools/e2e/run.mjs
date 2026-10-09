@@ -1137,6 +1137,56 @@ try {
   check('홈의 오늘 일정을 누르면 캘린더로', (await kid.locator('.tab.active').innerText()).includes('캘린더'));
   await toHome(dad);
 
+  // ── 8-5. 스티커: 부모의 가격·숨김, 자녀가 바로 사서 메모에 붙이기 ─────────────
+  await more(dad, '상점 관리');
+  const stickerAdmin = region(dad, '스티커 팩');
+  await stickerAdmin.waitFor();
+  check('상점 관리에 스티커 팩 4개(처음 가격)', (await stickerAdmin.locator('.card').count()) === 4 && (await stickerAdmin.getByRole('button', { name: '기본 팩 가격 정하기' }).innerText()).includes('50코인'));
+  await stickerAdmin.getByRole('button', { name: '동물 팩 가격 정하기' }).click();
+  await dad.getByLabel('가격(코인)').fill('5');
+  await dad.getByRole('dialog').getByRole('button', { name: '저장하기' }).click();
+  await toast(dad, '스티커 팩을 고쳤어요');
+  await stickerAdmin.getByRole('button', { name: '음식 팩 가격 정하기' }).click();
+  await dad.getByRole('dialog').getByRole('radio', { name: '숨기기' }).click();
+  await dad.getByRole('dialog').getByRole('button', { name: '저장하기' }).click();
+  await stickerAdmin.getByRole('button', { name: '음식 팩 가격 정하기' }).getByText(/숨김/).waitFor();
+  check('부모가 가격을 바꾸고 팩을 숨김', (await stickerAdmin.getByRole('button', { name: '동물 팩 가격 정하기' }).innerText()).includes('5코인'));
+
+  await kid.locator('.tabbar').getByRole('link', { name: '퀘스트' }).click();
+  await kid.getByRole('main').getByRole('link', { name: '상점', exact: true }).click();
+  const stickerShop = region(kid, '스티커');
+  await stickerShop.waitFor();
+  check('자녀 상점의 스티커: 숨긴 팩은 안 보이고 바뀐 가격', (await stickerShop.getByText('음식 팩').count()) === 0 && (await stickerShop.locator('article', { hasText: '동물 팩' }).getByText('5코인 · 4개').isVisible()));
+  const coinsBefore = await coins(kid);
+  await stickerShop.getByRole('button', { name: '동물 팩 자세히' }).click();
+  await shot(kid, '52-sticker-pack');
+  await kid.getByRole('dialog').getByRole('button', { name: '5코인으로 바로 사기' }).click();
+  await toast(kid, '샀어요');
+  await stickerShop.locator('article', { hasText: '동물 팩' }).getByText('가지고 있어요').waitFor();
+  await expectCoins(kid, coinsBefore - 5, '스티커 팩을 사면 바로 코인이 빠짐(승인 없음)');
+  await shot(kid, '51-sticker-shop', true);
+
+  // 메모에 스티커 붙이기
+  await toHome(kid);
+  await region(kid, '가족 메모').getByRole('button', { name: '+ 메모' }).click();
+  await kid.getByLabel('메모', { exact: true }).fill('오늘 저녁 맛있었어요');
+  const picker = kid.getByRole('group', { name: '스티커 붙이기' });
+  check('스티커 고르기: 산 팩만 열리고 나머지는 잠김', (await picker.getByRole('button', { name: '동물' }).getAttribute('aria-pressed')) === 'true' && (await picker.getByRole('button', { name: /기본/ }).isDisabled()));
+  await picker.getByRole('button', { name: '고양이 스티커' }).click();
+  check('누르면 스티커가 골라짐', (await picker.getByRole('button', { name: '고양이 스티커' }).getAttribute('aria-pressed')) === 'true');
+  await shot(kid, '53-note-sticker');
+  await kid.getByRole('dialog').getByRole('button', { name: '메모 남기기' }).click();
+  await toast(kid, '메모를 남겼어요');
+  check('내 메모 한 줄에 스티커', (await region(kid, '가족 메모').getByRole('button', { name: /^딸의 메모: 오늘 저녁 맛있었어요/ }).locator('.note-sticker svg').count()) === 1);
+  await toHome(dad);
+  const dadSticker = region(dad, '가족 메모').locator('article', { hasText: '오늘 저녁 맛있었어요' }).getByRole('img', { name: '고양이 스티커' });
+  check('부모 홈의 새 메모 카드에 스티커가 크게', await dadSticker.waitFor({ timeout: 5000 }).then(() => true).catch(() => false));
+  await shot(dad, '54-parent-note-sticker');
+  await kid.getByRole('link', { name: /^인벤토리/ }).first().click();
+  await kid.getByRole('heading', { name: '인벤토리' }).waitFor();
+  check('인벤토리에 산 스티커 팩', await region(kid, '스티커').getByText('동물 팩').isVisible());
+  await kid.getByRole('button', { name: '‹ 돌아가기' }).click();
+
   // ── 9. 초대코드로 새 자녀 가입 ───────────────────────────────────────────
   await more(dad, '가족 구성원');
   await dad.getByRole('button', { name: '가족 초대하기' }).click();

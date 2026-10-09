@@ -124,6 +124,7 @@ const kid = (streak: Member['streak'] = null): Member => ({
   streak,
   goalRewardId: null,
   checkin: null,
+  stickerPacks: [],
 });
 
 describe('dates', () => {
@@ -981,7 +982,7 @@ describe('가족 메모', () => {
   const person = (uid: string, displayName: string, role: 'parent' | 'child' = 'parent') =>
     ({ uid, displayName, role, avatar: { id: 'bear', color: 'brown' }, coins: 0 }) as unknown as Member;
   const family = [person('dad', '아빠'), person('mom', '엄마'), person('kid', '딸', 'child')];
-  const note = (id: string, extra: Partial<Note> = {}): Note => ({ id, text: id, toUids: [], until: '', createdBy: 'dad', createdAt: 0, readBy: [], hiddenAt: 0, ...extra });
+  const note = (id: string, extra: Partial<Note> = {}): Note => ({ id, text: id, toUids: [], until: '', createdBy: 'dad', createdAt: 0, readBy: [], hiddenAt: 0, sticker: '', ...extra });
 
   it('홈에서 내린 메모는 홈에서 빠지고 캘린더 기록에는 남는다', () => {
     const at = new Date(2026, 9, 7, 19).getTime();
@@ -1001,7 +1002,7 @@ describe('가족 메모', () => {
 
   it('입력값을 다듬는다', () => {
     const uids = ['dad', 'mom', 'kid'];
-    expect(cleanNoteInput({ text: ' 전화해 줘 ', toUids: ['kid', 'kid', 'dad', 'x'], until: '' }, uids, 'dad', '2026-10-08')).toEqual({ text: '전화해 줘', toUids: ['kid'], until: '' });
+    expect(cleanNoteInput({ text: ' 전화해 줘 ', toUids: ['kid', 'kid', 'dad', 'x'], until: '' }, uids, 'dad', '2026-10-08')).toEqual({ text: '전화해 줘', toUids: ['kid'], until: '', sticker: '' });
     expect(cleanNoteInput({ text: '모두에게', toUids: [], until: '2026-10-08' }, uids, 'dad', '2026-10-08').until).toBe('2026-10-08');
     expect(() => cleanNoteInput({ text: '', toUids: [], until: '' }, uids, 'dad', '2026-10-08')).toThrow('메모를 적어 주세요');
     expect(() => cleanNoteInput({ text: '가'.repeat(101), toUids: [], until: '' }, uids, 'dad', '2026-10-08')).toThrow('100자까지');

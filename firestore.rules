@@ -176,7 +176,50 @@ service cloud.firestore {
         && d.toUids is list && d.toUids.size() <= 30
         && d.until is string && d.until.size() <= 10
         && d.readBy is list && d.readBy.size() <= 30
-        && (!('hiddenAt' in d) || d.hiddenAt is int);
+        && (!('hiddenAt' in d) || d.hiddenAt is int)
+        && (!('sticker' in d) || (d.sticker is string && d.sticker.size() <= 41));
+    }
+
+    // 스티커 팩의 가격: 부모가 정한 값, 없으면 처음 가격(src/assets/stickers.json 과 같아야 한다)
+    function stickerPricePath(fid, packId) {
+      return /databases/$(database)/documents/families/$(fid)/stickerPrices/$(packId);
+    }
+    function stickerPrice(fid, packId) {
+      return exists(stickerPricePath(fid, packId)) ? get(stickerPricePath(fid, packId)).data.price
+        : (packId == 'basic' ? 50 : 100);
+    }
+    function stickerHidden(fid, packId) {
+      return exists(stickerPricePath(fid, packId)) && get(stickerPricePath(fid, packId)).data.hidden == true;
+    }
+
+    // 자녀가 스티커 팩을 사는 변경: 팩 하나를 더하고 그 가격만큼 코인을 뺀다. 같은 묶음에 장부 기록이 있어야 한다.
+    function validStickerBuy(fid) {
+      let before = resource.data;
+      let after = request.resource.data;
+      let owned = before.get('stickerPacks', []);
+      let packId = after.stickerPacks[after.stickerPacks.size() - 1];
+      return after.diff(before).affectedKeys().hasOnly(['coins', 'stickerPacks'])
+        && after.stickerPacks is list
+        && after.stickerPacks.size() == owned.size() + 1
+        && after.stickerPacks.hasAll(owned)
+        && !(packId in owned)
+        && packId is string && packId.size() <= 20
+        && after.coins == before.coins - stickerPrice(fid, packId)
+        && after.coins >= 0
+        && existsAfter(/databases/$(database)/documents/families/$(fid)/ledger/$('sticker-' + request.auth.uid + '-' + packId));
+    }
+
+    // 스티커 팩을 산 장부 기록: 본인이, 정해진 가격만큼, 사람과 팩으로 정해진 id 로 한 번만
+    function validStickerPayment(fid, lid) {
+      let d = request.resource.data;
+      return d.type == 'sticker'
+        && d.uid == request.auth.uid
+        && d.by == request.auth.uid
+        && d.refId is string
+        && lid == 'sticker-' + request.auth.uid + '-' + d.refId
+        && d.amount == -stickerPrice(fid, d.refId)
+        && !stickerHidden(fid, d.refId)
+        && d.refId in getAfter(memberPath(fid, request.auth.uid)).data.get('stickerPacks', []);
     }
 
     // 메모를 받은 사람이 "확인했어요"를 누르는 변경: 확인한 사람 목록에 자기만 더할 수 있다.
@@ -376,6 +419,7 @@ service cloud.firestore {
           (uid == request.auth.uid
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatar', 'goalRewardId']))
           || (uid == request.auth.uid && validCheckinUpdate(fid))
+          || (uid == request.auth.uid && validStickerBuy(fid))
           || (isParent(fid)
             && request.resource.data.coins >= 0
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['coins', 'streak']))
@@ -419,6 +463,15 @@ service cloud.firestore {
           && request.resource.data.uid == request.auth.uid
           && request.resource.data.token is string
           && request.resource.data.token.size() > 0 && request.resource.data.token.size() <= 4096;
+      }
+
+      match /stickerPrices/{packId} {
+        allow read: if isMember(fid);
+        allow write: if isParent(fid)
+          && request.resource.data.price is int
+          && request.resource.data.price >= 1 && request.resource.data.price <= 1000
+          && request.resource.data.hidden is bool
+          && request.resource.data.keys().hasOnly(['price', 'hidden']);
       }
 
       match /notes/{nid} {
@@ -560,9 +613,11 @@ service cloud.firestore {
           (isParent(fid)
             && request.resource.data.by == request.auth.uid
             && request.resource.data.type != 'checkin'
+            && request.resource.data.type != 'sticker'
             && (request.resource.data.type != 'quest' || validQuestPayout(fid, lid))
             && (request.resource.data.type != 'reward' || validRewardPayout(fid, lid)))
           || (isMember(fid) && validCheckinPayout(fid, lid))
+          || (isMember(fid) && validStickerPayment(fid, lid))
         );
       }
     }

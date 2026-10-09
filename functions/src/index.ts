@@ -146,7 +146,9 @@ export const onNoteCreated = onDocumentCreated('families/{fid}/notes/{nid}', asy
 });
 
 export const onLedgerCreated = onDocumentCreated('families/{fid}/ledger/{lid}', async (event) => {
-  await deliver(event.params.fid, ledgerNotices(event.params.lid, dataOf(event.data)));
+  const entry = dataOf(event.data);
+  const people = await familyMembers(event.params.fid);
+  await deliver(event.params.fid, ledgerNotices(event.params.lid, entry, nameOf(people, entry?.uid)), people);
 });
 
 // ── 정해진 시각 ─────────────────────────────────────────────────────────────

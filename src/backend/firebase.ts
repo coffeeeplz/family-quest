@@ -61,6 +61,7 @@ import { normalizePushPrefs } from '../domain/push';
 import { INVITE_TTL_MS, isInviteCodeShape, newInviteCode, normalizeInviteCode } from '../domain/invites';
 import { cleanEventInput } from '../domain/calendar';
 import { cleanNoteInput } from '../domain/notes';
+import { MAX_STICKER_PRICE, findPack, packOffer, stickerLedgerId } from '../domain/stickers';
 import { MAX_DECLINE_NOTE, MAX_OPEN_WISHES, WISH_KEEP_DAYS, canCounterWish, checkWishTurn, cleanWishInput, cleanWishPrice } from '../domain/wishes';
 import { ETC_CATEGORY_ID, MAX_EATEN, cleanFoodInput, cleanStars, withEaten } from '../domain/foods';
 import { cleanFix, cleanPlaceInput, planCheckin } from '../domain/location';
@@ -98,6 +99,7 @@ import {
   type Reward,
   type Role,
   type Run,
+  type StickerPrice,
   type Unsub,
   type Wish,
 } from './types';
@@ -196,6 +198,7 @@ export function createFirebaseBackend(): Backend {
   const eventsCol = (fid: string) => collection(db, 'families', fid, 'events');
   const wishesCol = (fid: string) => collection(db, 'families', fid, 'wishes');
   const notesCol = (fid: string) => collection(db, 'families', fid, 'notes');
+  const stickerPricesCol = (fid: string) => collection(db, 'families', fid, 'stickerPrices');
   const pushPrefsRef = (fid: string, uid: string) => doc(db, 'families', fid, 'pushPrefs', uid);
   const pushDeviceRef = (fid: string) => doc(db, 'families', fid, 'pushDevices', deviceId());
 
@@ -315,6 +318,7 @@ export function createFirebaseBackend(): Backend {
       d.checkin && Number.isInteger(d.checkin.dayNum) && Number.isInteger(d.checkin.count)
         ? { dayNum: d.checkin.dayNum, count: d.checkin.count }
         : null,
+    stickerPacks: Array.isArray(d.stickerPacks) ? d.stickerPacks.filter((p: unknown): p is string => typeof p === 'string') : [],
   });
 
   const toLocation = (id: string, d: DocumentData): LocationRecord => ({
@@ -337,6 +341,13 @@ export function createFirebaseBackend(): Backend {
     createdAt: d.createdAt ?? 0,
     readBy: [...((d.readBy as string[] | undefined) ?? [])],
     hiddenAt: typeof d.hiddenAt === 'number' ? d.hiddenAt : 0,
+    sticker: typeof d.sticker === 'string' ? d.sticker : '',
+  });
+
+  const toStickerPrice = (id: string, d: DocumentData): StickerPrice => ({
+    packId: id,
+    price: Number.isInteger(d.price) ? d.price : 100,
+    hidden: d.hidden === true,
   });
 
   /** 가족 구성원의 uid 목록(메모를 받을 사람을 검사할 때 쓴다) */
@@ -1208,6 +1219,49 @@ export function createFirebaseBackend(): Backend {
         console.warn('[push] refresh', error);
       }
     },
+
+    watchStickerPrices(familyId, cb, onError) {
+      return onSnapshot(
+        stickerPricesCol(familyId),
+        (snap) => cb(snap.docs.map((s) => toStickerPrice(s.id, s.data()))),
+        (error) => {
+          console.error('[sticker prices]', error);
+          onError?.();
+        },
+      );
+    },
+
+    setStickerPrice: (familyId, packId, price, hidden) =>
+      guard(async () => {
+        if (!findPack(packId)) throw new AppError('스티커 팩을 찾을 수 없어요.');
+        if (!Number.isInteger(price) || price < 1 || price > MAX_STICKER_PRICE) throw new AppError(`가격은 1부터 ${MAX_STICKER_PRICE} 사이로 적어 주세요.`);
+        await setDoc(doc(stickerPricesCol(familyId), packId), { price, hidden });
+      }),
+
+    buyStickerPack: (familyId, uid, packId) =>
+      guard(async () => {
+        const pack = findPack(packId);
+        if (!pack) throw new AppError('스티커 팩을 찾을 수 없어요.');
+        const priceSnap = await getDoc(doc(stickerPricesCol(familyId), packId));
+        const offer = packOffer(pack, priceSnap.exists() ? [toStickerPrice(packId, priceSnap.data())] : []);
+        if (offer.hidden) throw new AppError('지금은 살 수 없는 팩이에요.');
+        // 승인을 기다리는 보상 신청에 묶인 코인은 쓸 수 없다.
+        const waiting = await getDocs(query(ordersCol(familyId), where('uid', '==', uid), where('status', '==', 'requested')));
+        const reserved = waiting.docs.reduce((sum, s) => sum + (Number(s.data().price) || 0), 0);
+        await runTransaction(db, async (tx) => {
+          const snap = await tx.get(memberRef(familyId, uid));
+          if (!snap.exists()) throw new AppError('이 가족의 구성원이 아니에요.');
+          const member = toMember(uid, snap.data());
+          if (member.role === 'parent') throw new AppError('부모는 사지 않아도 모든 스티커를 쓸 수 있어요.');
+          if (member.stickerPacks.includes(packId)) throw new AppError('이미 가지고 있는 팩이에요.');
+          const free = member.coins - reserved;
+          if (free < offer.price) throw new AppError(`코인이 ${offer.price - free}개 모자라요.`);
+          // 장부와 잔액, 가진 팩을 한 묶음으로 쓴다. 금액은 서버 규칙이 다시 검사한다.
+          const entry: Omit<LedgerEntry, 'id'> = { uid, amount: -offer.price, type: 'sticker', refId: packId, memo: `스티커: ${pack.name}`, note: '', by: uid, at: Date.now() };
+          tx.set(doc(ledgerCol(familyId), stickerLedgerId(uid, packId)), entry);
+          tx.update(memberRef(familyId, uid), { coins: increment(-offer.price), stickerPacks: arrayUnion(packId) });
+        });
+      }),
 
     watchNotes(familyId, cb, onError) {
       return onSnapshot(

@@ -9,6 +9,8 @@ import type { IconName } from '../../lib/sprites';
 import { Icon } from '../../ui/Sprite';
 import { Button, CoinInline, Empty, Fold, Sheet } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
+import { STICKER_PACKS } from '../../domain/stickers';
+import { PackPreview } from '../stickers/StickerShop';
 import { useUsedOrders } from './useUsedOrders';
 
 /**
@@ -31,6 +33,7 @@ export function InventoryPage() {
   const [confirm, setConfirm] = useState(false);
 
   const groups = inventoryGroups(orders, owner.uid);
+  const ownedPacks = STICKER_PACKS.filter((p) => owner.stickerPacks.includes(p.id));
   const months = usedByMonth(used, owner.uid);
   const usedTotal = used.length;
   const opened = groups.find((group) => group.key === openKey);
@@ -96,6 +99,21 @@ export function InventoryPage() {
           </div>
         )}
       </section>
+
+      {ownedPacks.length > 0 && (
+        <section className="stack" aria-label="스티커">
+          <h2 className="t-title">스티커</h2>
+          <div className="shop-grid">
+            {ownedPacks.map((pack) => (
+              <article key={pack.id} className="card shop-item">
+                <PackPreview pack={pack} />
+                <h3 className="t-body item-title center">{pack.name}</h3>
+                <p className="t-cap">메모에 붙여 써요</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
 
       <Fold title="지난 기록" summary={usedTotal > 0 ? `${usedTotal}개 사용` : '없음'}>
         {months.length === 0 && <p className="t-cap">아직 쓴 보상이 없어요.</p>}

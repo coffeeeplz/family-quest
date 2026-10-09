@@ -5,6 +5,7 @@ import type { Member, Note } from '../../backend/types';
 import { canEditNote, isNoteOnHome, noteTargetText, notesOnDay } from '../../domain/notes';
 import { Avatar, Icon } from '../../ui/Sprite';
 import { Button, Sheet } from '../../ui/kit';
+import { Sticker } from '../../ui/Sticker';
 import { useAction } from '../../ui/toast';
 
 const clock = (at: number) => {
@@ -60,6 +61,11 @@ export function DayNotes({ day, notes }: { day: string; notes: Note[] }) {
                 {isNoteOnHome(note, today) ? ' · 홈에 있음' : ''}
               </span>
             </span>
+            {note.sticker && (
+              <span className="note-sticker">
+                <Sticker id={note.sticker} size={32} />
+              </span>
+            )}
           </button>
         );
       })}
@@ -70,6 +76,11 @@ export function DayNotes({ day, notes }: { day: string; notes: Note[] }) {
             {nameOf(viewing.createdBy)} → {noteTargetText(viewing, members)} · {clock(viewing.createdAt)}
           </p>
           <p className="t-body note-text">{viewing.text}</p>
+          {viewing.sticker && (
+            <div className="center">
+              <Sticker id={viewing.sticker} size={64} label />
+            </div>
+          )}
           {viewing.hiddenAt > 0 && canEditNote(viewing, me.uid, isParent) && (
             <Button big block disabled={busy} onClick={() => void act(() => backend.hideNote(family.id, viewing.id, false), '홈에 다시 올렸어요.')}>
               홈에 다시 올리기

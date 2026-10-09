@@ -6,6 +6,7 @@ import { MAX_NOTE_TEXT } from '../../domain/notes';
 import { Avatar } from '../../ui/Sprite';
 import { Button, Field, FieldGroup, Sheet } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
+import { StickerPicker } from '../stickers/StickerPicker';
 
 interface Props {
   /** 고칠 메모. null 이면 새로 남긴다. */
@@ -23,6 +24,7 @@ export function NoteSheet({ note, onClose }: Props) {
   const [toUids, setToUids] = useState<string[]>(note?.toUids ?? []);
   const [dated, setDated] = useState(Boolean(note?.until));
   const [until, setUntil] = useState(note?.until || today);
+  const [sticker, setSticker] = useState(note?.sticker ?? '');
 
   // 받을 사람은 메모를 쓴 사람을 뺀 가족
   const authorUid = note?.createdBy ?? me.uid;
@@ -30,7 +32,7 @@ export function NoteSheet({ note, onClose }: Props) {
   const toggle = (uid: string) => setToUids(toUids.includes(uid) ? toUids.filter((id) => id !== uid) : [...toUids, uid]);
 
   async function save() {
-    const input = { text, toUids, until: dated ? until : '' };
+    const input = { text, toUids, until: dated ? until : '', sticker };
     const ok = note
       ? await run(() => backend.updateNote(family.id, note.id, input), '메모를 고쳤어요.')
       : await run(() => backend.createNote(family.id, input, me.uid), '메모를 남겼어요.');
@@ -52,6 +54,8 @@ export function NoteSheet({ note, onClose }: Props) {
           />
         )}
       </Field>
+
+      <StickerPicker value={sticker} onChange={setSticker} onShop={onClose} />
 
       <div className="field" role="group" aria-label="누구에게 보일까요?">
         <div className="label">누구에게 보일까요?</div>

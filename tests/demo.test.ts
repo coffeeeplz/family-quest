@@ -18,6 +18,7 @@ import type {
   Reward,
   Run,
   Wish,
+  StickerPrice,
 } from '../src/backend/types';
 import { categoryOf, ratingSummary } from '../src/domain/foods';
 import { DEFAULT_SETTINGS } from '../src/domain/settings';
@@ -860,5 +861,45 @@ describe('가족 메모', () => {
     await backend.deleteNote(FAMILY, mine);
     expect(noteById(mine)).toBeUndefined();
     await expect(backend.deleteNote(FAMILY, mine)).rejects.toThrow('찾을 수 없어요');
+  });
+});
+
+describe('스티커', () => {
+  const prices = () => snapshot<StickerPrice[]>((cb) => backend.watchStickerPrices(FAMILY, cb));
+
+  it('자녀는 코인으로 바로 사고(장부에 남음), 산 팩의 스티커만 메모에 붙인다', async () => {
+    as('demo-kid');
+    const memo = { text: '고마워요', toUids: [], until: '' };
+    await expect(backend.createNote(FAMILY, { ...memo, sticker: 'basic/heart' }, 'demo-kid')).rejects.toThrow('가지고 있는 스티커만');
+    await expect(backend.buyStickerPack(FAMILY, 'demo-kid', 'basic')).rejects.toThrow('코인이 20개 모자라요'); // 30코인뿐
+    as('demo-dad');
+    await backend.giveCoins(FAMILY, 'demo-kid', 30, '', 'demo-dad'); // 60코인
+    as('demo-kid');
+    await backend.buyStickerPack(FAMILY, 'demo-kid', 'basic');
+    expect(kid()).toMatchObject({ coins: 10, stickerPacks: ['basic'] });
+    expect(kid().coins).toBe(ledgerSum());
+    expect(ledger().find((e) => e.id === 'sticker-demo-kid-basic')).toMatchObject({ type: 'sticker', amount: -50, by: 'demo-kid' });
+    await expect(backend.buyStickerPack(FAMILY, 'demo-kid', 'basic')).rejects.toThrow('이미 가지고 있는');
+    const id = await backend.createNote(FAMILY, { ...memo, sticker: 'basic/heart' }, 'demo-kid');
+    expect(noteById(id)!.sticker).toBe('basic/heart');
+    await expect(backend.createNote(FAMILY, { ...memo, sticker: 'animal/cat' }, 'demo-kid')).rejects.toThrow('가지고 있는 스티커만');
+    // 모르는 스티커는 붙지 않는다.
+    expect(noteById(await backend.createNote(FAMILY, { ...memo, sticker: 'zzz/none' }, 'demo-kid'))!.sticker).toBe('');
+  });
+
+  it('부모는 모든 스티커를 무료로 쓰고, 가격을 바꾸거나 숨긴다', async () => {
+    as('demo-dad');
+    const id = await backend.createNote(FAMILY, { text: '최고야', toUids: [], until: '', sticker: 'cheer/best' }, 'demo-dad');
+    expect(noteById(id)!.sticker).toBe('cheer/best');
+    await expect(backend.buyStickerPack(FAMILY, 'demo-dad', 'cheer')).rejects.toThrow('부모는');
+    await backend.setStickerPrice(FAMILY, 'animal', 20, false);
+    await backend.setStickerPrice(FAMILY, 'food', 100, true);
+    await expect(backend.setStickerPrice(FAMILY, 'animal', 0, false)).rejects.toThrow('가격은');
+    expect(prices()).toHaveLength(2);
+    as('demo-kid');
+    await expect(backend.setStickerPrice(FAMILY, 'animal', 1, false)).rejects.toThrow();
+    await expect(backend.buyStickerPack(FAMILY, 'demo-kid', 'food')).rejects.toThrow('살 수 없는');
+    await backend.buyStickerPack(FAMILY, 'demo-kid', 'animal');
+    expect(kid()).toMatchObject({ coins: 10, stickerPacks: ['animal'] });
   });
 });

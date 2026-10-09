@@ -1,5 +1,6 @@
 import { AppError, type Member, type Note, type NoteInput } from '../backend/types';
 import { dateKey, formatShortDay, isDateKey } from '../lib/dates';
+import { findSticker } from './stickers';
 
 export const MAX_NOTE_TEXT = 100;
 /** 홈에 함께 둘 수 있는 메모의 수(내린 메모는 세지 않는다) */
@@ -8,7 +9,7 @@ export const MAX_NOTES = 30;
 export const NOTE_LINES = 5;
 
 /** 메모 입력값을 검사한다. 받는 사람에서 쓴 사람과 가족이 아닌 사람은 뺀다. */
-export function cleanNoteInput(input: NoteInput, memberUids: string[], authorUid: string, today: string): NoteInput {
+export function cleanNoteInput(input: NoteInput, memberUids: string[], authorUid: string, today: string): Required<NoteInput> {
   const text = input.text.trim();
   if (!text) throw new AppError('메모를 적어 주세요.');
   if (text.length > MAX_NOTE_TEXT) throw new AppError(`메모는 ${MAX_NOTE_TEXT}자까지 쓸 수 있어요.`);
@@ -20,7 +21,9 @@ export function cleanNoteInput(input: NoteInput, memberUids: string[], authorUid
     if (input.until < today) throw new AppError('사라질 날짜는 오늘보다 앞설 수 없어요.');
     until = input.until;
   }
-  return { text, toUids, until };
+  // 모르는 스티커는 붙이지 않는다(가지고 있는지는 저장하는 쪽에서 본다).
+  const sticker = input.sticker && findSticker(input.sticker) ? input.sticker : '';
+  return { text, toUids, until, sticker };
 }
 
 /** 이 사람에게 보내는 메모인지(가족 모두에게 보내는 메모 포함) */

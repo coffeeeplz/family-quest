@@ -10,6 +10,7 @@ import { Icon } from '../../ui/Sprite';
 import { BackLink, Button, CoinInline, CoinPill, Empty, Sheet } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
 import { InventoryButton } from '../inventory/InventoryButton';
+import { StickerShop } from '../stickers/StickerShop';
 import { MyWishCard } from '../wishes/MyWishCard';
 import { WishFormSheet } from '../wishes/WishFormSheet';
 import { useWishes } from '../wishes/useWishes';
@@ -91,6 +92,8 @@ export function ShopPage() {
       )}
 
       <GoalCard onChange={() => setGoal(null)} />
+
+      <StickerShop />
 
       <section className="stack" aria-label="보상 목록">
         <div className="section-head" style={{ alignItems: 'center' }}>
