@@ -353,7 +353,8 @@ service cloud.firestore {
         && d.endDay is string && d.endDay.size() == 10 && d.endDay >= d.startDay
         && d.allDay is bool
         && d.who is list && d.who.size() <= 30
-        && d.repeat in ['none', 'weekly', 'monthly', 'yearly'];
+        && d.repeat in ['none', 'weekly', 'monthly', 'yearly']
+        && (!('sticker' in d) || (d.sticker is string && d.sticker.size() <= 41));
     }
 
     // 뭐먹지 메뉴의 모양

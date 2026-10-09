@@ -1433,3 +1433,47 @@ a.btn.inventory-btn {
 .note-sticker {
   flex-shrink: 0;
 }
+.sticker-attach {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sticker-input {
+  position: relative;
+}
+.sticker-input > .input {
+  padding-right: 52px;
+}
+.sticker-btn {
+  position: absolute;
+  right: calc(var(--px) + 4px);
+  top: calc(var(--px) + 4px);
+  width: 40px;
+  height: 40px;
+  border: 0;
+  background: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.row > .sticker-btn {
+  position: static;
+}
+.sticker-chosen {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sticker-tray {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--card);
+}
+.said-sticker {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 4px;
+}

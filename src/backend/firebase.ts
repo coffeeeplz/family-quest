@@ -61,7 +61,7 @@ import { normalizePushPrefs } from '../domain/push';
 import { INVITE_TTL_MS, isInviteCodeShape, newInviteCode, normalizeInviteCode } from '../domain/invites';
 import { cleanEventInput } from '../domain/calendar';
 import { cleanNoteInput } from '../domain/notes';
-import { MAX_STICKER_PRICE, findPack, packOffer, stickerLedgerId } from '../domain/stickers';
+import { MAX_STICKER_PRICE, cleanSaid, findPack, packOffer, stickerLedgerId } from '../domain/stickers';
 import { MAX_DECLINE_NOTE, MAX_OPEN_WISHES, WISH_KEEP_DAYS, canCounterWish, checkWishTurn, cleanWishInput, cleanWishPrice } from '../domain/wishes';
 import { ETC_CATEGORY_ID, MAX_EATEN, cleanFoodInput, cleanStars, withEaten } from '../domain/foods';
 import { cleanFix, cleanPlaceInput, planCheckin } from '../domain/location';
@@ -376,6 +376,7 @@ export function createFirebaseBackend(): Backend {
     id,
     title: d.title,
     memo: d.memo ?? '',
+    sticker: typeof d.sticker === 'string' ? d.sticker : '',
     startDay: d.startDay,
     endDay: d.endDay ?? d.startDay,
     allDay: d.allDay === true,
@@ -670,7 +671,7 @@ export function createFirebaseBackend(): Backend {
     approveRun: (familyId, id, byUid, options) =>
       guard(async () => {
         const runRef = doc(runsCol(familyId), id);
-        const praise = options.praise.trim().slice(0, MAX_PRAISE_LENGTH);
+        const praise = cleanSaid(options.praise, MAX_PRAISE_LENGTH);
         // 승인, 장부 기록, 잔액 증가, 연속 달성을 한 묶음으로 처리한다(하나라도 실패하면 모두 취소).
         await runTransaction(db, async (tx) => {
           const snap = await tx.get(runRef);
@@ -728,7 +729,7 @@ export function createFirebaseBackend(): Backend {
             status: 'rejected',
             decidedBy: byUid,
             decidedAt: Date.now(),
-            rejectReason: reason.trim().slice(0, 60),
+            rejectReason: cleanSaid(reason, 60),
           });
         });
       }),
@@ -986,7 +987,7 @@ export function createFirebaseBackend(): Backend {
           const snap = await tx.get(ref);
           if (!snap.exists()) throw new AppError('보상 신청을 찾을 수 없어요.');
           if (snap.data().status !== 'requested') throw new AppError('이미 다른 사람이 확인했어요.');
-          tx.update(ref, { status: 'rejected', decidedBy: byUid, decidedAt: Date.now(), rejectReason: reason.trim().slice(0, 60) });
+          tx.update(ref, { status: 'rejected', decidedBy: byUid, decidedAt: Date.now(), rejectReason: cleanSaid(reason, 60) });
         });
       }),
 
@@ -1441,7 +1442,7 @@ export function createFirebaseBackend(): Backend {
           type: 'gift',
           refId: ref.id,
           memo: '칭찬 코인',
-          note: note.trim().slice(0, MAX_PRAISE_LENGTH),
+          note: cleanSaid(note, MAX_PRAISE_LENGTH),
           by: byUid,
           at: Date.now(),
         };

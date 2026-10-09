@@ -6,6 +6,8 @@ import { MAX_TITLE } from '../../domain/quests';
 import { formatDay } from '../../lib/dates';
 import { Avatar } from '../../ui/Sprite';
 import { Button, Field, FieldGroup, Sheet } from '../../ui/kit';
+import { Sticker } from '../../ui/Sticker';
+import { StickerAttach } from '../stickers/StickerAttach';
 import { useAction } from '../../ui/toast';
 
 interface Props {
@@ -33,6 +35,7 @@ export function EventSheet({ event, day, onClose }: Props) {
   const [repeat, setRepeat] = useState<EventRepeat>(event?.repeat ?? 'none');
   const [repeatUntil, setRepeatUntil] = useState(event?.repeatUntil ?? '');
   const [memo, setMemo] = useState(event?.memo ?? '');
+  const [sticker, setSticker] = useState(event?.sticker ?? '');
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const toggleWho = (uid: string) => setWho(who.includes(uid) ? who.filter((id) => id !== uid) : [...who, uid]);
@@ -49,7 +52,16 @@ export function EventSheet({ event, day, onClose }: Props) {
           {people}
           {repeatText(event) ? ` · ${repeatText(event)}` : ''}
         </p>
-        {event.memo && <p className="t-body">{event.memo}</p>}
+        {(event.memo || event.sticker) && (
+          <p className="t-body">
+            {event.memo}
+            {event.sticker && (
+              <span className="said-sticker">
+                <Sticker id={event.sticker} size={32} label />
+              </span>
+            )}
+          </p>
+        )}
         <p className="t-cap">이 일정은 올린 사람과 부모님만 고칠 수 있어요.</p>
         <Button tone="plain" big block onClick={onClose}>
           닫기
@@ -62,6 +74,7 @@ export function EventSheet({ event, day, onClose }: Props) {
     const input = {
       title,
       memo,
+      sticker,
       startDay,
       endDay: manyDays ? endDay : startDay,
       allDay,
@@ -160,7 +173,11 @@ export function EventSheet({ event, day, onClose }: Props) {
       )}
 
       <Field label="메모 (안 적어도 돼요)">
-        {(id) => <input id={id} className="input" type="text" value={memo} maxLength={MAX_EVENT_MEMO} onChange={(e) => setMemo(e.target.value)} />}
+        {(id) => (
+          <StickerAttach value={sticker} onChange={setSticker} onShop={onClose}>
+            <input id={id} className="input" type="text" value={memo} maxLength={MAX_EVENT_MEMO} onChange={(e) => setMemo(e.target.value)} />
+          </StickerAttach>
+        )}
       </Field>
 
       <Button big block disabled={busy} onClick={() => void save()}>

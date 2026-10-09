@@ -768,7 +768,7 @@ describe('캘린더', () => {
 
   it('validates event input', () => {
     const base = { title: ' 치과 ', memo: '', startDay: TODAY, endDay: '', allDay: false, startTime: '15:30', endTime: '', who: ['kid', 'kid', ''], repeat: 'none' as const, repeatUntil: '2026-12-31' };
-    expect(cleanEventInput(base)).toEqual({ title: '치과', memo: '', startDay: TODAY, endDay: TODAY, allDay: false, startTime: '15:30', endTime: '', who: ['kid'], repeat: 'none', repeatUntil: '' });
+    expect(cleanEventInput(base)).toEqual({ title: '치과', memo: '', startDay: TODAY, endDay: TODAY, allDay: false, startTime: '15:30', endTime: '', who: ['kid'], repeat: 'none', repeatUntil: '', sticker: '' });
     expect(cleanEventInput({ ...base, allDay: true, endTime: '16:00' })).toMatchObject({ startTime: '', endTime: '' });
     expect(() => cleanEventInput({ ...base, title: ' ' })).toThrow('일정 이름');
     expect(() => cleanEventInput({ ...base, startDay: '2026-02-30' })).toThrow('날짜를 골라');

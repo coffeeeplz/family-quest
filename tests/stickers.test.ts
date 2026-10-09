@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { STICKER_PACKS, checkPack, findSticker, packOffer, stickerRef } from '../src/domain/stickers';
+import { STICKER_PACKS, checkPack, cleanSaid, findSticker, packOffer, saidPlain, splitSticker, stickerRef, withSticker } from '../src/domain/stickers';
 
 describe('스티커', () => {
   it('모든 팩이 형식에 맞다', () => {
@@ -31,5 +31,17 @@ describe('스티커', () => {
     const basic = STICKER_PACKS.find((p) => p.id === 'basic')!;
     expect(packOffer(basic, [])).toEqual({ price: 50, hidden: false });
     expect(packOffer(basic, [{ packId: 'basic', price: 30, hidden: true }])).toEqual({ price: 30, hidden: true });
+  });
+
+  it('한마디 끝에 붙이는 스티커', () => {
+    expect(withSticker(' 잘했어 ', 'animal/cat')).toBe('잘했어 {s:animal/cat}');
+    expect(withSticker('', 'animal/cat')).toBe('{s:animal/cat}');
+    expect(withSticker('잘했어', '')).toBe('잘했어');
+    expect(splitSticker('잘했어 {s:animal/cat}')).toEqual({ text: '잘했어', sticker: 'animal/cat' });
+    expect(splitSticker('그냥 글 {중괄호}')).toEqual({ text: '그냥 글 {중괄호}', sticker: '' });
+    expect(splitSticker('모르는 {s:zzz/none}')).toEqual({ text: '모르는', sticker: '' });
+    expect(cleanSaid('가'.repeat(30) + ' {s:basic/heart}', 20)).toBe('가'.repeat(20) + ' {s:basic/heart}');
+    expect(cleanSaid('좋아 {s:zzz/none}', 20)).toBe('좋아');
+    expect(saidPlain('최고야 {s:cheer/best}')).toBe('최고야 [최고]');
   });
 });

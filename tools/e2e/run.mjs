@@ -1170,10 +1170,13 @@ try {
   await toHome(kid);
   await region(kid, '가족 메모').getByRole('button', { name: '+ 메모' }).click();
   await kid.getByLabel('메모', { exact: true }).fill('오늘 저녁 맛있었어요');
-  const picker = kid.getByRole('group', { name: '스티커 붙이기' });
-  check('스티커 고르기: 산 팩만 열리고 나머지는 잠김', (await picker.getByRole('button', { name: '동물' }).getAttribute('aria-pressed')) === 'true' && (await picker.getByRole('button', { name: /기본/ }).isDisabled()));
-  await picker.getByRole('button', { name: '고양이 스티커' }).click();
-  check('누르면 스티커가 골라짐', (await picker.getByRole('button', { name: '고양이 스티커' }).getAttribute('aria-pressed')) === 'true');
+  const noteDialog = kid.getByRole('dialog');
+  check('스티커 판은 처음에 닫혀 있음(입력칸 오른쪽 버튼만)', (await noteDialog.getByRole('group', { name: '스티커 판' }).count()) === 0);
+  await noteDialog.getByRole('button', { name: '스티커 붙이기' }).click();
+  const tray = noteDialog.getByRole('group', { name: '스티커 판' });
+  check('스티커 판: 산 팩만 열리고 나머지는 잠김', (await tray.getByRole('button', { name: '동물' }).getAttribute('aria-pressed')) === 'true' && (await tray.getByRole('button', { name: /기본/ }).isDisabled()));
+  await tray.getByRole('button', { name: '고양이 스티커' }).click();
+  check('고르면 판이 닫히고 입력칸 위에 고른 스티커', (await tray.count()) === 0 && (await noteDialog.getByText('고양이 스티커', { exact: true }).isVisible()));
   await shot(kid, '53-note-sticker');
   await kid.getByRole('dialog').getByRole('button', { name: '메모 남기기' }).click();
   await toast(kid, '메모를 남겼어요');
@@ -1186,6 +1189,28 @@ try {
   await kid.getByRole('heading', { name: '인벤토리' }).waitFor();
   check('인벤토리에 산 스티커 팩', await region(kid, '스티커').getByText('동물 팩').isVisible());
   await kid.getByRole('button', { name: '‹ 돌아가기' }).click();
+
+  // 다른 입력칸의 스티커: 캘린더 일정 메모, 칭찬 코인 한마디(부모는 모든 스티커 무료)
+  await dad.locator('.tabbar').getByRole('link', { name: '캘린더' }).click();
+  await dad.getByRole('button', { name: '+ 일정' }).click();
+  await dad.getByLabel('일정 이름').fill('운동회');
+  await dad.getByRole('dialog').getByRole('button', { name: '스티커 붙이기' }).click();
+  await dad.getByRole('dialog').getByRole('group', { name: '스티커 판' }).getByRole('button', { name: '응원' }).click();
+  await dad.getByRole('dialog').getByRole('button', { name: '최고 스티커' }).click();
+  await dad.getByRole('dialog').getByRole('button', { name: '일정 올리기' }).click();
+  await dayList(dad).getByRole('button', { name: /^운동회/ }).waitFor();
+  check('일정 메모에 붙인 스티커가 달력 목록에 보임', (await dayList(dad).getByRole('button', { name: /^운동회/ }).locator('.note-sticker svg').count()) === 1);
+  await toHome(dad);
+  const kidCoins = await coins(kid);
+  await dad.getByRole('button', { name: /^더 보기/ }).click();
+  await dad.getByRole('dialog').getByRole('button', { name: '칭찬 코인 주기' }).click();
+  await dad.getByRole('dialog').getByRole('button', { name: '스티커 붙이기' }).click();
+  await dad.getByRole('dialog').getByRole('button', { name: '하트 스티커' }).click();
+  await dad.getByRole('dialog').getByRole('button', { name: '딸에게 코인 주기' }).click();
+  const giftScene = kid.locator('.celebrate');
+  check('칭찬 한마디의 스티커가 자녀 축하 화면에', await giftScene.getByRole('img', { name: '하트 스티커' }).waitFor({ timeout: 5000 }).then(() => true).catch(() => false));
+  await shot(kid, '55-gift-sticker');
+  await expectCoins(kid, kidCoins + 5, '칭찬 코인 +5(스티커와 함께)');
 
   // ── 9. 초대코드로 새 자녀 가입 ───────────────────────────────────────────
   await more(dad, '가족 구성원');

@@ -1,5 +1,6 @@
 // 알림 서버가 보낼 알림을 정하는 규칙. 저장소의 문서가 바뀌기 전과 후를 보고 누구에게 무엇을 보낼지 돌려준다.
 // 서버(functions)와 자동 검사가 함께 쓰므로 Firebase 와 상관없는 순수한 계산만 둔다.
+import { saidPlain } from './stickers';
 import { clip, type PushMessage, type PushType } from './push';
 
 /** Firestore 문서의 내용(서버에서 그대로 받은 값) */
@@ -24,11 +25,11 @@ export function runNotices(rid: string, before: Doc | undefined, after: Doc | un
     return [{ to: 'parents', type: 'approval', msg: { title: '완료 요청', body: clip(`${kidName}: ${title} (+${coins(after.reward)})`), url: '#/home', tag } }];
   }
   if (after.status === 'approved' && before?.status !== 'approved') {
-    const praise = after.praise ? ` "${after.praise}"` : '';
+    const praise = after.praise ? ` "${saidPlain(String(after.praise))}"` : '';
     return [{ to: [after.assigneeUid], type: 'result', msg: { title: `+${coins(after.reward)}!`, body: clip(`${title} 승인됐어요.${praise}`), url: '#/home', tag } }];
   }
   if (after.status === 'rejected' && before?.status !== 'rejected') {
-    const reason = after.rejectReason ? ` · ${after.rejectReason}` : '';
+    const reason = after.rejectReason ? ` · ${saidPlain(String(after.rejectReason))}` : '';
     return [{ to: [after.assigneeUid], type: 'result', msg: { title: '다시 해 볼까요?', body: clip(`${title}${reason}`), url: '#/quests', tag } }];
   }
   return [];
@@ -62,7 +63,7 @@ export function orderNotices(oid: string, before: Doc | undefined, after: Doc | 
     return [{ to: [after.uid], type: 'shop', msg: { title: '보상 획득!', body: clip(`${after.rewardTitle} · 인벤토리에 들어갔어요`), url: '#/inventory', tag } }];
   }
   if (before?.status === 'requested' && after.status === 'rejected') {
-    const reason = after.rejectReason ? ` "${after.rejectReason}"` : '';
+    const reason = after.rejectReason ? ` "${saidPlain(String(after.rejectReason))}"` : '';
     return [{ to: [after.uid], type: 'shop', msg: { title: '보상 신청', body: clip(`${after.rewardTitle}: 이번에는 안 된대요.${reason}`), url: '#/shop', tag } }];
   }
   // 앱 안 상품(이모티콘, 꾸미기)은 허락 없이 바로 쓰고, 썼다는 것만 부모에게 알린다.
@@ -114,7 +115,7 @@ export function ledgerNotices(lid: string, entry: Doc | undefined, buyerName = '
     return [{ to: 'parents', type: 'shop', msg: { title: '스티커 구매', body: clip(`${buyerName}이(가) ${what}을(를) 샀어요 (${-Number(entry.amount)}코인)`), url: '#/home', tag: `sticker-${lid}` } }];
   }
   if (!entry || entry.type !== 'gift' || !(Number(entry.amount) > 0)) return [];
-  return [{ to: [entry.uid], type: 'result', msg: { title: `칭찬 코인 +${entry.amount}`, body: clip(entry.note ? `"${entry.note}"` : String(entry.memo ?? '칭찬 코인')), url: '#/home', tag: `gift-${lid}` } }];
+  return [{ to: [entry.uid], type: 'result', msg: { title: `칭찬 코인 +${entry.amount}`, body: clip(entry.note ? `"${saidPlain(String(entry.note))}"` : String(entry.memo ?? '칭찬 코인')), url: '#/home', tag: `gift-${lid}` } }];
 }
 
 /** 저녁 알림: 아직 안 한 "꼭" 할 일의 이름들 */

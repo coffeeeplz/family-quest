@@ -21,7 +21,7 @@ import {
 import { MAX_NOTES, activeNoteCount, canEditNote, cleanNoteInput, isNoteFor } from '../domain/notes';
 import { normalizePushPrefs, type PushPrefs } from '../domain/push';
 import { MAX_REWARDS, availableCoins, buyBlockReason, cleanRewardInput } from '../domain/shop';
-import { MAX_STICKER_PRICE, canUsePack, findPack, findSticker, packOffer, stickerLedgerId } from '../domain/stickers';
+import { MAX_STICKER_PRICE, canUsePack, cleanSaid, findPack, findSticker, packOffer, stickerLedgerId } from '../domain/stickers';
 import { MAX_DECLINE_NOTE, MAX_OPEN_WISHES, WISH_KEEP_DAYS, canCounterWish, checkWishTurn, cleanWishInput, cleanWishPrice, openWishCount } from '../domain/wishes';
 import { addDays, dateKey, dayNumber, parseDateKey } from '../lib/dates';
 import {
@@ -520,7 +520,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
     return member;
   }
 
-  function requireStickerOwned(familyId: string, uid: string, sticker: string) {
+  function requireStickerOwned(familyId: string, uid: string, sticker: string | undefined) {
     if (!sticker) return;
     const found = findSticker(sticker);
     const member = state.members[familyId][uid];
@@ -794,7 +794,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       if (!run) throw new AppError('완료 요청을 찾을 수 없어요.');
       if (run.status !== 'submitted') throw new AppError('이미 다른 사람이 확인했어요.');
       const now = Date.now();
-      const praise = options.praise.trim().slice(0, MAX_PRAISE_LENGTH);
+      const praise = cleanSaid(options.praise, MAX_PRAISE_LENGTH);
       state.runs[familyId][id] = { ...run, status: 'approved', decidedBy: byUid, decidedAt: now, praise };
       addLedger(familyId, {
         id,
@@ -842,7 +842,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
         status: 'rejected',
         decidedBy: byUid,
         decidedAt: Date.now(),
-        rejectReason: reason.trim().slice(0, 60),
+        rejectReason: cleanSaid(reason, 60),
       };
       commit();
     },
@@ -982,7 +982,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
         type: 'gift',
         refId: id,
         memo: '칭찬 코인',
-        note: note.trim().slice(0, MAX_PRAISE_LENGTH),
+        note: cleanSaid(note, MAX_PRAISE_LENGTH),
         by: byUid,
         at: Date.now(),
       });
@@ -1117,7 +1117,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
         status: 'rejected',
         decidedBy: byUid,
         decidedAt: Date.now(),
-        rejectReason: reason.trim().slice(0, 60),
+        rejectReason: cleanSaid(reason, 60),
       };
       commit();
     },
@@ -1514,6 +1514,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       requireSelf(byUid);
       requireMember(familyId);
       const clean = cleanEventInput(input);
+      requireStickerOwned(familyId, byUid, clean.sticker);
       if (Object.keys(state.events[familyId]).length >= MAX_EVENTS) throw new AppError(`일정은 ${MAX_EVENTS}개까지 올릴 수 있어요.`);
       const id = newId('e');
       state.events[familyId][id] = { id, ...clean, createdBy: byUid, createdAt: Date.now() };
@@ -1525,7 +1526,9 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       const member = requireMember(familyId);
       const stored = requireEvent(familyId, eventId);
       if (!canEditEvent(stored, member.uid, member.role === 'parent')) throw new AppError('올린 사람과 부모만 고칠 수 있어요.');
-      state.events[familyId][eventId] = { ...stored, ...cleanEventInput(input) };
+      const clean = cleanEventInput(input);
+      if ((clean.sticker ?? '') !== (stored.sticker ?? '')) requireStickerOwned(familyId, member.uid, clean.sticker);
+      state.events[familyId][eventId] = { ...stored, ...clean };
       commit();
     },
 

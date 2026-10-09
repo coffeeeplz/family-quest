@@ -12,6 +12,7 @@ import { Button, CoinInline, Sheet } from '../../ui/kit';
 import { useSwipe } from '../../ui/useSwipe';
 import { noteDays } from '../../domain/notes';
 import { DayNotes } from '../notes/DayNotes';
+import { Sticker } from '../../ui/Sticker';
 import { useNotes } from '../notes/useNotes';
 import { EventSheet } from './EventSheet';
 import { useEvents } from './useEvents';
@@ -208,6 +209,11 @@ export function CalendarPage() {
                   {event.who.length === 0 ? ' · 가족 모두' : ''}
                 </span>
               </span>
+              {event.sticker && (
+                <span className="note-sticker">
+                  <Sticker id={event.sticker} size={24} />
+                </span>
+              )}
               <span className="who" aria-hidden="true">
                 {people.map((m) => (
                   <Avatar key={m.uid} avatar={m.avatar} size={24} />

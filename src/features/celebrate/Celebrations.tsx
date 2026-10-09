@@ -6,6 +6,7 @@ import { coinScene, gainsOf, goalJustReached, latestAt, missedGains } from '../.
 import { reservedCoins } from '../../domain/shop';
 import { armSound, buzz, markCelebrating, playTune, reducedMotion } from '../../lib/feedback';
 import type { IconName } from '../../lib/sprites';
+import { Said } from '../stickers/StickerAttach';
 import { Icon } from '../../ui/Sprite';
 
 type Scene =
@@ -222,7 +223,11 @@ export function Celebrations() {
         </div>
       ))}
       {scene.more > 0 && <div className="t-cap">외 {scene.more}건</div>}
-      {scene.note && <div className="t-body celebrate-note">"{scene.note}"</div>}
+      {scene.note && (
+        <div className="t-body celebrate-note">
+          <Said said={scene.note} size={48} />
+        </div>
+      )}
       {current.away && <div className="t-cap">화면을 누르면 닫혀요</div>}
     </div>
   );

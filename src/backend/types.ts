@@ -419,6 +419,8 @@ export interface EventInput {
   repeat: EventRepeat;
   /** 반복을 끝내는 날. 비어 있으면 계속 */
   repeatUntil: string;
+  /** 메모에 붙인 스티커('팩/스티커'). 없거나 빈 문자열이면 없음 */
+  sticker?: string;
 }
 
 /** 가족 캘린더의 일정 */

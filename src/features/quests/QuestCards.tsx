@@ -7,6 +7,7 @@ import type { IconName } from '../../lib/sprites';
 import { Icon } from '../../ui/Sprite';
 import { Button, CoinInline, Sheet } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
+import { Said } from '../stickers/StickerAttach';
 import { recordAuto } from '../location/auto';
 
 const CARD_CLASS: Record<BoardItem['state'], string> = {
@@ -119,9 +120,21 @@ export function QuestCards({ items }: { items: BoardItem[] }) {
 
           {item.note && item.state !== 'approved' && <p className="t-cap card-foot">{item.note}</p>}
           {item.state === 'rejected' && (
-            <p className="t-capb card-foot">{item.run?.rejectReason ? `다시 해 볼까요? "${item.run.rejectReason}"` : '한 번 더 해 볼까요?'}</p>
+            <p className="t-capb card-foot">
+              {item.run?.rejectReason ? (
+                <>
+                  다시 해 볼까요? <Said said={item.run.rejectReason} />
+                </>
+              ) : (
+                '한 번 더 해 볼까요?'
+              )}
+            </p>
           )}
-          {item.state === 'approved' && item.run?.praise && <p className="t-capb card-foot">"{item.run.praise}"</p>}
+          {item.state === 'approved' && item.run?.praise && (
+            <p className="t-capb card-foot">
+              <Said said={item.run.praise} />
+            </p>
+          )}
           {item.memo && item.state === 'todo' && (
             <div className="row card-foot" style={{ justifyContent: 'space-between' }}>
               <span className="t-cap">{item.memo.declined ? '코인 제안은 거절됐어요' : '코인 없는 메모'}</span>

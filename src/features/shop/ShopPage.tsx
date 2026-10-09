@@ -14,6 +14,7 @@ import { StickerShop } from '../stickers/StickerShop';
 import { MyWishCard } from '../wishes/MyWishCard';
 import { WishFormSheet } from '../wishes/WishFormSheet';
 import { useWishes } from '../wishes/useWishes';
+import { Said } from '../stickers/StickerAttach';
 import { GoalCard } from './GoalCard';
 
 /** 자녀의 상점: 모은 코인으로 보상을 신청하고, 받을 보상을 확인한다. 퀘스트 화면의 상점 버튼으로 들어온다. */
@@ -162,7 +163,7 @@ export function ShopPage() {
                   <div className="card-main">
                     <h3 className="t-body item-title">{order.rewardTitle}</h3>
                     <p className="t-capb">
-                      이번에는 안 된대요.{order.rejectReason ? ` "${order.rejectReason}"` : ''} 코인은 그대로예요.
+                      이번에는 안 된대요. {order.rejectReason && <Said said={order.rejectReason} />} 코인은 그대로예요.
                     </p>
                   </div>
                 </article>

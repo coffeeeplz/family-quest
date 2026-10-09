@@ -1,5 +1,6 @@
 import { AppError, type CalendarEvent, type EventInput, type EventRepeat } from '../backend/types';
 import { WEEKDAYS, addDays, formatShortDay, isDateKey, parseDateKey, weekdayOf } from '../lib/dates';
+import { findSticker } from './stickers';
 import { MAX_TITLE } from './quests';
 
 export const MAX_EVENT_MEMO = 100;
@@ -71,6 +72,7 @@ export function cleanEventInput(input: EventInput): EventInput {
     who: [...new Set(input.who.filter((uid) => typeof uid === 'string' && uid))],
     repeat: input.repeat,
     repeatUntil,
+    sticker: input.sticker && findSticker(input.sticker) ? input.sticker : '',
   };
 }
 

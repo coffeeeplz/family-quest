@@ -5,6 +5,7 @@ import type { LedgerEntry } from '../../backend/types';
 import { formatWhen } from '../../lib/dates';
 import type { IconName } from '../../lib/sprites';
 import { Avatar, Icon } from '../../ui/Sprite';
+import { Said } from '../stickers/StickerAttach';
 import { BackLink, CoinInline, CoinPill, Empty } from '../../ui/kit';
 
 const TYPE_ICON: Record<LedgerEntry['type'], IconName> = {
@@ -75,7 +76,11 @@ export function LedgerPage() {
                   {formatWhen(entry.at, today)}
                   {giver ? ` · ${giver.displayName}` : ''}
                 </p>
-                {entry.note && <p className="t-capb">"{entry.note}"</p>}
+                {entry.note && (
+                  <p className="t-capb">
+                    <Said said={entry.note} />
+                  </p>
+                )}
               </div>
               <CoinInline amount={entry.amount} sign />
             </article>

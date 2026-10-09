@@ -77,3 +77,33 @@ export function checkPack(value: unknown): string[] {
   });
   return problems;
 }
+
+// ── 한마디(칭찬, 거절 이유)에 붙이는 스티커 ────────────────────────────────
+// 따로 칸을 두지 않고 글 끝에 {s:팩id/스티커id} 로 붙여 저장한다(서버 규칙과 옛 기록을 그대로 쓸 수 있다).
+const SAID_TOKEN = /\s*\{s:([a-z][a-z0-9-]*\/[a-z][a-z0-9-]*)\}\s*$/;
+
+/** '잘했어 {s:animal/cat}' → { text: '잘했어', sticker: 'animal/cat' } */
+export function splitSticker(said: string): { text: string; sticker: string } {
+  const match = said.match(SAID_TOKEN);
+  if (!match) return { text: said, sticker: '' };
+  return { text: said.slice(0, match.index).trimEnd(), sticker: findSticker(match[1]) ? match[1] : '' };
+}
+
+/** 글 끝에 스티커를 붙인다. 스티커가 없으면 글만 */
+export function withSticker(text: string, sticker: string): string {
+  const clean = text.trim();
+  return sticker ? `${clean} {s:${sticker}}`.trim() : clean;
+}
+
+/** 저장 전에 다듬기: 글은 max 자까지, 모르는 스티커는 뗀다. */
+export function cleanSaid(said: string, max: number): string {
+  const { text, sticker } = splitSticker(said);
+  return withSticker(text.trim().slice(0, max), sticker);
+}
+
+/** 알림처럼 그림을 못 보여 주는 곳에서 쓰는 글: 스티커는 [고양이] 처럼 이름으로 */
+export function saidPlain(said: string): string {
+  const { text, sticker } = splitSticker(said);
+  const label = sticker ? findSticker(sticker)?.sticker.label : '';
+  return [text, label ? `[${label}]` : ''].filter(Boolean).join(' ');
+}

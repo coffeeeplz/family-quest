@@ -6,7 +6,7 @@ import { MAX_NOTE_TEXT } from '../../domain/notes';
 import { Avatar } from '../../ui/Sprite';
 import { Button, Field, FieldGroup, Sheet } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
-import { StickerPicker } from '../stickers/StickerPicker';
+import { StickerAttach } from '../stickers/StickerAttach';
 
 interface Props {
   /** 고칠 메모. null 이면 새로 남긴다. */
@@ -43,19 +43,19 @@ export function NoteSheet({ note, onClose }: Props) {
     <Sheet title={note ? '메모 고치기' : '메모 남기기'} onClose={onClose}>
       <Field label="메모" hint={`${text.length}/${MAX_NOTE_TEXT}자`}>
         {(id) => (
-          <textarea
-            id={id}
-            className="input area"
-            rows={3}
-            value={text}
-            maxLength={MAX_NOTE_TEXT}
-            placeholder="예: 학원 끝나면 전화해 줘"
-            onChange={(event) => setText(event.target.value)}
-          />
+          <StickerAttach value={sticker} onChange={setSticker} onShop={onClose}>
+            <textarea
+              id={id}
+              className="input area"
+              rows={3}
+              value={text}
+              maxLength={MAX_NOTE_TEXT}
+              placeholder="예: 학원 끝나면 전화해 줘"
+              onChange={(event) => setText(event.target.value)}
+            />
+          </StickerAttach>
         )}
       </Field>
-
-      <StickerPicker value={sticker} onChange={setSticker} onShop={onClose} />
 
       <div className="field" role="group" aria-label="누구에게 보일까요?">
         <div className="label">누구에게 보일까요?</div>

@@ -21,6 +21,8 @@ import { PushNudge } from '../notify/PushNudge';
 import { OfferSheet } from '../negotiation/OfferSheet';
 import { WishInbox } from '../wishes/WishInbox';
 import { useWishes } from '../wishes/useWishes';
+import { withSticker } from '../../domain/stickers';
+import { StickerAttach } from '../stickers/StickerAttach';
 import { KidStatus } from './KidStatus';
 
 const QUICK_REASONS = ['조금만 더 해 보자', '다시 확인해 줘', '끝까지 해 보자'];
@@ -38,6 +40,8 @@ export function ApprovalsPage() {
   const [approveTarget, setApproveTarget] = useState<Run | null>(null);
   const [rejectTarget, setRejectTarget] = useState<Run | null>(null);
   const [reason, setReason] = useState('');
+  // 승인 한마디, 거절 이유에 붙일 스티커(창을 열 때마다 비운다)
+  const [said, setSaid] = useState('');
   const [counterTarget, setCounterTarget] = useState<Proposal | null>(null);
   /** 칭찬 코인을 받을 자녀. null 이면 창이 닫혀 있다. */
   const [giftKidUid, setGiftKidUid] = useState<string | null>(null);
@@ -75,7 +79,7 @@ export function ApprovalsPage() {
     if (!rejectTarget) return;
     const target = rejectTarget;
     setRejectTarget(null);
-    void run(() => backend.rejectRun(family.id, target.id, me.uid, reason), '다시 해 보라고 알렸어요.');
+    void run(() => backend.rejectRun(family.id, target.id, me.uid, withSticker(reason, said)), '다시 해 보라고 알렸어요.');
   }
 
   const upcomingBonus = approveTarget ? streakFor(approveTarget) : null;
@@ -162,6 +166,7 @@ export function ApprovalsPage() {
                     disabled={busy}
                     onClick={() => {
                       setReason('');
+                      setSaid('');
                       setOrderRejectTarget(order);
                     }}
                   >
@@ -212,12 +217,16 @@ export function ApprovalsPage() {
                     disabled={busy}
                     onClick={() => {
                       setReason('');
+                      setSaid('');
                       setRejectTarget(item);
                     }}
                   >
                     다시 하기
                   </Button>
-                  <Button tone="mint" disabled={busy} onClick={() => setApproveTarget(item)}>
+                  <Button tone="mint" disabled={busy} onClick={() => {
+                    setSaid('');
+                    setApproveTarget(item);
+                  }}>
                     승인하고 코인 주기
                   </Button>
                 </div>
@@ -309,15 +318,16 @@ export function ApprovalsPage() {
               이번 승인으로 {upcomingBonus.count}일 연속 달성! 보너스 {upcomingBonus.bonus}코인도 함께 줘요.
             </p>
           )}
+          <StickerAttach value={said} onChange={setSaid} />
           <div className="stack" style={{ gap: 10 }}>
             {settings.praises.map((praise) => (
-              <Button key={praise} tone="mint" block onClick={() => approve(approveTarget, praise)}>
+              <Button key={praise} tone="mint" block onClick={() => approve(approveTarget, withSticker(praise, said))}>
                 {praise}
               </Button>
             ))}
           </div>
-          <Button tone="plain" big block onClick={() => approve(approveTarget, '')}>
-            한마디 없이 승인
+          <Button tone="plain" big block onClick={() => approve(approveTarget, withSticker('', said))}>
+            {said ? '스티커만 붙여 승인' : '한마디 없이 승인'}
           </Button>
           <p className="t-cap center">한마디는 더보기의 가족 설정에서 바꿀 수 있어요.</p>
         </Sheet>
@@ -335,7 +345,9 @@ export function ApprovalsPage() {
           </div>
           <Field label="한마디 (안 적어도 돼요)">
             {(id) => (
-              <input id={id} className="input" type="text" value={reason} maxLength={60} onChange={(event) => setReason(event.target.value)} />
+              <StickerAttach value={said} onChange={setSaid}>
+                <input id={id} className="input" type="text" value={reason} maxLength={60} onChange={(event) => setReason(event.target.value)} />
+              </StickerAttach>
             )}
           </Field>
           <Button big block onClick={reject}>
@@ -352,7 +364,9 @@ export function ApprovalsPage() {
           <p className="t-body">"{orderRejectTarget.rewardTitle}" 신청을 거절해요. 코인은 빠지지 않아요.</p>
           <Field label="한마디 (안 적어도 돼요)">
             {(id) => (
-              <input id={id} className="input" type="text" value={reason} maxLength={60} placeholder="예: 숙제 먼저 하고 하자" onChange={(event) => setReason(event.target.value)} />
+              <StickerAttach value={said} onChange={setSaid}>
+                <input id={id} className="input" type="text" value={reason} maxLength={60} placeholder="예: 숙제 먼저 하고 하자" onChange={(event) => setReason(event.target.value)} />
+              </StickerAttach>
             )}
           </Field>
           <Button
@@ -361,7 +375,7 @@ export function ApprovalsPage() {
             onClick={() => {
               const target = orderRejectTarget;
               setOrderRejectTarget(null);
-              void run(() => backend.rejectOrder(family.id, target.id, me.uid, reason), '거절했어요. 코인은 그대로예요.');
+              void run(() => backend.rejectOrder(family.id, target.id, me.uid, withSticker(reason, said)), '거절했어요. 코인은 그대로예요.');
             }}
           >
             거절하기
@@ -452,6 +466,7 @@ function GiftSheet({ kids, initialKidUid, praises, busy, onGive, onClose }: Gift
   const [kidUid, setKidUid] = useState(kids.some((k) => k.uid === initialKidUid) ? initialKidUid : (kids[0]?.uid ?? ''));
   const [amount, setAmount] = useState('5');
   const [note, setNote] = useState(praises[0] ?? '');
+  const [sticker, setSticker] = useState('');
   const kid = kids.find((k) => k.uid === kidUid);
 
   return (
@@ -481,18 +496,20 @@ function GiftSheet({ kids, initialKidUid, praises, busy, onGive, onClose }: Gift
                 </button>
               ))}
             </div>
-            <input
-              id={id}
-              className="input"
-              type="text"
-              value={note}
-              maxLength={MAX_PRAISE_LENGTH}
-              onChange={(event) => setNote(event.target.value)}
-            />
+            <StickerAttach value={sticker} onChange={setSticker}>
+              <input
+                id={id}
+                className="input"
+                type="text"
+                value={note}
+                maxLength={MAX_PRAISE_LENGTH}
+                onChange={(event) => setNote(event.target.value)}
+              />
+            </StickerAttach>
           </>
         )}
       </Field>
-      <Button big block disabled={busy || !kid} onClick={() => kid && onGive(kid, parseCoins(amount), note)}>
+      <Button big block disabled={busy || !kid} onClick={() => kid && onGive(kid, parseCoins(amount), withSticker(note, sticker))}>
         {kid ? `${kid.displayName}에게 코인 주기` : '코인 주기'}
       </Button>
       <Button tone="plain" big block onClick={onClose}>
