@@ -3,6 +3,8 @@ import { ApprovalsPage } from '../features/approvals/ApprovalsPage';
 import { CalendarPage } from '../features/calendar/CalendarPage';
 import { HomePage } from '../features/home/HomePage';
 import { NotifyPage } from '../features/notify/NotifyPage';
+import { UpdatesPage } from '../features/more/UpdatesPage';
+import { useHasNewUpdate } from '../lib/updates';
 import { PushSync } from '../features/notify/PushSync';
 import { useNotes } from '../features/notes/useNotes';
 import { useMyBoard } from '../features/quests/QuestCards';
@@ -38,12 +40,14 @@ interface TabDef {
   label: string;
   icon: IconName;
   count?: number;
+  /** 숫자 대신 붙는 표시(새 업데이트 소식의 'N') */
+  badge?: string;
   /** 이 탭에 딸린 다른 화면의 주소(그 화면에 있을 때도 탭이 켜진다) */
   also?: string[];
 }
 
 /** 더보기 탭 안쪽에 있는 화면들 */
-const MORE_PATHS = ['/family', '/log', '/settings', '/notify'];
+const MORE_PATHS = ['/family', '/log', '/settings', '/notify', '/updates'];
 
 /**
  * 로그인 뒤의 화면 틀: 주소에 따라 화면을 바꾸고 아래에 탭을 둔다.
@@ -55,6 +59,8 @@ export function Shell() {
   const { pending, offersForParent, ordersForParent, proposals, today } = useFamilyData();
   const { notes } = useNotes();
   const { remaining } = useMyBoard();
+  const newUpdate = useHasNewUpdate();
+  const moreBadge = newUpdate ? 'N' : undefined;
   // 아직 확인하지 않은 가족 메모: 홈 탭에 숫자로 보인다.
   const unreadNotes = visibleNotes(notes, me.uid, today).filter((note) => isUnreadFor(note, me.uid)).length;
   // 자녀가 답할 차례인 코인 협상
@@ -71,7 +77,7 @@ export function Shell() {
         { to: '/calendar', label: '캘린더', icon: 'calendar' },
         { to: '/food', label: '뭐먹지', icon: 'food' },
         // 부모의 상점 관리는 자주 열지 않으므로 더보기 안에 있다(보상 신청은 승인 탭으로 온다).
-        { to: '/more', label: '더보기', icon: 'more', also: [...MORE_PATHS, '/shop'] },
+        { to: '/more', label: '더보기', icon: 'more', badge: moreBadge, also: [...MORE_PATHS, '/shop'] },
       ]
     : [
         { to: '/home', label: '홈', icon: 'home', count: unreadNotes },
@@ -79,7 +85,7 @@ export function Shell() {
         { to: '/quests', label: '퀘스트', icon: 'quest', count: remaining + offersForMe + wishesForMe, also: ['/shop'] },
         { to: '/calendar', label: '캘린더', icon: 'calendar' },
         { to: '/food', label: '뭐먹지', icon: 'food' },
-        { to: '/more', label: '더보기', icon: 'more', also: MORE_PATHS },
+        { to: '/more', label: '더보기', icon: 'more', badge: moreBadge, also: MORE_PATHS },
       ];
 
   return (
@@ -112,6 +118,7 @@ export function Shell() {
         <Route path="/log" element={<LedgerPage />} />
         <Route path="/family" element={<FamilyPage />} />
         <Route path="/notify" element={<NotifyPage />} />
+        <Route path="/updates" element={<UpdatesPage />} />
         <Route path="*" element={<Navigate to={tabs[0].to} replace />} />
       </Routes>
 
@@ -138,6 +145,10 @@ function TabBar({ tabs }: { tabs: TabDef[] }) {
             {tab.count ? (
               <span className="tab-count" aria-label={`${tab.count}개 대기`}>
                 {tab.count}
+              </span>
+            ) : tab.badge ? (
+              <span className="tab-count" aria-label="새 소식 있음">
+                {tab.badge}
               </span>
             ) : null}
           </Link>

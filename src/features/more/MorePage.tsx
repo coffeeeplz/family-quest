@@ -7,6 +7,8 @@ import { AvatarFrame, Icon } from '../../ui/Sprite';
 import { Button } from '../../ui/kit';
 import { LocationInfoRow } from '../location/CheckinButton';
 import { usePushStatus } from '../notify/usePush';
+import { APP_VERSION } from '../../domain/changelog';
+import { useHasNewUpdate } from '../../lib/updates';
 
 interface MenuItem {
   to: string;
@@ -23,6 +25,7 @@ export function MorePage() {
   const backend = useBackend();
   const { family, me, isParent } = useSession();
   const { status } = usePushStatus();
+  const newUpdate = useHasNewUpdate();
   const pushHint = status === 'on' ? '이 기기에서 받는 중 · 종류와 시각 정하기' : status === 'demo' ? '체험 모드에서는 알림이 오지 않아요' : '이 기기에서 알림 켜기, 종류와 시각 정하기';
 
   const items: MenuItem[] = [
@@ -33,6 +36,7 @@ export function MorePage() {
     ...(isParent
       ? [{ to: '/settings', icon: 'star' as IconName, title: '가족 설정', hint: '코인 협상, 연속 달성 보너스, 칭찬 한마디, 자주 쓰는 퀘스트' }]
       : []),
+    { to: '/updates', icon: 'balloon', title: '업데이트 소식', hint: newUpdate ? `v${APP_VERSION} 새 소식이 있어요` : `v${APP_VERSION} · 새로 생긴 기능 보기` },
   ];
 
   function leaveSession() {
@@ -92,6 +96,7 @@ export function MorePage() {
           로그아웃
         </Button>
       )}
+      <p className="t-cap center">가족 퀘스트 v{APP_VERSION}</p>
     </main>
   );
 }

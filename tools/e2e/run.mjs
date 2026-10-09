@@ -101,7 +101,7 @@ const pickDay = async (page, n) => {
   return day;
 };
 const dayList = (page) => region(page, '고른 날의 일정');
-const tabNames = async (page) => (await page.locator('.tabbar a').allInnerTexts()).map((t) => t.replace(/\d+/g, '').trim()).join();
+const tabNames = async (page) => (await page.locator('.tabbar a > span:not(.tab-count)').allInnerTexts()).map((t) => t.trim()).join();
 // 아래 탭으로 가기. 자녀의 상점은 퀘스트 화면의 버튼으로 들어간다.
 const toHome = (page) => page.locator('.tabbar').getByRole('link', { name: '홈' }).click();
 const toQuests = (page) => page.locator('.tabbar').getByRole('link', { name: '퀘스트' }).click();
@@ -222,7 +222,7 @@ try {
   watch(dad, 'dad');
   await enter(dad, '아빠');
   await dad.getByRole('heading', { name: '승인 대기' }).waitFor();
-  check('홈 탭 숫자 = 승인 3 + 코인 제안 2 + 보상 제안 1 + 안 읽은 메모 1', (await dad.locator('.tab-count').innerText()) === '7', await dad.locator('.tab-count').innerText());
+  check('홈 탭 숫자 = 승인 3 + 코인 제안 2 + 보상 제안 1 + 안 읽은 메모 1', (await dad.locator('.tabbar a', { hasText: '홈' }).locator('.tab-count').innerText()) === '7', await dad.locator('.tabbar a', { hasText: '홈' }).locator('.tab-count').innerText());
   check('아래 탭: 홈 퀘스트 캘린더 뭐먹지 더보기', (await tabNames(dad)) === '홈,퀘스트,캘린더,뭐먹지,더보기', await tabNames(dad));
   check('승인 화면 머리말: 답할 일 6개, 작은 + 버튼', (await dad.getByText('답할 일 6개').isVisible()) && (await dad.getByRole('link', { name: '새 퀘스트 만들기', exact: true }).isVisible()));
   check('가족 칸과 큰 버튼은 첫 화면에 없음', (await dad.locator('.member-strip').count()) === 0 && (await dad.getByRole('main').getByRole('button', { name: '칭찬 코인 주기' }).count()) === 0);
@@ -237,7 +237,7 @@ try {
   await toHome(kid);
   await kidNote.getByRole('button', { name: '딸의 메모 확인했어요' }).click();
   await myNote.getByText('아빠 확인').waitFor();
-  check('부모가 확인하면 자녀 화면에 바로 보임', (await dad.locator('.tab-count').innerText()) === '6');
+  check('부모가 확인하면 자녀 화면에 바로 보임', (await dad.locator('.tabbar a', { hasText: '홈' }).locator('.tab-count').innerText()) === '6');
   // 부모는 자녀가 쓴 메모도 고칠 수 있다. 고치면 다시 확인받는다.
   await dadNotes.getByRole('button', { name: /^딸의 메모: 준비물로 색종이/ }).click();
   check('메모 창에 고치기와 지우기가 따로', (await dad.getByRole('dialog').getByRole('button', { name: '지우기', exact: true }).isVisible()));
@@ -477,7 +477,8 @@ try {
   check('자녀 더보기에는 가족 설정이 없음', await (async () => {
     await kid.getByRole('link', { name: '더보기' }).click();
     await kid.getByRole('navigation', { name: '더보기 메뉴' }).waitFor();
-    return (await kid.getByRole('navigation', { name: '더보기 메뉴' }).getByRole('link').count()) === 3; // 가족, 코인 기록, 알림
+    const nav = kid.getByRole('navigation', { name: '더보기 메뉴' });
+    return (await nav.getByRole('link').count()) === 4 && (await nav.getByRole('link', { name: /^가족 설정/ }).count()) === 0; // 가족, 코인 기록, 알림, 업데이트 소식
   })());
   await more(kid, '코인 기록');
   await kid.getByRole('heading', { name: '코인 기록' }).waitFor();
@@ -969,6 +970,20 @@ try {
   await kid.getByRole('navigation', { name: '더보기 메뉴' }).getByRole('link', { name: /^알림/ }).click();
   await kid.getByLabel('저녁 할 일 알림 시각').waitFor();
   check('저장한 알림 설정이 다시 열어도 남아 있음', (await kid.getByLabel('저녁 할 일 알림 시각').inputValue()) === '19:00' && (await kid.getByLabel('조용한 시간 시작').inputValue()) === '21:30' && (await kid.getByRole('button', { name: /^가족 메모 알림/ }).getAttribute('aria-pressed')) === 'false');
+
+  // ── 8-3b. 업데이트 소식과 버전 ──────────────────────────────────────────
+  const moreTab = kid.locator('.tabbar a', { hasText: '더보기' });
+  check('새 업데이트가 있으면 더보기 탭에 N', (await moreTab.locator('.tab-count').innerText()) === 'N');
+  await moreTab.click();
+  const version = (await kid.getByText(/^가족 퀘스트 v\d+\.\d+\.\d+$/).innerText()).replace('가족 퀘스트 ', '');
+  check('더보기 아래에 버전 표시', /^v\d/.test(version), version);
+  await kid.getByRole('navigation', { name: '더보기 메뉴' }).getByRole('link', { name: /^업데이트 소식/ }).click();
+  await kid.getByRole('heading', { name: '업데이트 소식' }).waitFor();
+  const latest = kid.getByRole('region', { name: `버전 ${version.slice(1)}` });
+  check('업데이트 소식: 최신 버전이 맨 위에 "새로" 표시와 함께', (await latest.getByText('새로').isVisible()) && (await kid.locator('section.card').first().getAttribute('aria-label')) === `버전 ${version.slice(1)}` && (await kid.getByRole('region', { name: '버전 1.0.0' }).isVisible()));
+  await shot(kid, '48b-updates');
+  check('소식을 보면 N 표시가 사라짐', (await moreTab.locator('.tab-count').count()) === 0);
+  check('다른 사람의 기기에는 아직 N', (await dad.locator('.tabbar a', { hasText: '더보기' }).locator('.tab-count').innerText()) === 'N');
 
   // ── 8-4. 가족 캘린더 ─────────────────────────────────────────────────────
   await kid.locator('.tabbar').getByRole('link', { name: '캘린더' }).click();

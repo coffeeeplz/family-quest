@@ -1368,3 +1368,18 @@ button.today-line {
 .push-nudge .today-line {
   background: var(--pink-soft);
 }
+
+/* 업데이트 소식 */
+.update-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.update-list li {
+  line-height: 18px;
+}
+.new-tag {
+  color: #c2334d;
+}
