@@ -1141,7 +1141,7 @@ try {
   await more(dad, '상점 관리');
   const stickerAdmin = region(dad, '스티커 팩');
   await stickerAdmin.waitFor();
-  check('상점 관리에 스티커 팩 4개(처음 가격)', (await stickerAdmin.locator('.card').count()) === 4 && (await stickerAdmin.getByRole('button', { name: '기본 팩 가격 정하기' }).innerText()).includes('50코인'));
+  check('상점 관리에 스티커 팩 5개(처음 가격)', (await stickerAdmin.locator('.card').count()) === 5 && (await stickerAdmin.getByRole('button', { name: '기본 팩 가격 정하기' }).innerText()).includes('50코인'));
   await stickerAdmin.getByRole('button', { name: '동물 팩 가격 정하기' }).click();
   await dad.getByLabel('가격(코인)').fill('5');
   await dad.getByRole('dialog').getByRole('button', { name: '저장하기' }).click();

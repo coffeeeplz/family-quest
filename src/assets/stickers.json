@@ -378,5 +378,100 @@
         ]
       }
     ]
+  },
+  {
+    "id": "sea",
+    "name": "바다 팩",
+    "price": 100,
+    "stickers": [
+      {
+        "id": "whale",
+        "label": "고래",
+        "rows": [
+          ".....B....B.....",
+          "....KBB..BBK....",
+          ".....KBBBBK.....",
+          "......KBBK......",
+          "...KKKKKKKK.....",
+          "..KBBBBBBBBKK...",
+          ".KBBWWBBBBBBBK..",
+          ".KBWKKBBBBBBBBK.",
+          ".KBBKKBBBBRBBBK.",
+          ".KCCCCCCCBBBBBK.",
+          "..KCCCCCKBBBBK..",
+          "...KKCCKBBBK....",
+          "....KKK.KBBK....",
+          "........KBBK....",
+          ".........KK.....",
+          "................"
+        ]
+      },
+      {
+        "id": "octopus",
+        "label": "문어",
+        "rows": [
+          "................",
+          ".....KKKKKK.....",
+          "...KKPPPPPPKK...",
+          "..KPPWPPPPWPPK..",
+          ".KPPKKPPPPKKPPK.",
+          ".KPPPPPKKPPPPPK.",
+          ".KPPRPPPPPPRPPK.",
+          "..KPPPPPPPPPPK..",
+          "..KKKPPPPPPKKK..",
+          ".KPPKPPPPPPKPPK.",
+          ".KPK.KPPPPK.KPK.",
+          ".KPC.KPKKPK.CPK.",
+          "..KK.KP..PK.KK..",
+          "...KPKK..KKPK...",
+          "....KK....KK....",
+          "................"
+        ]
+      },
+      {
+        "id": "fish",
+        "label": "물고기",
+        "rows": [
+          "................",
+          "....KK..........",
+          "...KYYK.....KK..",
+          "..KYYYYK...KYYK.",
+          ".KOOYYYYKKKYYYK.",
+          "KOWKOOYYYYYYYYK.",
+          "KOKOCOOYOYYYYYK.",
+          "KOOOWOOOYYYYYYK.",
+          "KOROCOOYOYYYYYK.",
+          ".KOOOYYYYKKYYYK.",
+          "..KOOYYK...KYYK.",
+          "...KYYK.....KK..",
+          "....KK..........",
+          "................",
+          "................",
+          "................"
+        ]
+      },
+      {
+        "id": "clam",
+        "label": "조개",
+        "rows": [
+          "................",
+          "......KKKK......",
+          "....KKCCCCKK....",
+          "...KCWCPPCWCK...",
+          "..KCCPCCPCCPCK..",
+          ".KCCPCCPCCPCCCK.",
+          ".KCPCCPCCPCCPCK.",
+          ".KCCCCCCCCCCCCK.",
+          "..KKCCCCCCCCKK..",
+          "...KKKKWWKKKK...",
+          "..KNCCKWWKCCNK..",
+          ".KNCCCKWWKCCCNK.",
+          ".KNCCCCKKCCCCNK.",
+          "..KNNCCCCCCNNK..",
+          "....KKNNNNKK....",
+          "................"
+        ]
+      }
+    ]
   }
 ]

@@ -12,6 +12,11 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '1.12.0',
+    date: '2026-10-10',
+    items: ['새 스티커: 바다 팩(고래, 문어, 물고기, 조개) 100코인'],
+  },
+  {
     version: '1.11.1',
     date: '2026-10-09',
     items: [
