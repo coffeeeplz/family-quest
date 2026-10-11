@@ -111,7 +111,8 @@ export interface Quest extends QuestInput {
   createdAt: number;
 }
 
-export type RunStatus = 'submitted' | 'approved' | 'rejected';
+/** skipped = 자녀가 놓친 일을 포기함(코인 없음) */
+export type RunStatus = 'submitted' | 'approved' | 'rejected' | 'skipped';
 
 /** 퀘스트를 하루치(또는 한 번) 수행한 기록. id = `${questId}_${dateKey}` */
 export interface Run {
@@ -490,6 +491,8 @@ export interface Backend {
   /** late=true 면 놓친 날의 반복 퀘스트를 늦게 하는 것으로, 코인을 절반만 받는다. */
   submitRun(familyId: string, quest: Quest, dateKey: string, uid: string, late: boolean): Promise<void>;
   cancelRun(familyId: string, runId: string): Promise<void>;
+  /** 놓친 퀘스트를 포기한다(코인 없이 목록에서 빠지고 기록에 '포기함'으로 남는다) */
+  giveUpRun(familyId: string, quest: Quest, dateKey: string, uid: string): Promise<void>;
   approveRun(familyId: string, runId: string, byUid: string, options: ApproveOptions): Promise<void>;
   rejectRun(familyId: string, runId: string, byUid: string, reason: string): Promise<void>;
 

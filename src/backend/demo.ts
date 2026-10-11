@@ -262,7 +262,10 @@ function seed(now: number = Date.now()): DemoState {
       [FAMILY]: {
         'q-math': quest('q-math', '수학 문제집 2쪽', 10, { type: 'daily' }),
         'q-read': quest('q-read', '책 30분 읽기', 10, { type: 'daily' }),
-        'q-room': quest('q-room', '방 정리하기', 20, { type: 'weekly', days: [6] }),
+        // 주 1회 퀘스트는 늘 모레로 둔다(요일에 따라 체험 화면이 달라지지 않게).
+        'q-room': quest('q-room', '방 정리하기', 20, { type: 'weekly', days: [(parseDateKey(today).getDay() + 2) % 7] }),
+        // 어제까지였던 한 번짜리 퀘스트: 놓친 일에 남아 있고, 늦게 하면 절반
+        'q-shoes': quest('q-shoes', '실내화 빨기', 10, { type: 'none', date: yesterday }),
         'q-piano': quest('q-piano', '피아노 연습', 15, { type: 'none', date: today }, true),
       },
     },
@@ -768,6 +771,34 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
         oneOff: stored.repeat.type === 'none',
         late,
         status: 'submitted',
+        submittedAt: Date.now(),
+        decidedBy: null,
+        decidedAt: null,
+        rejectReason: '',
+        praise: '',
+      };
+      commit();
+    },
+
+    async giveUpRun(familyId, quest, day, uid) {
+      requireSelf(uid);
+      requireMember(familyId);
+      const stored = state.quests[familyId]?.[quest.id];
+      if (!stored) throw new AppError('퀘스트를 찾을 수 없어요.');
+      if (stored.assigneeUid !== uid) throw new AppError('내 퀘스트만 포기할 수 있어요.');
+      const id = runId(stored.id, day);
+      const existing = state.runs[familyId][id];
+      if (existing && existing.status !== 'rejected') throw new AppError('이미 완료를 알린 퀘스트예요.');
+      state.runs[familyId][id] = {
+        id,
+        questId: stored.id,
+        questTitle: stored.title,
+        reward: 0,
+        assigneeUid: uid,
+        dateKey: day,
+        oneOff: stored.repeat.type === 'none',
+        late: false,
+        status: 'skipped',
         submittedAt: Date.now(),
         decidedBy: null,
         decidedAt: null,

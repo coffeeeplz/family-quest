@@ -903,3 +903,17 @@ describe('스티커', () => {
     expect(kid()).toMatchObject({ coins: 10, stickerPacks: ['animal'] });
   });
 });
+
+describe('놓친 퀘스트 포기', () => {
+  it('자녀는 어제까지였던 퀘스트를 코인 없이 포기하고, 목록에서 빠진다', async () => {
+    as('demo-kid');
+    const shoes = questById('q-shoes');
+    const day = addDays(today, -1);
+    await backend.giveUpRun(FAMILY, shoes, day, 'demo-kid');
+    expect(runById(`q-shoes_${day}`)).toMatchObject({ status: 'skipped', reward: 0 });
+    expect(kid().coins).toBe(ledgerSum());
+    await expect(backend.giveUpRun(FAMILY, shoes, day, 'demo-kid')).rejects.toThrow('이미');
+    as('demo-dad');
+    await expect(backend.giveUpRun(FAMILY, shoes, day, 'demo-dad')).rejects.toThrow('내 퀘스트만');
+  });
+});

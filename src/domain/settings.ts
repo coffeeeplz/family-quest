@@ -2,7 +2,7 @@ import { AppError, type FamilySettings } from '../backend/types';
 import { DEFAULT_FOOD_CATEGORIES, cleanFoodCategories, normalizeFoodCategories } from './foods';
 
 /** 놓친 반복 퀘스트를 며칠 전 것까지 보여 줄지 */
-export const MISSED_DAYS = 3;
+export const MISSED_DAYS = 1;
 export const MAX_REWARD = 1000;
 export const MAX_PRAISES = 8;
 export const MAX_PRAISE_LENGTH = 20;

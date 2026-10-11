@@ -663,6 +663,26 @@ export function createFirebaseBackend(): Backend {
         });
       }),
 
+    giveUpRun: (familyId, quest, day, uid) =>
+      guard(async () => {
+        // 처음이면 새로 만들고, 돌려받은(반려된) 기록이면 포기로 덮어쓴다. 서버 규칙이 다시 검사한다.
+        await setDoc(doc(runsCol(familyId), runId(quest.id, day)), {
+          questId: quest.id,
+          questTitle: quest.title,
+          reward: 0,
+          assigneeUid: uid,
+          dateKey: day,
+          oneOff: quest.repeat.type === 'none',
+          late: false,
+          status: 'skipped',
+          submittedAt: Date.now(),
+          decidedBy: null,
+          decidedAt: null,
+          rejectReason: '',
+          praise: '',
+        });
+      }),
+
     cancelRun: (familyId, id) =>
       guard(async () => {
         await deleteDoc(doc(runsCol(familyId), id));

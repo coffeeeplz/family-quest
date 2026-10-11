@@ -199,14 +199,17 @@ describe('half reward for late quests', () => {
 });
 
 describe('board: missed / today / upcoming', () => {
-  it('lists the last three missed days of a repeating quest at half coins', () => {
+  it('lists only yesterday as a missed day of a repeating quest, at half coins', () => {
     const board = buildBoard([quest({ reward: 15 })], [], [], 'kid', TODAY);
     expect(board.today.map((i) => [i.runDay, i.reward, i.late])).toEqual([[TODAY, 15, false]]);
-    expect(board.missed.map((i) => [i.runDay, i.reward, i.late])).toEqual([
-      ['2026-10-03', 8, true],
-      ['2026-10-04', 8, true],
-      ['2026-10-05', 8, true],
-    ]);
+    expect(board.missed.map((i) => [i.runDay, i.reward, i.late])).toEqual([['2026-10-05', 8, true]]);
+  });
+
+  it('drops a missed day the child gave up', () => {
+    const runs = [run('q1', '2026-10-05', { status: 'skipped', reward: 0 })];
+    expect(buildBoard([quest({})], runs, [], 'kid', TODAY).missed).toEqual([]);
+    const oneOff = quest({ id: 'a', repeat: { type: 'none', date: '2026-10-01' } });
+    expect(buildBoard([oneOff], [run('a', '2026-10-01', { status: 'skipped', reward: 0 })], [], 'kid', TODAY).missed).toEqual([]);
   });
 
   it('skips missed days that were done, are awaiting approval, or predate the quest', () => {
@@ -221,24 +224,20 @@ describe('board: missed / today / upcoming', () => {
   it('keeps a rejected or late-submitted day in the missed list', () => {
     const runs = [
       run('q1', '2026-10-05', { status: 'rejected', rejectReason: '다시' }),
-      run('q1', '2026-10-04', { status: 'submitted', late: true, reward: 5 }),
-      run('q1', '2026-10-03', { status: 'approved', late: true, reward: 5 }),
     ];
-    const missed = buildBoard([quest({})], runs, [], 'kid', TODAY).missed;
-    expect(missed.map((i) => [i.runDay, i.state])).toEqual([
-      ['2026-10-05', 'rejected'],
-      ['2026-10-04', 'submitted'],
-    ]);
+    expect(buildBoard([quest({})], runs, [], 'kid', TODAY).missed.map((i) => [i.runDay, i.state])).toEqual([['2026-10-05', 'rejected']]);
+    const late = [run('q1', '2026-10-05', { status: 'submitted', late: true, reward: 5 })];
+    expect(buildBoard([quest({})], late, [], 'kid', TODAY).missed.map((i) => [i.runDay, i.state])).toEqual([['2026-10-05', 'submitted']]);
   });
 
-  it('places one-off quests by due date; overdue ones keep full coins', () => {
+  it('places one-off quests by due date; overdue ones stay until done or given up, at half coins', () => {
     const quests = [
       quest({ id: 'a', title: '어제까지', reward: 15, repeat: { type: 'none', date: '2026-10-05' } }),
       quest({ id: 'b', title: '오늘까지', repeat: { type: 'none', date: TODAY } }),
       quest({ id: 'c', title: '금요일까지', repeat: { type: 'none', date: '2026-10-09' } }),
     ];
     const board = buildBoard(quests, [], [], 'kid', TODAY);
-    expect(board.missed.map((i) => [i.title, i.reward, i.late])).toEqual([['어제까지', 15, false]]);
+    expect(board.missed.map((i) => [i.title, i.reward, i.late])).toEqual([['어제까지', 8, true]]);
     expect(board.today.map((i) => i.title)).toEqual(['오늘까지']);
     expect(board.upcoming.map((i) => [i.title, i.canAct, i.runDay])).toEqual([['금요일까지', true, '2026-10-09']]);
   });

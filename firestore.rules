@@ -95,6 +95,18 @@ service cloud.firestore {
         );
     }
 
+    // 자녀가 놓친 퀘스트를 포기: 내 퀘스트의 그날 기록을 코인 없이 '포기함'으로
+    function validGiveUp(fid, rid) {
+      let d = request.resource.data;
+      let quest = get(/databases/$(database)/documents/families/$(fid)/quests/$(d.questId)).data;
+      return d.assigneeUid == request.auth.uid
+        && d.status == 'skipped'
+        && d.decidedBy == null
+        && d.reward == 0
+        && rid == d.questId + '_' + d.dateKey
+        && quest.assigneeUid == request.auth.uid;
+    }
+
     // 퀘스트 코인 지급: 같은 묶음에서 승인된 수행 기록과 금액, 받는 사람이 일치해야 한다.
     function validQuestPayout(fid, lid) {
       let run = getAfter(/databases/$(database)/documents/families/$(fid)/runs/$(lid)).data;
@@ -588,10 +600,10 @@ service cloud.firestore {
 
       match /runs/{rid} {
         allow read: if isMember(fid);
-        allow create: if isMember(fid) && validSubmission(fid, rid);
+        allow create: if isMember(fid) && (validSubmission(fid, rid) || validGiveUp(fid, rid));
         allow update: if isMember(fid) && (
           // 돌려받은 퀘스트를 자녀가 다시 제출
-          (resource.data.status == 'rejected' && validSubmission(fid, rid))
+          (resource.data.status == 'rejected' && (validSubmission(fid, rid) || validGiveUp(fid, rid)))
           // 부모의 승인 또는 반려
           || (isParent(fid)
             && resource.data.status == 'submitted'

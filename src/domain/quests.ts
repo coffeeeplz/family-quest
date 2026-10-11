@@ -162,13 +162,13 @@ export function buildBoard(quests: Quest[], runs: Run[], proposals: Proposal[], 
     if (run) usedRunIds.add(run.id);
     return {
       key: runId(quest.id, day),
-      kind: 'quest',
+      kind: 'quest' as const,
       title: quest.title,
       note: quest.note,
       important: quest.important,
       label: repeatLabel(quest.repeat, today),
       day,
-      state: run ? run.status : 'todo',
+      state: run && run.status !== 'skipped' ? run.status : 'todo',
       quest,
       run,
       runDay: day,
@@ -185,7 +185,13 @@ export function buildBoard(quests: Quest[], runs: Run[], proposals: Proposal[], 
 
     if (quest.repeat.type === 'none') {
       const due = quest.repeat.date;
-      const item = questItem(quest, due, {});
+      // 포기한 한 번짜리 퀘스트는 보이지 않는다.
+      if (runById.get(runId(quest.id, due))?.status === 'skipped') continue;
+      // 기한이 지난 한 번짜리 퀘스트는 자녀가 하거나 포기할 때까지 남는다. 늦게 하면 절반
+      const item =
+        due < today
+          ? questItem(quest, due, { late: true, reward: halfReward(quest.reward), label: `${relativeDay(due, today)}까지였던 일 · 늦어서 절반` })
+          : questItem(quest, due, {});
       if (due < today) board.missed.push(item);
       else if (due === today) board.today.push(item);
       else board.upcoming.push(item);

@@ -166,8 +166,11 @@ try {
   check('퀘스트 화면: 메모와 일정은 없고 상점 버튼이 있음', (await region(kid, '가족 메모').count()) === 0 && (await kid.getByRole('link', { name: /일정/ }).count()) === 0 && (await kid.getByRole('main').getByRole('link', { name: '상점', exact: true }).isVisible()));
   check('퀘스트 탭에 남은 일의 수(놓친 일 1 + 오늘 할 일 2)', (await kid.locator('.tabbar a', { hasText: '퀘스트' }).locator('.tab-count').innerText()) === '3');
   const missed = region(kid, '놓친 일');
-  check('놓친 일 1개(그저께 책 읽기, 절반)', (await missed.locator('article').count()) === 1 && (await missed.getByText('그저께 못 한 일 · 늦어서 절반').isVisible()));
+  check('놓친 일 1개(어제까지였던 실내화 빨기, 절반)', (await missed.locator('article').count()) === 1 && (await missed.getByText('어제까지였던 일 · 늦어서 절반').isVisible()));
   check('놓친 일 코인은 절반(+5)', await missed.locator('.coin-inline', { hasText: '+5' }).isVisible());
+  await missed.getByRole('button', { name: '실내화 빨기 포기하기' }).click();
+  check('포기는 한 번 더 묻는다', await kid.getByRole('dialog', { name: '정말 포기할까요?' }).isVisible().catch(() => false) || (await kid.getByRole('heading', { name: '정말 포기할까요?' }).isVisible()));
+  await kid.getByRole('button', { name: '조금 더 해 볼게요' }).click();
   check('꼭 표시가 맨 위', (await region(kid, '오늘 할 일').locator('article').first().innerText()).includes('피아노 연습'));
   check('다가오는 일은 접혀 있음', (await region(kid, '다가오는 일').getByText('준비물 챙기기').count()) === 0);
   await unfold(kid, '다가오는 일');
@@ -354,7 +357,7 @@ try {
 
   await waiting.locator('article', { hasText: '책 30분 읽기' }).filter({ hasNotText: '늦어서 절반' }).getByRole('button', { name: '승인하고 코인 주기' }).click();
   const bonusNote = dad.getByRole('dialog').getByText('이번 승인으로 3일 연속 달성! 보너스 10코인도 함께 줘요.');
-  const isSaturday = new Date().getDay() === 6; // 토요일에는 주 1회 퀘스트가 남아 그날 완료가 아니다
+  const isSaturday = false; // 체험의 주 1회 퀘스트는 늘 모레라서 요일과 상관없다
   check('승인 창에 연속 달성 보너스 안내', isSaturday || (await bonusNote.isVisible()));
   await shot(dad, '09-parent-bonus');
   await dad.getByRole('dialog').getByRole('button', { name: '한마디 없이 승인' }).click();

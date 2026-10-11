@@ -42,6 +42,14 @@ export function QuestCards({ items }: { items: BoardItem[] }) {
   const { today } = useFamilyData();
   const { busy, run } = useAction();
   const [cancelTarget, setCancelTarget] = useState<BoardItem | null>(null);
+  const [giveUpTarget, setGiveUpTarget] = useState<BoardItem | null>(null);
+
+  function giveUp(item: BoardItem) {
+    setGiveUpTarget(null);
+    if (!item.quest) return;
+    const quest = item.quest;
+    void run(() => backend.giveUpRun(family.id, quest, item.runDay, me.uid), '포기했어요. 다음엔 꼭 해 봐요!');
+  }
 
   function submit(item: BoardItem) {
     if (!item.quest) return;
@@ -135,6 +143,13 @@ export function QuestCards({ items }: { items: BoardItem[] }) {
               <Said said={item.run.praise} />
             </p>
           )}
+          {item.kind === 'quest' && item.quest && item.day < today && (item.state === 'todo' || item.state === 'rejected') && (
+            <div className="row card-foot" style={{ justifyContent: 'flex-end' }}>
+              <button type="button" className="link" disabled={busy} aria-label={`${item.title} 포기하기`} onClick={() => setGiveUpTarget(item)}>
+                포기하기
+              </button>
+            </div>
+          )}
           {item.memo && item.state === 'todo' && (
             <div className="row card-foot" style={{ justifyContent: 'space-between' }}>
               <span className="t-cap">{item.memo.declined ? '코인 제안은 거절됐어요' : '코인 없는 메모'}</span>
@@ -145,6 +160,18 @@ export function QuestCards({ items }: { items: BoardItem[] }) {
           )}
         </article>
       ))}
+
+      {giveUpTarget && (
+        <Sheet title="정말 포기할까요?" onClose={() => setGiveUpTarget(null)}>
+          <p className="t-body">"{giveUpTarget.title}"을(를) 포기하면 코인 없이 목록에서 빠져요. 부모님은 자녀 현황에서 볼 수 있어요.</p>
+          <Button tone="plain" big block disabled={busy} onClick={() => giveUp(giveUpTarget)}>
+            포기하기
+          </Button>
+          <Button big block onClick={() => setGiveUpTarget(null)}>
+            조금 더 해 볼게요
+          </Button>
+        </Sheet>
+      )}
 
       {cancelTarget && (
         <Sheet title="확인을 기다리는 중" onClose={() => setCancelTarget(null)}>

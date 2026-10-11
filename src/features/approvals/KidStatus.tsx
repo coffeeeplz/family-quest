@@ -55,6 +55,8 @@ export function KidStatus({ kid, onGift }: Props) {
   const streak = family.settings.streakOn ? currentStreak(kid, quests, today) : 0;
   const reserved = reservedCoins(orders, kid.uid);
   const recent = ledger.filter((entry) => entry.uid === kid.uid).slice(0, RECENT);
+  // 최근 일주일 동안 포기한 일
+  const givenUp = runs.filter((r) => r.assigneeUid === kid.uid && r.status === 'skipped').sort((a, b) => b.submittedAt - a.submittedAt);
   const goal = rewards.find((reward) => reward.id === kid.goalRewardId);
 
   const renderItem = (item: BoardItem) => (
@@ -151,6 +153,21 @@ export function KidStatus({ kid, onGift }: Props) {
       {goal && (
         <Fold title="목표 저금통" summary={goal.title}>
           <GoalCard member={kid} />
+        </Fold>
+      )}
+
+      {givenUp.length > 0 && (
+        <Fold title="포기한 일" summary={`최근 ${givenUp.length}건`}>
+          {givenUp.map((r) => (
+            <div key={r.id} className="px history-row">
+              <div className="grow stack" style={{ gap: 4 }}>
+                <span className="t-body item-title">{r.questTitle}</span>
+                <span className="t-cap">
+                  {formatDay(r.dateKey)} 할 일 · {formatWhen(r.submittedAt, today)} 포기함
+                </span>
+              </div>
+            </div>
+          ))}
         </Fold>
       )}
 
