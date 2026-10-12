@@ -7,6 +7,7 @@ import { MAX_EVENTS, canEditEvent, cleanEventInput } from '../domain/calendar';
 import { MAX_FOODS, canEditFood, cleanFoodInput, cleanStars, findSameName, withEaten } from '../domain/foods';
 import { MAX_PLACES, cleanFix, cleanPlaceInput, planCheckin } from '../domain/location';
 import { cleanFamilyName, cleanProfile } from '../domain/profile';
+import { MAX_WARDROBE_PRICE, entryOffer, findEntry, ownedOf, wardrobeLedgerId } from '../domain/wardrobe';
 import { MAX_OFFER_NOTE, canCounter, cleanOfferAmount, cleanProposalInput, turnOf } from '../domain/proposals';
 import { cleanPresetInput, cleanQuestInput, runId } from '../domain/quests';
 import {
@@ -45,6 +46,7 @@ import {
   type Reward,
   type Run,
   type StickerPrice,
+  type WardrobePrice,
   type Unsub,
   type UserProfile,
   type Wish,
@@ -59,7 +61,7 @@ interface DemoUser {
 }
 
 interface DemoState {
-  v: 12;
+  v: 13;
   currentUid: string | null;
   users: Record<string, DemoUser>;
   families: Record<string, Family>;
@@ -79,6 +81,7 @@ interface DemoState {
   notes: Record<string, Record<string, Note>>;
   pushPrefs: Record<string, Record<string, PushPrefs>>;
   stickerPrices: Record<string, Record<string, StickerPrice>>;
+  wardrobePrices: Record<string, Record<string, WardrobePrice>>;
   invites: Record<string, Invite>;
 }
 
@@ -87,7 +90,7 @@ export interface KeyValueStore {
   setItem(key: string, value: string): void;
 }
 
-const STORAGE_KEY = 'family-quest-demo-v12';
+const STORAGE_KEY = 'family-quest-demo-v13';
 const FAMILY = 'demo-family';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -159,6 +162,7 @@ function seed(now: number = Date.now()): DemoState {
     goalRewardId: null,
     checkin: null,
     stickerPacks: [],
+    wardrobe: [],
   });
 
   const event = (id: string, title: string, startDay: string, over: Partial<CalendarEvent> = {}): CalendarEvent => ({
@@ -235,7 +239,7 @@ function seed(now: number = Date.now()): DemoState {
   });
 
   return {
-    v: 12,
+    v: 13,
     currentUid: null,
     users: {
       'demo-dad': { uid: 'demo-dad', email: 'dad@example.com', label: '아빠', hint: '퀘스트를 만들고 승인해요', familyId: FAMILY },
@@ -356,6 +360,7 @@ function seed(now: number = Date.now()): DemoState {
     },
     pushPrefs: { [FAMILY]: {} },
     stickerPrices: { [FAMILY]: {} },
+    wardrobePrices: { [FAMILY]: {} },
     // 자녀가 상점에 올려 달라고 제안한 보상: 부모의 답을 기다리는 중
     wishes: {
       [FAMILY]: {
@@ -408,7 +413,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       const raw = store?.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as DemoState;
-        if (parsed.v === 12) return parsed;
+        if (parsed.v === 13) return parsed;
       }
     } catch {
       // 저장소를 못 읽으면 새로 시작한다.
@@ -570,12 +575,12 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
     async createFamily(uid, familyName, profile) {
       requireSelf(uid);
       const name = cleanFamilyName(familyName);
-      const clean = cleanProfile(profile);
+      const clean = cleanProfile(profile, 'all');
       if (state.users[uid].familyId) throw new AppError('이미 가족에 들어가 있어요.');
       const id = newId('fam');
       const now = Date.now();
       state.families[id] = { id, name, createdBy: uid, createdAt: now, settings: { ...DEFAULT_SETTINGS } };
-      state.members[id] = { [uid]: { uid, role: 'parent', ...clean, coins: 0, joinedAt: now, streak: null, goalRewardId: null, checkin: null, stickerPacks: [] } };
+      state.members[id] = { [uid]: { uid, role: 'parent', ...clean, coins: 0, joinedAt: now, streak: null, goalRewardId: null, checkin: null, stickerPacks: [], wardrobe: [] } };
       state.quests[id] = {};
       state.runs[id] = {};
       state.ledger[id] = [];
@@ -590,6 +595,8 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       state.wishes[id] = {};
       state.notes[id] = {};
       state.pushPrefs[id] = {};
+      state.stickerPrices[id] = {};
+      state.wardrobePrices[id] = {};
       state.users[uid].familyId = id;
       commit();
       return id;
@@ -597,13 +604,14 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
 
     async joinFamily(uid, rawCode, profile) {
       requireSelf(uid);
-      const clean = cleanProfile(profile);
       const code = normalizeInviteCode(rawCode);
       if (!isInviteCodeShape(code)) throw new AppError('초대코드는 6자리예요. 다시 확인해 주세요.');
       const invite = state.invites[code];
       if (!invite) throw new AppError('초대코드를 찾을 수 없어요. 다시 확인해 주세요.');
       if (invite.expiresAt < Date.now()) throw new AppError('기한이 지난 초대코드예요. 새 코드를 받아 주세요.');
       if (state.users[uid].familyId) throw new AppError('이미 가족에 들어가 있어요.');
+      // 새로 들어오는 자녀는 아직 산 꾸미기가 없다.
+      const clean = cleanProfile(profile, invite.role === 'parent' ? 'all' : []);
       state.members[invite.familyId][uid] = {
         uid,
         role: invite.role,
@@ -614,6 +622,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
         goalRewardId: null,
         checkin: null,
         stickerPacks: [],
+        wardrobe: [],
       };
       state.users[uid].familyId = invite.familyId;
       commit();
@@ -651,7 +660,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
     async updateMyProfile(familyId, uid, profile) {
       requireSelf(uid);
       const member = requireMember(familyId);
-      const clean = cleanProfile(profile);
+      const clean = cleanProfile(profile, ownedOf(member));
       state.members[familyId][uid] = { ...member, ...clean };
       commit();
     },
@@ -1419,6 +1428,36 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       addLedger(familyId, { id, uid, amount: -offer.price, type: 'sticker', refId: packId, memo: `스티커: ${pack.name}`, note: '', by: uid, at: Date.now() });
       const after = state.members[familyId][uid];
       state.members[familyId][uid] = { ...after, stickerPacks: [...after.stickerPacks, packId] };
+      commit();
+    },
+
+    watchWardrobePrices(familyId, cb) {
+      return watch(() => Object.values(state.wardrobePrices[familyId] ?? {}).map((p) => ({ ...p })), cb);
+    },
+
+    async setWardrobePrice(familyId, itemId, price, hidden) {
+      requireParent(familyId);
+      if (!findEntry(itemId)) throw new AppError('꾸미기 상품을 찾을 수 없어요.');
+      if (!Number.isInteger(price) || price < 1 || price > MAX_WARDROBE_PRICE) throw new AppError(`가격은 1부터 ${MAX_WARDROBE_PRICE} 사이로 적어 주세요.`);
+      state.wardrobePrices[familyId][itemId] = { itemId, price, hidden };
+      commit();
+    },
+
+    async buyWardrobeItem(familyId, uid, itemId) {
+      requireSelf(uid);
+      const member = requireMember(familyId);
+      const entry = findEntry(itemId);
+      if (!entry) throw new AppError('꾸미기 상품을 찾을 수 없어요.');
+      if (member.role === 'parent') throw new AppError('부모는 사지 않아도 모든 꾸미기를 쓸 수 있어요.');
+      if (member.wardrobe.includes(itemId)) throw new AppError('이미 가지고 있어요.');
+      const offer = entryOffer(entry, Object.values(state.wardrobePrices[familyId] ?? {}));
+      if (offer.hidden) throw new AppError('지금은 살 수 없는 상품이에요.');
+      const free = availableCoins(member, Object.values(state.orders[familyId] ?? {}));
+      if (free < offer.price) throw new AppError(`코인이 ${offer.price - free}개 모자라요.`);
+      const id = wardrobeLedgerId(uid, itemId);
+      addLedger(familyId, { id, uid, amount: -offer.price, type: 'wardrobe', refId: itemId, memo: `꾸미기: ${entry.name}`, note: '', by: uid, at: Date.now() });
+      const after = state.members[familyId][uid];
+      state.members[familyId][uid] = { ...after, wardrobe: [...after.wardrobe, itemId] };
       commit();
     },
 

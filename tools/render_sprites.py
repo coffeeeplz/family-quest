@@ -79,15 +79,19 @@ avs = data["avatars"]
 icons = data["icons"]
 PER_ROW = 10  # icons per preview row
 icon_rows = (len(icons) + PER_ROW - 1) // PER_ROW
-sheet = Image.new("RGB", (len(avs) * 16 * S // 2 + 40, 2 * 16 * S + icon_rows * (12 * 6 + 8) + 60), hex2rgb("#F6F0FF"))
+AN = len(avs[0]["rows"])  # 아바타 한 변의 칸 수(16)
+AS = 128 // AN  # 미리보기에서 한 칸의 px
+av_rows = (len(avs) + 5) // 6
+top = av_rows * (AN * AS + 10)
+sheet = Image.new("RGB", (6 * (AN * AS + 4) + 20, top + icon_rows * (12 * 6 + 8) + 40), hex2rgb("#F6F0FF"))
 for i, a in enumerate(avs):
-    check(a["id"], a["rows"], 16)
+    check(a["id"], a["rows"], AN)
     prim = colors[a["color"]]
-    paint(sheet, a["rows"], prim, 10 + (i % 6) * (16 * S + 4), 10 + (i // 6) * (16 * S + 10), S)
+    paint(sheet, a["rows"], prim, 10 + (i % 6) * (AN * AS + 4), 10 + (i // 6) * (AN * AS + 10), AS)
     open(os.path.join(out, f"avatar-{a['id']}.svg"), "w").write(to_svg(a["rows"], prim))
 for i, (k, rows) in enumerate(icons.items()):
     check(k, rows, 12)
-    paint(sheet, rows, "#FFFFFF", 10 + (i % PER_ROW) * (12 * 6 + 6), 2 * (16 * S + 10) + 20 + (i // PER_ROW) * (12 * 6 + 8), 6)
+    paint(sheet, rows, "#FFFFFF", 10 + (i % PER_ROW) * (12 * 6 + 6), top + 20 + (i // PER_ROW) * (12 * 6 + 8), 6)
     open(os.path.join(out, f"icon-{k}.svg"), "w").write(to_svg(rows, "#FFFFFF"))
 sheet.save(os.path.join(out, "preview.png"))
 print("ok", len(avs), "avatars", len(icons), "icons")

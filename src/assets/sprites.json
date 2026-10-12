@@ -10,7 +10,9 @@
   "G": "#B9B4C7",
   "B": "#7FB8FF",
   "M": "#5FD3B0",
-  "N": "#A8765A"
+  "N": "#A8765A",
+  "D": "#3B4A7A",
+  "E": "#D6ECFF"
  },
  "avatarColors": [
   {
@@ -59,6 +61,9 @@
    "id": "rabbit",
    "name": "토끼",
    "color": "pink",
+   "price": 0,
+   "hatY": 0,
+   "faceY": 0,
    "rows": [
     "...KK......KK...",
     "..KAAK....KAAK..",
@@ -82,6 +87,9 @@
    "id": "cat",
    "name": "고양이",
    "color": "yellow",
+   "price": 0,
+   "hatY": 0,
+   "faceY": 0,
    "rows": [
     "................",
     "..KK........KK..",
@@ -105,6 +113,9 @@
    "id": "bear",
    "name": "곰",
    "color": "brown",
+   "price": 0,
+   "hatY": 0,
+   "faceY": 0,
    "rows": [
     "................",
     "..KKK......KKK..",
@@ -128,6 +139,9 @@
    "id": "fox",
    "name": "여우",
    "color": "peach",
+   "price": 0,
+   "hatY": 0,
+   "faceY": 0,
    "rows": [
     "................",
     "..KK........KK..",
@@ -151,6 +165,9 @@
    "id": "dog",
    "name": "강아지",
    "color": "white",
+   "price": 0,
+   "hatY": -2,
+   "faceY": -1,
    "rows": [
     "................",
     "................",
@@ -174,6 +191,9 @@
    "id": "penguin",
    "name": "펭귄",
    "color": "sky",
+   "price": 0,
+   "hatY": -3,
+   "faceY": -1,
    "rows": [
     "................",
     "....KKKKKKKK....",
@@ -197,6 +217,9 @@
    "id": "frog",
    "name": "개구리",
    "color": "mint",
+   "price": 0,
+   "hatY": -2,
+   "faceY": -3,
    "rows": [
     "................",
     "................",
@@ -220,6 +243,9 @@
    "id": "chick",
    "name": "병아리",
    "color": "yellow",
+   "price": 0,
+   "hatY": -1,
+   "faceY": -1,
    "rows": [
     ".......KK.......",
     "......KAAK......",
@@ -243,6 +269,9 @@
    "id": "dragon",
    "name": "아기 용",
    "color": "mint",
+   "price": 0,
+   "hatY": 0,
+   "faceY": -1,
    "rows": [
     "................",
     "..KK........KK..",
@@ -266,6 +295,9 @@
    "id": "unicorn",
    "name": "유니콘",
    "color": "white",
+   "price": 0,
+   "hatY": 0,
+   "faceY": 0,
    "rows": [
     ".......KK.......",
     "......KYYK......",
@@ -289,6 +321,9 @@
    "id": "robot",
    "name": "로봇",
    "color": "sky",
+   "price": 0,
+   "hatY": -2,
+   "faceY": -2,
    "rows": [
     ".......KK.......",
     "......KYYK......",
@@ -312,6 +347,9 @@
    "id": "ghost",
    "name": "꼬마 유령",
    "color": "lavender",
+   "price": 0,
+   "hatY": -3,
+   "faceY": -2,
    "rows": [
     "................",
     "....KKKKKKKK....",
@@ -329,6 +367,110 @@
     ".KAAAAAAAAAAAAK.",
     ".KAKKAAKKAAKKAK.",
     "..K..KK..KK..K.."
+   ]
+  },
+  {
+   "id": "whale",
+   "name": "고래",
+   "color": "sky",
+   "price": 300,
+   "hatY": -1,
+   "faceY": 0,
+   "rows": [
+    "......B..B......",
+    ".......BB.......",
+    ".......B........",
+    "....KKKKKKKK....",
+    "..KKAAAAAAAAKK..",
+    ".KAAAAAAAAAAAAK.",
+    ".KAAAAAAAAAAAAK.",
+    ".KAAKAAAAAAKAAK.",
+    ".KAAKAAAAAAKAAK.",
+    ".KAPAAAKKAAAPAK.",
+    ".KAAAAAAAAAAAAK.",
+    ".KWWWWWWWWWWWWK.",
+    ".KWWWWWWWWWWWWKK",
+    "..KWWWWWWWWWWKAK",
+    "...KKWWWWWWKKAK.",
+    ".....KKKKKK..KK."
+   ]
+  },
+  {
+   "id": "dino",
+   "name": "공룡",
+   "color": "mint",
+   "price": 300,
+   "hatY": -1,
+   "faceY": 0,
+   "rows": [
+    "................",
+    "......K..K......",
+    ".....KaKKaK.....",
+    "....KKKKKKKK....",
+    "..KKAAAAAAAAKK..",
+    ".KAAAAAAAAAAAAK.",
+    ".KAAAAAAAAAAAAK.",
+    ".KAAKAAAAAAKAAK.",
+    ".KAAKAAAAAAKAAK.",
+    ".KAPAAKAAKAAPAK.",
+    ".KAAAAAKKAAAAAK.",
+    "..KKAAAAAAAAKK..",
+    "...KAACCCCAAK.KK",
+    "...KAACCCCAAKKaK",
+    "...KAAAKKAAAaaK.",
+    "...KKKK..KKKKK.."
+   ]
+  },
+  {
+   "id": "panda",
+   "name": "판다",
+   "color": "lavender",
+   "price": 300,
+   "hatY": -1,
+   "faceY": 0,
+   "rows": [
+    "................",
+    "..KKK......KKK..",
+    ".KAAAK....KAAAK.",
+    ".KAAAKKKKKKAAAK.",
+    ".KKWWWWWWWWWWKK.",
+    ".KWWWWWWWWWWWWK.",
+    ".KWAAWWWWWWAAWK.",
+    ".KAAKAWWWWAKAAK.",
+    ".KAAKAWWWWAKAAK.",
+    ".KWPWWWKKWWWPWK.",
+    ".KWWWWWWWWWWWWK.",
+    "..KKAAAAAAAAKK..",
+    "...KAAWWWWAAK...",
+    "...KAAWWWWAAK...",
+    "...KAAAKKAAAK...",
+    "...KKKK..KKKK..."
+   ]
+  },
+  {
+   "id": "astronaut",
+   "name": "우주인",
+   "color": "peach",
+   "price": 300,
+   "hatY": -2,
+   "faceY": 0,
+   "rows": [
+    ".......R........",
+    ".......K........",
+    "....KKKKKKKK....",
+    "..KKWWWWWWWWKK..",
+    ".KWWAAAAAAAAWWK.",
+    ".KWAWAAAAAAAAWK.",
+    ".KWAAAAAAAAAAWK.",
+    ".KWAKAAAAAAKAWK.",
+    ".KWAKAAAAAAKAWK.",
+    ".KWAPAAKKAAPAWK.",
+    ".KWWAAAAAAAAWWK.",
+    "..KKWWWWWWWWKK..",
+    "..KWWWGGGGWWWK..",
+    "..KWWWGRBGWWWK..",
+    "...KWWWKKWWWK...",
+    "...KKKK..KKKK..."
    ]
   }
  ],

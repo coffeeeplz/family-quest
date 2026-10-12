@@ -125,6 +125,7 @@ const kid = (streak: Member['streak'] = null): Member => ({
   goalRewardId: null,
   checkin: null,
   stickerPacks: [],
+  wardrobe: [],
 });
 
 describe('dates', () => {
