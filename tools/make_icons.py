@@ -21,7 +21,9 @@ def tile(size, cell, bg="#FFE0EE", border=True):
         for i in range(size):
             for j in range(b):
                 px[i, j] = ink; px[i, size - 1 - j] = ink; px[j, i] = ink; px[size - 1 - j, i] = ink
-    off = (size - 16 * cell) // 2
+    n = len(rabbit["rows"])  # 아바타가 32×32 가 되어도 같은 크기로 그린다
+    cell = max(1, cell * 16 // n)
+    off = (size - n * cell) // 2
     for y, row in enumerate(rabbit["rows"]):
         for x, ch in enumerate(row):
             if ch == ".": continue

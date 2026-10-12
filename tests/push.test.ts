@@ -97,6 +97,7 @@ describe('보낼 알림 정하기', () => {
     expect(ledgerNotices('l1', { type: 'gift', amount: 5, uid: 'kid', note: '고마워!' })[0]).toMatchObject({ to: ['kid'], msg: { title: '칭찬 코인 +5', body: '"고마워!"' } });
     expect(ledgerNotices('l1', { type: 'quest', amount: 10, uid: 'kid' })).toEqual([]);
     expect(ledgerNotices('l2', { type: 'sticker', amount: -100, uid: 'kid', memo: '스티커: 동물 팩' }, '딸')[0]).toMatchObject({ to: 'parents', type: 'shop', msg: { body: '딸이(가) 동물 팩을(를) 샀어요 (100코인)' } });
+    expect(ledgerNotices('l3', { type: 'wardrobe', amount: -200, uid: 'kid', memo: '꾸미기: 왕관' }, '딸')[0]).toMatchObject({ to: 'parents', type: 'shop', msg: { title: '꾸미기 구매', body: '딸이(가) 왕관을(를) 샀어요 (200코인)' } });
   });
 
   it('저녁과 아침 알림 문구', () => {

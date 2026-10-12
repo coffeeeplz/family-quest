@@ -5,6 +5,11 @@ export interface AvatarDef {
   name: string;
   /** 기본 색 id */
   color: string;
+  /** 0 이면 처음부터 쓰는 캐릭터, 그 밖에는 상점에서 사는 캐릭터의 처음 가격 */
+  price: number;
+  /** 모자를 아래(+)나 위(-)로 옮길 칸 수(머리 위 끝이 뼈대와 다른 캐릭터) */
+  hatY: number;
+  /** 32줄 × 32글자 */
   rows: string[];
 }
 
@@ -20,6 +25,9 @@ export const ICONS: Record<string, string[]> = data.icons;
 export type IconName = keyof typeof data.icons;
 
 const PALETTE: Record<string, string> = data.palette;
+
+/** 처음부터 누구나 쓰는 캐릭터인지 */
+export const isFreeAvatar = (id: string) => AVATARS.some((a) => a.id === id && a.price === 0);
 
 export function avatarDef(id: string): AvatarDef {
   return AVATARS.find((a) => a.id === id) ?? AVATARS[0];

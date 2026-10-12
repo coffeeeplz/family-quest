@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useBackend, useSession } from '../../app/session';
 import type { Invite, ProfileInput, Role } from '../../backend/types';
 import { Avatar } from '../../ui/Sprite';
 import { BackLink, Button, CoinInline, Sheet } from '../../ui/kit';
 import { errorText, useToast } from '../../ui/toast';
 import { ProfileForm } from '../avatar/ProfileForm';
+import { ownedOf, type Owned } from '../../domain/wardrobe';
 
 /** 가족 구성원, 내 캐릭터 바꾸기, 초대코드 */
 export function FamilyPage() {
@@ -43,6 +45,9 @@ export function FamilyPage() {
       <Button big block onClick={() => setEditing(true)}>
         내 캐릭터와 이름 바꾸기
       </Button>
+      <Link className="btn plain big block" to="/wardrobe">
+        캐릭터 꾸미기
+      </Link>
       {isParent && (
         <Button tone="mint" big block onClick={() => setInviting(true)}>
           가족 초대하기
@@ -52,6 +57,7 @@ export function FamilyPage() {
       {editing && (
         <EditProfileSheet
           initial={{ displayName: me.displayName, avatar: me.avatar }}
+          owned={ownedOf(me)}
           onClose={() => setEditing(false)}
           onSave={async (profile) => {
             await backend.updateMyProfile(family.id, me.uid, profile);
@@ -72,11 +78,12 @@ export function FamilyPage() {
 
 interface EditProfileProps {
   initial: ProfileInput;
+  owned: Owned;
   onClose: () => void;
   onSave: (profile: ProfileInput) => Promise<void>;
 }
 
-function EditProfileSheet({ initial, onClose, onSave }: EditProfileProps) {
+function EditProfileSheet({ initial, owned, onClose, onSave }: EditProfileProps) {
   const [profile, setProfile] = useState(initial);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -95,7 +102,7 @@ function EditProfileSheet({ initial, onClose, onSave }: EditProfileProps) {
 
   return (
     <Sheet title="내 캐릭터 바꾸기" onClose={onClose}>
-      <ProfileForm value={profile} onChange={setProfile} />
+      <ProfileForm value={profile} onChange={setProfile} owned={owned} />
       {error && (
         <p className="error" role="alert">
           {error}

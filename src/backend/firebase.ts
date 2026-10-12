@@ -62,6 +62,7 @@ import { INVITE_TTL_MS, isInviteCodeShape, newInviteCode, normalizeInviteCode } 
 import { cleanEventInput } from '../domain/calendar';
 import { cleanNoteInput } from '../domain/notes';
 import { MAX_STICKER_PRICE, cleanSaid, findPack, packOffer, stickerLedgerId } from '../domain/stickers';
+import { MAX_WARDROBE_PRICE, entryOffer, findEntry, ownedOf, wardrobeLedgerId } from '../domain/wardrobe';
 import { MAX_DECLINE_NOTE, MAX_OPEN_WISHES, WISH_KEEP_DAYS, canCounterWish, checkWishTurn, cleanWishInput, cleanWishPrice } from '../domain/wishes';
 import { ETC_CATEGORY_ID, MAX_EATEN, cleanFoodInput, cleanStars, withEaten } from '../domain/foods';
 import { cleanFix, cleanPlaceInput, planCheckin } from '../domain/location';
@@ -101,6 +102,7 @@ import {
   type Role,
   type Run,
   type StickerPrice,
+  type WardrobePrice,
   type Unsub,
   type Wish,
 } from './types';
@@ -200,6 +202,7 @@ export function createFirebaseBackend(): Backend {
   const wishesCol = (fid: string) => collection(db, 'families', fid, 'wishes');
   const notesCol = (fid: string) => collection(db, 'families', fid, 'notes');
   const stickerPricesCol = (fid: string) => collection(db, 'families', fid, 'stickerPrices');
+  const wardrobePricesCol = (fid: string) => collection(db, 'families', fid, 'wardrobePrices');
   const pushPrefsRef = (fid: string, uid: string) => doc(db, 'families', fid, 'pushPrefs', uid);
   const pushDeviceRef = (fid: string) => doc(db, 'families', fid, 'pushDevices', deviceId());
 
@@ -320,6 +323,7 @@ export function createFirebaseBackend(): Backend {
         ? { dayNum: d.checkin.dayNum, count: d.checkin.count }
         : null,
     stickerPacks: Array.isArray(d.stickerPacks) ? d.stickerPacks.filter((p: unknown): p is string => typeof p === 'string') : [],
+    wardrobe: Array.isArray(d.wardrobe) ? d.wardrobe.filter((p: unknown): p is string => typeof p === 'string') : [],
   });
 
   const toLocation = (id: string, d: DocumentData): LocationRecord => ({
@@ -348,6 +352,12 @@ export function createFirebaseBackend(): Backend {
   const toStickerPrice = (id: string, d: DocumentData): StickerPrice => ({
     packId: id,
     price: Number.isInteger(d.price) ? d.price : 100,
+    hidden: d.hidden === true,
+  });
+
+  const toWardrobePrice = (id: string, d: DocumentData): WardrobePrice => ({
+    itemId: id,
+    price: Number.isInteger(d.price) ? d.price : (findEntry(id)?.price ?? 100),
     hidden: d.hidden === true,
   });
 
@@ -459,7 +469,8 @@ export function createFirebaseBackend(): Backend {
     createFamily: (uid, familyName, profile) =>
       guard(async () => {
         const name = cleanFamilyName(familyName);
-        const clean = cleanProfile(profile);
+        // 가족을 만든 사람은 부모라서 모든 꾸미기를 쓸 수 있다.
+        const clean = cleanProfile(profile, 'all');
         const ref = doc(collection(db, 'families'));
         const now = Date.now();
         const batch = writeBatch(db);
@@ -472,13 +483,14 @@ export function createFirebaseBackend(): Backend {
 
     joinFamily: (uid, rawCode, profile) =>
       guard(async () => {
-        const clean = cleanProfile(profile);
         const code = normalizeInviteCode(rawCode);
         if (!isInviteCodeShape(code)) throw new AppError('초대코드는 6자리예요. 다시 확인해 주세요.');
         const snap = await getDoc(doc(db, 'invites', code));
         if (!snap.exists()) throw new AppError('초대코드를 찾을 수 없어요. 다시 확인해 주세요.');
         const invite = snap.data() as Omit<Invite, 'code'>;
         if (invite.expiresAt < Date.now()) throw new AppError('기한이 지난 초대코드예요. 새 코드를 받아 주세요.');
+        // 새로 들어오는 자녀는 아직 산 꾸미기가 없다.
+        const clean = cleanProfile(profile, invite.role === 'parent' ? 'all' : []);
         const batch = writeBatch(db);
         batch.set(memberRef(invite.familyId, uid), {
           uid,
@@ -539,7 +551,9 @@ export function createFirebaseBackend(): Backend {
 
     updateMyProfile: (familyId, uid, profile) =>
       guard(async () => {
-        const clean = cleanProfile(profile);
+        const snap = await getDoc(memberRef(familyId, uid));
+        if (!snap.exists()) throw new AppError('이 가족의 구성원이 아니에요.');
+        const clean = cleanProfile(profile, ownedOf(toMember(uid, snap.data())));
         await updateDoc(memberRef(familyId, uid), { displayName: clean.displayName, avatar: clean.avatar });
       }),
 
@@ -1295,6 +1309,49 @@ export function createFirebaseBackend(): Backend {
           const entry: Omit<LedgerEntry, 'id'> = { uid, amount: -offer.price, type: 'sticker', refId: packId, memo: `스티커: ${pack.name}`, note: '', by: uid, at: Date.now() };
           tx.set(doc(ledgerCol(familyId), stickerLedgerId(uid, packId)), entry);
           tx.update(memberRef(familyId, uid), { coins: increment(-offer.price), stickerPacks: arrayUnion(packId) });
+        });
+      }),
+
+    watchWardrobePrices(familyId, cb, onError) {
+      return onSnapshot(
+        wardrobePricesCol(familyId),
+        (snap) => cb(snap.docs.map((s) => toWardrobePrice(s.id, s.data()))),
+        (error) => {
+          console.error('[wardrobe prices]', error);
+          onError?.();
+        },
+      );
+    },
+
+    setWardrobePrice: (familyId, itemId, price, hidden) =>
+      guard(async () => {
+        if (!findEntry(itemId)) throw new AppError('꾸미기 상품을 찾을 수 없어요.');
+        if (!Number.isInteger(price) || price < 1 || price > MAX_WARDROBE_PRICE) throw new AppError(`가격은 1부터 ${MAX_WARDROBE_PRICE} 사이로 적어 주세요.`);
+        await setDoc(doc(wardrobePricesCol(familyId), itemId), { price, hidden });
+      }),
+
+    buyWardrobeItem: (familyId, uid, itemId) =>
+      guard(async () => {
+        const entry = findEntry(itemId);
+        if (!entry) throw new AppError('꾸미기 상품을 찾을 수 없어요.');
+        const priceSnap = await getDoc(doc(wardrobePricesCol(familyId), itemId));
+        const offer = entryOffer(entry, priceSnap.exists() ? [toWardrobePrice(itemId, priceSnap.data())] : []);
+        if (offer.hidden) throw new AppError('지금은 살 수 없는 상품이에요.');
+        // 승인을 기다리는 보상 신청에 묶인 코인은 쓸 수 없다.
+        const waiting = await getDocs(query(ordersCol(familyId), where('uid', '==', uid), where('status', '==', 'requested')));
+        const reserved = waiting.docs.reduce((sum, s) => sum + (Number(s.data().price) || 0), 0);
+        await runTransaction(db, async (tx) => {
+          const snap = await tx.get(memberRef(familyId, uid));
+          if (!snap.exists()) throw new AppError('이 가족의 구성원이 아니에요.');
+          const member = toMember(uid, snap.data());
+          if (member.role === 'parent') throw new AppError('부모는 사지 않아도 모든 꾸미기를 쓸 수 있어요.');
+          if (member.wardrobe.includes(itemId)) throw new AppError('이미 가지고 있어요.');
+          const free = member.coins - reserved;
+          if (free < offer.price) throw new AppError(`코인이 ${offer.price - free}개 모자라요.`);
+          // 장부와 잔액, 가진 상품을 한 묶음으로 쓴다. 금액은 서버 규칙이 다시 검사한다.
+          const entryDoc: Omit<LedgerEntry, 'id'> = { uid, amount: -offer.price, type: 'wardrobe', refId: itemId, memo: `꾸미기: ${entry.name}`, note: '', by: uid, at: Date.now() };
+          tx.set(doc(ledgerCol(familyId), wardrobeLedgerId(uid, itemId)), entryDoc);
+          tx.update(memberRef(familyId, uid), { coins: increment(-offer.price), wardrobe: arrayUnion(itemId) });
         });
       }),
 

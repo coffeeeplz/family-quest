@@ -273,6 +273,67 @@ service cloud.firestore {
         && d.refId in getAfter(memberPath(fid, request.auth.uid)).data.get('stickerPacks', []);
     }
 
+    // 꾸미기 상품(유료 캐릭터와 아이템)의 id 와 처음 가격, 처음부터 쓰는 캐릭터 id.
+    // src/assets/sprites.json 과 wardrobe.json 과 같아야 한다(tools/avatar_art.py 와 tools/add-wardrobe-item.ts 가 함께 고친다).
+    function wardrobeDefaultPrices() {
+      return {'whale': 300, 'dino': 300, 'panda': 300, 'astronaut': 300, 'crown': 200, 'ribbon': 80, 'beanie': 120, 'round-glasses': 80, 'sunglasses': 120, 'blush': 50, 'tee': 80, 'cape': 150, 'uniform': 120, 'balloon': 60, 'wand': 150, 'soccer': 80, 'sky': 100, 'night': 150, 'sea': 150};
+    }
+    function freeAvatarIds() {
+      return ['rabbit', 'cat', 'bear', 'fox', 'dog', 'penguin', 'frog', 'chick', 'dragon', 'unicorn', 'robot', 'ghost'];
+    }
+    function wardrobePricePath(fid, itemId) {
+      return /databases/$(database)/documents/families/$(fid)/wardrobePrices/$(itemId);
+    }
+    function wardrobePrice(fid, itemId) {
+      return exists(wardrobePricePath(fid, itemId)) ? get(wardrobePricePath(fid, itemId)).data.price
+        : wardrobeDefaultPrices()[itemId];
+    }
+    function wardrobeHidden(fid, itemId) {
+      return exists(wardrobePricePath(fid, itemId)) && get(wardrobePricePath(fid, itemId)).data.hidden == true;
+    }
+
+    // 캐릭터 모양: 처음부터 쓰는 캐릭터나 가진 캐릭터, 가진 꾸미기 아이템만 입을 수 있다.
+    function validAvatar(av, owned) {
+      let wear = av.get('wear', {});
+      return av is map
+        && av.keys().hasOnly(['id', 'color', 'wear'])
+        && av.id is string && av.color is string
+        && (av.id in freeAvatarIds() || av.id in owned)
+        && wear is map
+        && wear.keys().hasOnly(['hat', 'face', 'outfit', 'hand', 'bg'])
+        && owned.hasAll(wear.values());
+    }
+
+    // 자녀가 꾸미기 상품을 사는 변경: 하나를 더하고 그 가격만큼 코인을 뺀다. 같은 묶음에 장부 기록이 있어야 한다.
+    function validWardrobeBuy(fid) {
+      let before = resource.data;
+      let after = request.resource.data;
+      let owned = before.get('wardrobe', []);
+      let itemId = after.wardrobe[after.wardrobe.size() - 1];
+      return after.diff(before).affectedKeys().hasOnly(['coins', 'wardrobe'])
+        && after.wardrobe is list
+        && after.wardrobe.size() == owned.size() + 1
+        && after.wardrobe.hasAll(owned)
+        && !(itemId in owned)
+        && itemId is string && itemId in wardrobeDefaultPrices()
+        && after.coins == before.coins - wardrobePrice(fid, itemId)
+        && after.coins >= 0
+        && existsAfter(/databases/$(database)/documents/families/$(fid)/ledger/$('wardrobe-' + request.auth.uid + '-' + itemId));
+    }
+
+    // 꾸미기 상품을 산 장부 기록: 본인이, 정해진 가격만큼, 사람과 상품으로 정해진 id 로 한 번만
+    function validWardrobePayment(fid, lid) {
+      let d = request.resource.data;
+      return d.type == 'wardrobe'
+        && d.uid == request.auth.uid
+        && d.by == request.auth.uid
+        && d.refId is string && d.refId in wardrobeDefaultPrices()
+        && lid == 'wardrobe-' + request.auth.uid + '-' + d.refId
+        && d.amount == -wardrobePrice(fid, d.refId)
+        && !wardrobeHidden(fid, d.refId)
+        && d.refId in getAfter(memberPath(fid, request.auth.uid)).data.get('wardrobe', []);
+    }
+
     // 메모를 받은 사람(받는 사람이 없으면 가족 모두)이 "확인했어요"를 누르는 변경: 확인한 사람 목록에 자기만 더할 수 있다.
     function noteMarkedRead() {
       return (resource.data.toUids.size() == 0 || request.auth.uid in resource.data.toUids)
@@ -460,6 +521,10 @@ service cloud.firestore {
           && request.resource.data.uid == uid
           && request.resource.data.coins == 0
           && request.resource.data.role in ['parent', 'child']
+          // 산 것 없이 들어온다. 자녀는 처음부터 쓰는 캐릭터만
+          && request.resource.data.get('stickerPacks', []).size() == 0
+          && request.resource.data.get('wardrobe', []).size() == 0
+          && (request.resource.data.role == 'parent' || validAvatar(request.resource.data.avatar, []))
           && (
             (request.resource.data.role == 'parent'
               && getAfter(/databases/$(database)/documents/families/$(fid)).data.createdBy == uid)
@@ -471,9 +536,11 @@ service cloud.firestore {
         // 코인은 0 아래로 내려갈 수 없다. 본인이 코인을 늘릴 수 있는 경우는 위치 공유 코인뿐이다.
         allow update: if isMember(fid) && (
           (uid == request.auth.uid
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatar', 'goalRewardId']))
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatar', 'goalRewardId'])
+            && (resource.data.role == 'parent' || validAvatar(request.resource.data.avatar, resource.data.get('wardrobe', []))))
           || (uid == request.auth.uid && validCheckinUpdate(fid))
           || (uid == request.auth.uid && validStickerBuy(fid))
+          || (uid == request.auth.uid && validWardrobeBuy(fid))
           || (isParent(fid)
             && request.resource.data.coins >= 0
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['coins', 'streak']))
@@ -517,6 +584,16 @@ service cloud.firestore {
           && request.resource.data.uid == request.auth.uid
           && request.resource.data.token is string
           && request.resource.data.token.size() > 0 && request.resource.data.token.size() <= 4096;
+      }
+
+      match /wardrobePrices/{itemId} {
+        allow read: if isMember(fid);
+        allow write: if isParent(fid)
+          && itemId in wardrobeDefaultPrices()
+          && request.resource.data.price is int
+          && request.resource.data.price >= 1 && request.resource.data.price <= 1000
+          && request.resource.data.hidden is bool
+          && request.resource.data.keys().hasOnly(['price', 'hidden']);
       }
 
       match /stickerPrices/{packId} {
@@ -668,10 +745,12 @@ service cloud.firestore {
             && request.resource.data.by == request.auth.uid
             && request.resource.data.type != 'checkin'
             && request.resource.data.type != 'sticker'
+            && request.resource.data.type != 'wardrobe'
             && (request.resource.data.type != 'quest' || validQuestPayout(fid, lid))
             && (request.resource.data.type != 'reward' || validRewardPayout(fid, lid)))
           || (isMember(fid) && validCheckinPayout(fid, lid))
           || (isMember(fid) && validStickerPayment(fid, lid))
+          || (isMember(fid) && validWardrobePayment(fid, lid))
         );
       }
     }

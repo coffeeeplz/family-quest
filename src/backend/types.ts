@@ -8,11 +8,19 @@ import type { PushPrefs } from '../domain/push';
 
 export type Role = 'parent' | 'child';
 
+/** 꾸미기 칸: 모자, 얼굴(안경 등), 옷, 손에 든 소품, 배경 */
+export type WearSlot = 'hat' | 'face' | 'outfit' | 'hand' | 'bg';
+
+/** 칸마다 입은 꾸미기 아이템의 id(wardrobe.json). 빈 칸은 키가 없다. */
+export type Wear = Partial<Record<WearSlot, string>>;
+
 export interface AvatarChoice {
   /** sprites.json 의 캐릭터 id */
   id: string;
   /** sprites.json 의 색 id */
   color: string;
+  /** 입은 꾸미기 아이템. 옛 데이터에는 없다(맨몸). */
+  wear?: Wear;
 }
 
 export interface AuthUser {
@@ -87,6 +95,8 @@ export interface Member {
   checkin: Checkin | null;
   /** 산 스티커 팩의 id(자녀). 부모는 사지 않아도 모든 스티커를 쓴다. */
   stickerPacks: string[];
+  /** 산 꾸미기 상품(유료 캐릭터와 아이템)의 id(자녀). 부모는 사지 않아도 모두 쓴다. */
+  wardrobe: string[];
 }
 
 export type Repeat =
@@ -136,11 +146,18 @@ export interface Run {
 }
 
 /** quest=퀘스트 완료, bonus=연속 달성 보너스, gift=칭찬 코인, reward=상점 사용, checkin=위치 공유, adjust=조정 */
-export type LedgerType = 'quest' | 'bonus' | 'gift' | 'reward' | 'checkin' | 'adjust' | 'sticker';
+export type LedgerType = 'quest' | 'bonus' | 'gift' | 'reward' | 'checkin' | 'adjust' | 'sticker' | 'wardrobe';
 
 /** 부모가 상점 관리에서 정한 스티커 팩의 가격과 숨김 */
 export interface StickerPrice {
   packId: string;
+  price: number;
+  hidden: boolean;
+}
+
+/** 부모가 상점 관리에서 정한 꾸미기 상품의 가격과 숨김 */
+export interface WardrobePrice {
+  itemId: string;
   price: number;
   hidden: boolean;
 }
@@ -546,6 +563,11 @@ export interface Backend {
   buyStickerPack(familyId: string, uid: string, packId: string): Promise<void>;
   /** 기록에서도 완전히 지운다. 부모만 */
   deleteNote(familyId: string, noteId: string): Promise<void>;
+  /** 꾸미기 상품(유료 캐릭터와 아이템)의 가격과 숨김(부모가 정한 것) */
+  watchWardrobePrices(familyId: string, cb: (prices: WardrobePrice[]) => void, onError?: () => void): Unsub;
+  setWardrobePrice(familyId: string, itemId: string, price: number, hidden: boolean): Promise<void>;
+  /** 자녀가 꾸미기 상품을 코인으로 바로 산다(승인 없음, 부모에게 알림) */
+  buyWardrobeItem(familyId: string, uid: string, itemId: string): Promise<void>;
 
   // 자녀의 보상 제안과 가격 협상
   /** 협상 중인 제안과 최근에 끝난 제안 */

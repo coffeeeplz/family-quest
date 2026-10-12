@@ -289,3 +289,78 @@ describe('가족 메모', () => {
     await assertSucceeds(updateDoc(doc(as('mom'), path('notes/n1')), { hiddenAt: Date.now() }));
   });
 });
+
+describe('꾸미기 상품 구매', () => {
+  function buy(db: Firestore, itemId: string, price: number) {
+    const batch = writeBatch(db);
+    batch.set(doc(db, path(`ledger/wardrobe-kid-${itemId}`)), {
+      uid: 'kid', amount: -price, type: 'wardrobe', refId: itemId, memo: '꾸미기', note: '', by: 'kid', at: Date.now(),
+    });
+    batch.update(doc(db, path('members/kid')), { coins: increment(-price), wardrobe: arrayUnion(itemId) });
+    return batch.commit();
+  }
+
+  it('정해진 가격으로 아이템과 캐릭터를 살 수 있다', async () => {
+    await seed({ [path('members/kid')]: { uid: 'kid', role: 'child', coins: 1000, avatar: { id: 'rabbit', color: 'pink' } } });
+    await assertSucceeds(buy(as('kid'), 'crown', 200));
+    await assertSucceeds(buy(as('kid'), 'whale', 300));
+  });
+
+  it('가격을 깎거나 없는 상품을 살 수 없다', async () => {
+    await assertFails(buy(as('kid'), 'crown', 20));
+    await assertFails(buy(as('kid'), 'nothing', 10));
+  });
+
+  it('코인이 모자라면 살 수 없다', async () => {
+    await assertFails(buy(as('kid'), 'crown', 200));
+  });
+
+  it('숨긴 상품은 살 수 없고, 부모가 정한 가격을 따른다', async () => {
+    await seed({
+      [path('members/kid')]: { uid: 'kid', role: 'child', coins: 1000 },
+      [path('wardrobePrices/crown')]: { price: 200, hidden: true },
+      [path('wardrobePrices/cape')]: { price: 30, hidden: false },
+    });
+    await assertFails(buy(as('kid'), 'crown', 200));
+    await assertFails(buy(as('kid'), 'cape', 150));
+    await assertSucceeds(buy(as('kid'), 'cape', 30));
+  });
+
+  it('부모만 가격을 정할 수 있다', async () => {
+    await assertFails(setDoc(doc(as('kid'), path('wardrobePrices/crown')), { price: 1, hidden: false }));
+    await assertSucceeds(setDoc(doc(as('mom'), path('wardrobePrices/crown')), { price: 10, hidden: false }));
+    await assertFails(setDoc(doc(as('mom'), path('wardrobePrices/nothing')), { price: 10, hidden: false }));
+  });
+});
+
+describe('캐릭터 꾸미기(입기)', () => {
+  const kidWith = (wardrobe: string[]) => ({ uid: 'kid', role: 'child', coins: 0, avatar: { id: 'rabbit', color: 'pink' }, wardrobe });
+
+  it('자녀는 가진 아이템과 캐릭터만 입을 수 있다', async () => {
+    await seed({ [path('members/kid')]: kidWith(['crown', 'whale']) });
+    await assertSucceeds(updateDoc(doc(as('kid'), path('members/kid')), { avatar: { id: 'whale', color: 'sky', wear: { hat: 'crown' } } }));
+    await assertFails(updateDoc(doc(as('kid'), path('members/kid')), { avatar: { id: 'whale', color: 'sky', wear: { hat: 'crown', bg: 'night' } } }));
+    await assertFails(updateDoc(doc(as('kid'), path('members/kid')), { avatar: { id: 'panda', color: 'sky' } }));
+  });
+
+  it('무료 캐릭터는 누구나 고를 수 있다', async () => {
+    await seed({ [path('members/kid')]: kidWith([]) });
+    await assertSucceeds(updateDoc(doc(as('kid'), path('members/kid')), { avatar: { id: 'cat', color: 'peach' } }));
+  });
+
+  it('부모는 무엇이든 입을 수 있다', async () => {
+    await seed({ [path('members/mom')]: { uid: 'mom', role: 'parent', coins: 0, avatar: { id: 'rabbit', color: 'pink' } } });
+    await assertSucceeds(updateDoc(doc(as('mom'), path('members/mom')), { avatar: { id: 'astronaut', color: 'peach', wear: { hat: 'crown', hand: 'wand' } } }));
+  });
+
+  it('새로 들어오는 자녀는 산 것을 가지고 들어올 수 없다', async () => {
+    await seed({ ['invites/ABC234']: { familyId: FID, role: 'child', createdBy: 'mom', expiresAt: Date.now() + DAY_MS } });
+    const join = (data: object) => setDoc(doc(as('kid2'), path('members/kid2')), {
+      uid: 'kid2', role: 'child', coins: 0, displayName: '둘째', inviteCode: 'ABC234', avatar: { id: 'cat', color: 'peach' }, ...data,
+    });
+    await assertFails(join({ wardrobe: ['crown'] }));
+    await assertFails(join({ stickerPacks: ['animal'] }));
+    await assertFails(join({ avatar: { id: 'whale', color: 'sky' } }));
+    await assertSucceeds(join({}));
+  });
+});

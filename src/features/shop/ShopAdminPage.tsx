@@ -5,6 +5,7 @@ import type { IconName } from '../../lib/sprites';
 import { Icon } from '../../ui/Sprite';
 import { BackLink, CoinInline, Empty } from '../../ui/kit';
 import { StickerAdmin } from '../stickers/StickerShop';
+import { WardrobeAdmin } from '../wardrobe/WardrobeAdmin';
 
 /** 부모용: 상점에 올린 보상 목록. 누르면 고칠 수 있다. */
 export function ShopAdminPage() {
@@ -41,6 +42,8 @@ export function ShopAdminPage() {
       </div>
 
       <StickerAdmin />
+
+      <WardrobeAdmin />
     </main>
   );
 }

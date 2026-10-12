@@ -1,5 +1,6 @@
 import type { ProfileInput } from '../../backend/types';
 import { MAX_NAME } from '../../domain/profile';
+import { canUseAvatar, type Owned } from '../../domain/wardrobe';
 import { AVATARS, AVATAR_COLORS, avatarDef } from '../../lib/sprites';
 import { Avatar, AvatarFrame } from '../../ui/Sprite';
 import { Field, FieldGroup } from '../../ui/kit';
@@ -7,11 +8,14 @@ import { Field, FieldGroup } from '../../ui/kit';
 interface Props {
   value: ProfileInput;
   onChange: (next: ProfileInput) => void;
+  /** 쓸 수 있는 꾸미기 상품. 상점에서 파는 캐릭터는 산 사람(과 부모)에게만 보인다. */
+  owned?: Owned;
 }
 
 /** 이름, 캐릭터, 색을 고르는 입력 묶음. 가입할 때와 프로필을 바꿀 때 함께 쓴다. */
-export function ProfileForm({ value, onChange }: Props) {
+export function ProfileForm({ value, onChange, owned = [] }: Props) {
   const current = avatarDef(value.avatar.id);
+  const choices = AVATARS.filter((avatar) => canUseAvatar(owned, avatar.id));
   return (
     <>
       <div className="row" style={{ gap: 18 }}>
@@ -24,7 +28,7 @@ export function ProfileForm({ value, onChange }: Props) {
 
       <FieldGroup label="캐릭터 고르기">
         <div className="avatar-grid">
-          {AVATARS.map((avatar) => (
+          {choices.map((avatar) => (
             <button
               key={avatar.id}
               type="button"
@@ -32,8 +36,8 @@ export function ProfileForm({ value, onChange }: Props) {
               className="avatar-cell"
               aria-label={avatar.name}
               aria-checked={avatar.id === value.avatar.id}
-              // 캐릭터를 바꾸면 그 캐릭터의 기본 색으로 맞춘다.
-              onClick={() => onChange({ ...value, avatar: { id: avatar.id, color: avatar.color } })}
+              // 캐릭터를 바꾸면 그 캐릭터의 기본 색으로 맞춘다. 입은 꾸미기는 그대로 둔다.
+              onClick={() => onChange({ ...value, avatar: { ...value.avatar, id: avatar.id, color: avatar.color } })}
             >
               <Avatar avatar={{ id: avatar.id, color: avatar.id === value.avatar.id ? value.avatar.color : avatar.color }} size={48} />
             </button>

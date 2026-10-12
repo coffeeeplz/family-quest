@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useFamilyData } from '../../app/familyData';
 import { useBackend, useSession } from '../../app/session';
 import type { Reward } from '../../backend/types';
@@ -6,7 +7,7 @@ import { buyState, limitLabel, limitUsage, reservedCoins } from '../../domain/sh
 import { openWishCount, splitMyWishes } from '../../domain/wishes';
 import { dateKey } from '../../lib/dates';
 import type { IconName } from '../../lib/sprites';
-import { Icon } from '../../ui/Sprite';
+import { Avatar, Icon } from '../../ui/Sprite';
 import { BackLink, Button, CoinInline, CoinPill, Empty, Sheet } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
 import { InventoryButton } from '../inventory/InventoryButton';
@@ -93,6 +94,11 @@ export function ShopPage() {
       )}
 
       <GoalCard onChange={() => setGoal(null)} />
+
+      <Link className="btn plain block" to="/wardrobe">
+        <Avatar avatar={me.avatar} size={32} />
+        캐릭터 꾸미기
+      </Link>
 
       <StickerShop />
 
