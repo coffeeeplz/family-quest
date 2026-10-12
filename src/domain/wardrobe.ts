@@ -29,15 +29,14 @@ export const WARDROBE_ITEMS: WardrobeItem[] = catalog as WardrobeItem[];
 export const WARDROBE_SIZE = 16;
 export const MAX_WARDROBE_PRICE = 1000;
 /** 칸을 그리는 순서(아래부터). 'avatar' 는 캐릭터 자신 */
-export const LAYER_ORDER: (WearSlot | 'avatar')[] = ['bg', 'avatar', 'outfit', 'face', 'hat', 'hand'];
-export const WEAR_SLOTS: WearSlot[] = ['hat', 'face', 'outfit', 'hand', 'bg'];
+export const LAYER_ORDER: (WearSlot | 'avatar')[] = ['avatar', 'outfit', 'face', 'hat', 'hand'];
+export const WEAR_SLOTS: WearSlot[] = ['hat', 'face', 'outfit', 'hand'];
 export const SLOT_NAMES: Record<WearSlot | 'avatar', string> = {
   avatar: '캐릭터',
   hat: '모자',
   face: '얼굴',
   outfit: '옷',
   hand: '소품',
-  bg: '배경',
 };
 
 export const findItem = (id: string) => WARDROBE_ITEMS.find((item) => item.id === id) ?? null;
@@ -105,7 +104,7 @@ export function avatarLayers(avatar: AvatarChoice): { key: string; rows: string[
 }
 
 /** 그림 글자로 쓸 수 있는 것: 팔레트 + 캐릭터 색(A a L) + 투명(.) */
-export const WARDROBE_CHARS = '.AaLKWCPYORGBMNDEF';
+export const WARDROBE_CHARS = '.AaLKWCPYORGBMNDE';
 
 /** 다른 AI 가 그려 준 아이템 JSON 을 검사한다. 문제가 없으면 빈 배열 */
 export function checkWardrobeItem(value: unknown): string[] {

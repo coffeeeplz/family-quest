@@ -1,8 +1,8 @@
 // 다른 AI 가 그려 준 꾸미기 아이템 JSON 을 검사해서 src/assets/wardrobe.json 에 더한다.
 // 쓰는 법: npx tsx tools/add-wardrobe-item.ts 아이템.json
 // 아이템 JSON: { "id": "star-hat", "slot": "hat", "name": "별 모자", "price": 120, "rows": [16줄 × 16글자] }
-//   slot: hat(모자) face(얼굴) outfit(옷) hand(소품) bg(배경)
-//   글자: . 투명, A a L 캐릭터 색(밝기 셋), K W C P Y O R G B M N D E F 팔레트(src/assets/sprites.json)
+//   slot: hat(모자) face(얼굴) outfit(옷) hand(소품)
+//   글자: . 투명, A a L 캐릭터 색(밝기 셋), K W C P Y O R G B M N D E 팔레트(src/assets/sprites.json)
 //   기준 위치(토끼·곰): 머리 위 끝 y 4~5, 눈 y 7~8(x 4, 11), 볼 y 9(x 3, 12), 몸통 y 11~15(x 3~12), 소품은 오른쪽 x 12~15
 // firestore.rules 의 꾸미기 목록(wardrobeDefaultPrices)도 함께 고친다.
 import { readFileSync, writeFileSync } from 'node:fs';

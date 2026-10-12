@@ -276,7 +276,7 @@ service cloud.firestore {
     // 꾸미기 상품(유료 캐릭터와 아이템)의 id 와 처음 가격, 처음부터 쓰는 캐릭터 id.
     // src/assets/sprites.json 과 wardrobe.json 과 같아야 한다(tools/avatar_art.py 와 tools/add-wardrobe-item.ts 가 함께 고친다).
     function wardrobeDefaultPrices() {
-      return {'whale': 300, 'dino': 300, 'panda': 300, 'astronaut': 300, 'crown': 200, 'ribbon': 80, 'beanie': 120, 'round-glasses': 80, 'sunglasses': 120, 'blush': 50, 'tee': 80, 'cape': 150, 'uniform': 120, 'balloon': 60, 'wand': 150, 'soccer': 80, 'sky': 100, 'night': 150, 'sea': 150};
+      return {'whale': 300, 'dino': 300, 'panda': 300, 'astronaut': 300, 'crown': 200, 'ribbon': 80, 'beanie': 120, 'round-glasses': 80, 'sunglasses': 120, 'blush': 50, 'tee': 80, 'cape': 150, 'uniform': 120, 'balloon': 60, 'wand': 150, 'soccer': 80};
     }
     function freeAvatarIds() {
       return ['rabbit', 'cat', 'bear', 'fox', 'dog', 'penguin', 'frog', 'chick', 'dragon', 'unicorn', 'robot', 'ghost'];
@@ -300,7 +300,7 @@ service cloud.firestore {
         && av.id is string && av.color is string
         && (av.id in freeAvatarIds() || av.id in owned)
         && wear is map
-        && wear.keys().hasOnly(['hat', 'face', 'outfit', 'hand', 'bg'])
+        && wear.keys().hasOnly(['hat', 'face', 'outfit', 'hand'])
         && owned.hasAll(wear.values());
     }
 

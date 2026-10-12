@@ -8,8 +8,8 @@ import type { PushPrefs } from '../domain/push';
 
 export type Role = 'parent' | 'child';
 
-/** 꾸미기 칸: 모자, 얼굴(안경 등), 옷, 손에 든 소품, 배경 */
-export type WearSlot = 'hat' | 'face' | 'outfit' | 'hand' | 'bg';
+/** 꾸미기 칸: 모자, 얼굴(안경 등), 옷, 손에 든 소품 */
+export type WearSlot = 'hat' | 'face' | 'outfit' | 'hand';
 
 /** 칸마다 입은 꾸미기 아이템의 id(wardrobe.json). 빈 칸은 키가 없다. */
 export type Wear = Partial<Record<WearSlot, string>>;

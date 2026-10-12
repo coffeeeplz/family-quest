@@ -21,7 +21,7 @@ import { useAction } from '../../ui/toast';
 import { useWardrobePrices } from './useWardrobePrices';
 
 type Tab = WearSlot | 'avatar';
-const TABS: Tab[] = ['avatar', 'hat', 'face', 'outfit', 'hand', 'bg'];
+const TABS: Tab[] = ['avatar', 'hat', 'face', 'outfit', 'hand'];
 
 /** 저장된 모양과 같은지 비교할 수 있게 빈 칸을 뺀다. */
 function sameLook(a: AvatarChoice, b: AvatarChoice): boolean {
@@ -30,7 +30,7 @@ function sameLook(a: AvatarChoice, b: AvatarChoice): boolean {
 }
 
 /**
- * 캐릭터 꾸미기: 캐릭터와 색을 고르고 모자, 얼굴, 옷, 소품, 배경을 입어 본다.
+ * 캐릭터 꾸미기: 캐릭터와 색을 고르고 모자, 얼굴, 옷, 소품을 입어 본다.
  * 갖지 않은 것도 눌러서 입어 볼 수 있고, 마음에 들면 바로 산다(스티커처럼 승인 없이, 부모에게 알림). 부모는 모두 무료.
  */
 export function WardrobePage() {

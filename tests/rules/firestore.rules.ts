@@ -339,7 +339,7 @@ describe('캐릭터 꾸미기(입기)', () => {
   it('자녀는 가진 아이템과 캐릭터만 입을 수 있다', async () => {
     await seed({ [path('members/kid')]: kidWith(['crown', 'whale']) });
     await assertSucceeds(updateDoc(doc(as('kid'), path('members/kid')), { avatar: { id: 'whale', color: 'sky', wear: { hat: 'crown' } } }));
-    await assertFails(updateDoc(doc(as('kid'), path('members/kid')), { avatar: { id: 'whale', color: 'sky', wear: { hat: 'crown', bg: 'night' } } }));
+    await assertFails(updateDoc(doc(as('kid'), path('members/kid')), { avatar: { id: 'whale', color: 'sky', wear: { hat: 'crown', face: 'sunglasses' } } }));
     await assertFails(updateDoc(doc(as('kid'), path('members/kid')), { avatar: { id: 'panda', color: 'sky' } }));
   });
 

@@ -73,9 +73,9 @@ describe('꾸미기 그림', () => {
     expect(text).toMatch(/줄이 16개/);
   });
 
-  it('층은 배경, 캐릭터, 옷, 얼굴, 모자, 소품 순이고 모자는 캐릭터마다 위치를 옮긴다', () => {
-    const layers = avatarLayers({ id: 'astronaut', color: 'peach', wear: { hand: 'wand', hat: 'crown', bg: 'sky', face: 'blush', outfit: 'cape' } });
-    expect(layers.map((l) => l.key)).toEqual(['bg', 'avatar', 'outfit', 'face', 'hat', 'hand']);
+  it('층은 캐릭터, 옷, 얼굴, 모자, 소품 순이고 모자는 캐릭터마다 위치를 옮긴다', () => {
+    const layers = avatarLayers({ id: 'astronaut', color: 'peach', wear: { hand: 'wand', hat: 'crown', face: 'blush', outfit: 'cape' } });
+    expect(layers.map((l) => l.key)).toEqual(['avatar', 'outfit', 'face', 'hat', 'hand']);
     const astronaut = AVATARS.find((a) => a.id === 'astronaut')!;
     expect(layers.find((l) => l.key === 'hat')!.dy).toBe(astronaut.hatY);
     expect(layers.find((l) => l.key === 'face')!.dy).toBe(astronaut.faceY);
@@ -85,7 +85,7 @@ describe('꾸미기 그림', () => {
     // 옛 데이터(입은 것 없음)는 캐릭터만
     expect(avatarLayers({ id: 'rabbit', color: 'pink' }).map((l) => l.key)).toEqual(['avatar']);
     // 칸이 틀린 아이템은 그리지 않는다
-    expect(avatarLayers({ id: 'rabbit', color: 'pink', wear: { hat: 'sky' } }).map((l) => l.key)).toEqual(['avatar']);
+    expect(avatarLayers({ id: 'rabbit', color: 'pink', wear: { hat: 'cape' } }).map((l) => l.key)).toEqual(['avatar']);
   });
 });
 
@@ -94,13 +94,13 @@ describe('꾸미기 검사', () => {
     expect(cleanAvatarChoice({ id: 'cat', color: 'peach' }, [])).toEqual({ id: 'cat', color: 'peach' });
     expect(() => cleanAvatarChoice({ id: 'whale', color: 'sky' }, [])).toThrow('아직 갖지 않은 캐릭터');
     expect(() => cleanAvatarChoice({ id: 'cat', color: 'peach', wear: { hat: 'crown' } }, [])).toThrow('아직 갖지 않은 아이템');
-    expect(() => cleanAvatarChoice({ id: 'cat', color: 'peach', wear: { hat: 'sky' } }, ['sky'])).toThrow('없는 꾸미기');
+    expect(() => cleanAvatarChoice({ id: 'cat', color: 'peach', wear: { hat: 'cape' } }, ['cape'])).toThrow('없는 꾸미기');
     expect(cleanAvatarChoice({ id: 'whale', color: 'sky', wear: { hat: 'crown', face: '' } }, ['whale', 'crown'])).toEqual({
       id: 'whale',
       color: 'sky',
       wear: { hat: 'crown' },
     });
-    expect(cleanAvatarChoice({ id: 'panda', color: 'sky', wear: { bg: 'night' } }, 'all').wear).toEqual({ bg: 'night' });
+    expect(cleanAvatarChoice({ id: 'panda', color: 'sky', wear: { outfit: 'cape' } }, 'all').wear).toEqual({ outfit: 'cape' });
   });
 
   it('프로필 검사도 같은 규칙을 따른다', () => {
@@ -141,8 +141,8 @@ describe('꾸미기 상점(체험 모드)', () => {
   it('부모는 무료로 무엇이든 입고, 가격을 바꾸거나 숨긴다', async () => {
     as('demo-dad');
     await expect(backend.buyWardrobeItem(FAMILY, 'demo-dad', 'crown')).rejects.toThrow('부모는');
-    await backend.updateMyProfile(FAMILY, 'demo-dad', { displayName: dad().displayName, avatar: { id: 'astronaut', color: 'peach', wear: { hat: 'crown', bg: 'night' } } });
-    expect(dad().avatar.wear).toEqual({ hat: 'crown', bg: 'night' });
+    await backend.updateMyProfile(FAMILY, 'demo-dad', { displayName: dad().displayName, avatar: { id: 'astronaut', color: 'peach', wear: { hat: 'crown', hand: 'wand' } } });
+    expect(dad().avatar.wear).toEqual({ hat: 'crown', hand: 'wand' });
     await backend.setWardrobePrice(FAMILY, 'crown', 10, false);
     await backend.setWardrobePrice(FAMILY, 'cape', 150, true);
     await expect(backend.setWardrobePrice(FAMILY, 'crown', 0, false)).rejects.toThrow('가격은');
