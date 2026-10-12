@@ -43,6 +43,36 @@ service cloud.firestore {
         && invite.expiresAt > request.time.toMillis();
     }
 
+    // 날짜는 한국 시각(KST) 기준. 기기 시계가 조금 틀려도 되도록 앞뒤 10분의 여유를 둔다.
+    // kstDay(m): 지금에서 m분 옮긴 순간의 한국 날짜(그날 0시)
+    function kstDay(minutes) {
+      return (request.time + duration.value(540 + minutes, 'm')).date();
+    }
+
+    function isDateKey(key) {
+      return key is string && key.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}');
+    }
+
+    // 'YYYY-MM-DD' 를 kstDay 와 비교할 수 있는 값으로
+    function keyDay(key) {
+      return timestamp.date(int(key[0:4]), int(key[5:7]), int(key[8:10]));
+    }
+
+    // 오늘(한국 시각) 날짜인가
+    function isTodayKey(key) {
+      return isDateKey(key) && keyDay(key) >= kstDay(-10) && keyDay(key) <= kstDay(10);
+    }
+
+    // 완료 요청의 날짜: 한 번짜리는 기한 날짜 그대로, 반복은 오늘이나 놓친 날(이틀 전까지).
+    // 제때(늦지 않음)로 내려면 그 날짜가 아직 지나지 않았어야 한다.
+    function validRunDate(quest, key, late) {
+      return isDateKey(key)
+        && (quest.repeat.type == 'none'
+          ? key == quest.repeat.date
+          : keyDay(key) <= kstDay(10) && keyDay(key) >= kstDay(-10) - duration.value(2, 'd'))
+        && (late || keyDay(key) >= kstDay(-10));
+    }
+
     function validQuest(fid) {
       let d = request.resource.data;
       return d.title is string && d.title.size() > 0 && d.title.size() <= 40
@@ -75,6 +105,7 @@ service cloud.firestore {
         && d.reward == preset.reward
         && d.assigneeUid == request.auth.uid
         && d.repeat.type == 'none'
+        && isTodayKey(d.repeat.date)
         && d.active == true
         && qid == d.presetId + '_' + request.auth.uid + '_' + d.repeat.date;
     }
@@ -89,6 +120,7 @@ service cloud.firestore {
         && rid == d.questId + '_' + d.dateKey
         && quest.active == true
         && quest.assigneeUid == request.auth.uid
+        && validRunDate(quest, d.dateKey, d.late == true)
         && (
           (d.late == true && (d.reward * 2 == quest.reward || d.reward * 2 == quest.reward + 1))
           || (d.late != true && d.reward == quest.reward)
@@ -119,7 +151,10 @@ service cloud.firestore {
     function validOrder(fid) {
       let d = request.resource.data;
       let reward = get(/databases/$(database)/documents/families/$(fid)/rewards/$(d.rewardId)).data;
-      return d.uid == request.auth.uid
+      return d.keys().hasOnly(['rewardId', 'rewardTitle', 'icon', 'price', 'uid', 'status', 'requestedAt', 'requestedDay',
+            'decidedBy', 'decidedAt', 'rejectReason', 'deliveredBy', 'deliveredAt'])
+        && d.rewardTitle == reward.title
+        && d.uid == request.auth.uid
         && d.status == 'requested'
         && d.decidedBy == null
         && reward.active == true
@@ -200,6 +235,10 @@ service cloud.firestore {
       return exists(stickerPricePath(fid, packId)) ? get(stickerPricePath(fid, packId)).data.price
         : (packId == 'basic' ? 50 : 100);
     }
+    // 스티커 팩 id 목록(src/assets/stickers.json 과 같아야 한다. tools/add-sticker-pack.ts 가 함께 고친다)
+    function stickerPackIds() {
+      return ['basic', 'animal', 'food', 'cheer', 'sea'];
+    }
     function stickerHidden(fid, packId) {
       return exists(stickerPricePath(fid, packId)) && get(stickerPricePath(fid, packId)).data.hidden == true;
     }
@@ -215,7 +254,7 @@ service cloud.firestore {
         && after.stickerPacks.size() == owned.size() + 1
         && after.stickerPacks.hasAll(owned)
         && !(packId in owned)
-        && packId is string && packId.size() <= 20
+        && packId is string && packId in stickerPackIds()
         && after.coins == before.coins - stickerPrice(fid, packId)
         && after.coins >= 0
         && existsAfter(/databases/$(database)/documents/families/$(fid)/ledger/$('sticker-' + request.auth.uid + '-' + packId));
@@ -227,16 +266,17 @@ service cloud.firestore {
       return d.type == 'sticker'
         && d.uid == request.auth.uid
         && d.by == request.auth.uid
-        && d.refId is string
+        && d.refId is string && d.refId in stickerPackIds()
         && lid == 'sticker-' + request.auth.uid + '-' + d.refId
         && d.amount == -stickerPrice(fid, d.refId)
         && !stickerHidden(fid, d.refId)
         && d.refId in getAfter(memberPath(fid, request.auth.uid)).data.get('stickerPacks', []);
     }
 
-    // 메모를 받은 사람이 "확인했어요"를 누르는 변경: 확인한 사람 목록에 자기만 더할 수 있다.
+    // 메모를 받은 사람(받는 사람이 없으면 가족 모두)이 "확인했어요"를 누르는 변경: 확인한 사람 목록에 자기만 더할 수 있다.
     function noteMarkedRead() {
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy'])
+      return (resource.data.toUids.size() == 0 || request.auth.uid in resource.data.toUids)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy'])
         && request.resource.data.readBy.toSet().difference(resource.data.readBy.toSet()) == [request.auth.uid].toSet();
     }
 
@@ -316,7 +356,7 @@ service cloud.firestore {
 
     // 위치 공유 코인을 받을 때 내 구성원 정보의 변화:
     // 코인은 설정된 금액만큼만 늘고, 오늘의 횟수가 1 늘며, 하루 한도를 넘지 못한다.
-    // 날짜 번호는 서버 시각의 날짜와 하루 넘게 차이 날 수 없고, 지난 날짜로 되돌릴 수 없다.
+    // 날짜 번호는 서버 시각의 한국 날짜와 같아야 하고, 지난 날짜로 되돌릴 수 없다.
     // (설정을 한 번도 저장하지 않은 가족의 기본값은 1코인, 하루 3번이다.)
     function validCheckinUpdate(fid) {
       let before = resource.data;
@@ -324,14 +364,15 @@ service cloud.firestore {
       let settings = get(familyPath(fid)).data.settings;
       let amount = settings.get('checkinCoins', 1);
       let perDay = settings.get('checkinPerDay', 3);
-      let today = request.time.toMillis() / 86400000;
+      // 한국 시각의 날짜 번호(lib/dates 의 dayNumber). 앞뒤 10분 여유
+      let nowKst = request.time.toMillis() + 32400000;
       let prev = before.get('checkin', {'dayNum': 0, 'count': 0});
       let lid = checkinLedgerId(after.checkin);
       return after.diff(before).affectedKeys().hasOnly(['coins', 'checkin'])
         && amount is int && amount > 0
         && after.checkin.dayNum is int
-        && after.checkin.dayNum >= today - 1
-        && after.checkin.dayNum <= today + 1
+        && after.checkin.dayNum >= math.floor((nowKst - 600000) / 86400000)
+        && after.checkin.dayNum <= math.floor((nowKst + 600000) / 86400000)
         && after.checkin.dayNum >= prev.dayNum
         && after.checkin.count == (after.checkin.dayNum == prev.dayNum ? prev.count + 1 : 1)
         && after.checkin.count <= perDay

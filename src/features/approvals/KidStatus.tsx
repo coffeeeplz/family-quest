@@ -6,7 +6,7 @@ import type { Member } from '../../backend/types';
 import { buildBoard, todayProgress, type BoardItem } from '../../domain/quests';
 import { availableCoins, reservedCoins } from '../../domain/shop';
 import { currentStreak } from '../../domain/streak';
-import { formatDay, formatWhen } from '../../lib/dates';
+import { addDays, formatDay, formatWhen, parseDateKey } from '../../lib/dates';
 import type { IconName } from '../../lib/sprites';
 import { AvatarFrame, Icon } from '../../ui/Sprite';
 import { Button, CoinInline, CoinPill, Fold } from '../../ui/kit';
@@ -56,7 +56,10 @@ export function KidStatus({ kid, onGift }: Props) {
   const reserved = reservedCoins(orders, kid.uid);
   const recent = ledger.filter((entry) => entry.uid === kid.uid).slice(0, RECENT);
   // 최근 일주일 동안 포기한 일
-  const givenUp = runs.filter((r) => r.assigneeUid === kid.uid && r.status === 'skipped').sort((a, b) => b.submittedAt - a.submittedAt);
+  const weekAgo = parseDateKey(addDays(today, -7)).getTime();
+  const givenUp = runs
+    .filter((r) => r.assigneeUid === kid.uid && r.status === 'skipped' && r.submittedAt >= weekAgo)
+    .sort((a, b) => b.submittedAt - a.submittedAt);
   const goal = rewards.find((reward) => reward.id === kid.goalRewardId);
 
   const renderItem = (item: BoardItem) => (

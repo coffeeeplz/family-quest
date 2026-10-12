@@ -67,7 +67,8 @@ import { ETC_CATEGORY_ID, MAX_EATEN, cleanFoodInput, cleanStars, withEaten } fro
 import { cleanFix, cleanPlaceInput, planCheckin } from '../domain/location';
 import { cleanFamilyName, cleanProfile } from '../domain/profile';
 import { MAX_OFFER_NOTE, canCounter, cleanOfferAmount, cleanProposalInput, turnOf } from '../domain/proposals';
-import { cleanPresetInput, cleanQuestInput, runId } from '../domain/quests';
+import { cleanPresetInput, cleanQuestInput, runId, scheduledOn } from '../domain/quests';
+import { planStreak } from '../domain/streak';
 import {
   DEFAULT_SETTINGS,
   MAX_PRAISE_LENGTH,
@@ -152,12 +153,12 @@ async function guard<T>(work: () => Promise<T>): Promise<T> {
 
 /** 두 개의 실시간 조회 결과를 id 기준으로 합쳐서 하나처럼 돌려준다. */
 function watchMerged<T extends { id: string }>(
-  queries: [Query, Query],
+  queries: Query[],
   convert: (id: string, data: DocumentData) => T,
   cb: (items: T[]) => void,
   label: string,
 ): Unsub {
-  const results: (T[] | null)[] = [null, null];
+  const results: (T[] | null)[] = queries.map(() => null);
   const stops = queries.map((q, index) =>
     onSnapshot(
       q,
@@ -632,10 +633,12 @@ export function createFirebaseBackend(): Backend {
 
     watchRuns(familyId, sinceDateKey, cb) {
       // 최근 기록과, 오래됐더라도 아직 확인을 기다리는 기록을 합쳐서 돌려준다.
+      // 기한이 오래 지난 한 번짜리 퀘스트의 포기·반려 기록도 있어야 홈에 다시 뜨지 않는다.
       return watchMerged(
         [
           query(runsCol(familyId), where('dateKey', '>=', sinceDateKey)),
           query(runsCol(familyId), where('status', '==', 'submitted')),
+          query(runsCol(familyId), where('status', 'in', ['skipped', 'rejected'])),
         ],
         toRun,
         cb,
@@ -692,6 +695,11 @@ export function createFirebaseBackend(): Backend {
       guard(async () => {
         const runRef = doc(runsCol(familyId), id);
         const praise = cleanSaid(options.praise, MAX_PRAISE_LENGTH);
+        const [questSnap, settings] = await Promise.all([
+          getDocs(query(questsCol(familyId), where('active', '==', true))),
+          readSettings(familyId),
+        ]);
+        const quests = questSnap.docs.map((s) => toQuest(s.id, s.data()));
         // 승인, 장부 기록, 잔액 증가, 연속 달성을 한 묶음으로 처리한다(하나라도 실패하면 모두 취소).
         await runTransaction(db, async (tx) => {
           const snap = await tx.get(runRef);
@@ -699,7 +707,13 @@ export function createFirebaseBackend(): Backend {
           const run = toRun(snap.id, snap.data());
           if (run.status !== 'submitted') throw new AppError('이미 다른 사람이 확인했어요.');
 
-          const streak = options.streak;
+          // 연속 달성은 화면이 미리 계산한 값(options.streak) 대신 묶음 안에서 읽은 최신 기록으로 다시 계산한다.
+          // 두 부모가 같은 날의 다른 퀘스트를 동시에 승인해도, 나중에 끝나는 쪽이 다시 읽어서 맞게 센다.
+          const memberSnap = await tx.get(memberRef(familyId, run.assigneeUid));
+          const required = run.oneOff || run.late ? [] : quests.filter((q) => q.assigneeUid === run.assigneeUid && scheduledOn(q, run.dateKey));
+          const daySnaps = await Promise.all(required.map((q) => tx.get(doc(runsCol(familyId), runId(q.id, run.dateKey)))));
+          const dayRuns = daySnaps.filter((s) => s.exists()).map((s) => toRun(s.id, s.data()!));
+          const streak = memberSnap.exists() ? planStreak(quests, dayRuns, toMember(run.assigneeUid, memberSnap.data()), run, settings) : null;
           const bonusRef = streak ? doc(ledgerCol(familyId), `streak_${run.assigneeUid}_${streak.lastDate}`) : null;
           // 같은 날의 보너스가 이미 있으면 다시 주지 않는다.
           const bonus = streak && bonusRef && streak.bonus > 0 && !(await tx.get(bonusRef)).exists() ? streak.bonus : 0;
