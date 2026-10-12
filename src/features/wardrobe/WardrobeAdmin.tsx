@@ -57,7 +57,7 @@ export function WardrobeAdmin() {
 
       {editing && entry && (
         <Sheet title={entry.name} onClose={() => setEditing(null)}>
-          <div className="center">
+          <div className="wardrobe-preview">
             <EntryPicture entry={entry} size={96} />
           </div>
           <div className="field">

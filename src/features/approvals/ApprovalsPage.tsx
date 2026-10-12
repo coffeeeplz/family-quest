@@ -11,7 +11,8 @@ import { wishTurn, wishesForParent } from '../../domain/wishes';
 import { formatWhen } from '../../lib/dates';
 import type { IconName } from '../../lib/sprites';
 import { CoinInput, parseCoins } from '../../ui/CoinInput';
-import { Avatar, AvatarFrame, Icon } from '../../ui/Sprite';
+import { Avatar, Icon } from '../../ui/Sprite';
+import { AvatarMenu } from '../avatar/AvatarMenu';
 import { SwipePages, type SwipePage } from '../../ui/SwipePages';
 import { Button, CoinInline, Empty, Field, FieldGroup, Sheet } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
@@ -276,7 +277,7 @@ export function ApprovalsPage() {
   return (
     <main className="screen">
       <header className="screen-head">
-        <AvatarFrame avatar={me.avatar} size={48} background="var(--coin-bg)" />
+        <AvatarMenu size={48} background="var(--coin-bg)" />
         <div className="grow">
           <h1 className="t-title">{me.displayName}</h1>
           <p className="t-cap">{waitingCount > 0 ? `답할 일 ${waitingCount}개` : '답할 일이 없어요'}</p>

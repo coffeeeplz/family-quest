@@ -1,18 +1,16 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useBackend, useSession } from '../../app/session';
-import type { Invite, ProfileInput, Role } from '../../backend/types';
+import type { Invite, Role } from '../../backend/types';
 import { Avatar } from '../../ui/Sprite';
 import { BackLink, Button, CoinInline, Sheet } from '../../ui/kit';
 import { errorText, useToast } from '../../ui/toast';
-import { ProfileForm } from '../avatar/ProfileForm';
-import { ownedOf, type Owned } from '../../domain/wardrobe';
+import { MyProfileSheet } from '../avatar/MyProfileSheet';
 
 /** 가족 구성원, 내 캐릭터 바꾸기, 초대코드 */
 export function FamilyPage() {
   const backend = useBackend();
   const { family, members, me, isParent } = useSession();
-  const notify = useToast();
   const [editing, setEditing] = useState(false);
   const [inviting, setInviting] = useState(false);
 
@@ -54,17 +52,7 @@ export function FamilyPage() {
         </Button>
       )}
 
-      {editing && (
-        <EditProfileSheet
-          initial={{ displayName: me.displayName, avatar: me.avatar }}
-          owned={ownedOf(me)}
-          onClose={() => setEditing(false)}
-          onSave={async (profile) => {
-            await backend.updateMyProfile(family.id, me.uid, profile);
-            notify('바꿨어요!');
-          }}
-        />
-      )}
+      {editing && <MyProfileSheet onClose={() => setEditing(false)} />}
       {inviting && (
         <InviteSheet
           familyName={family.name}
@@ -73,48 +61,6 @@ export function FamilyPage() {
         />
       )}
     </main>
-  );
-}
-
-interface EditProfileProps {
-  initial: ProfileInput;
-  owned: Owned;
-  onClose: () => void;
-  onSave: (profile: ProfileInput) => Promise<void>;
-}
-
-function EditProfileSheet({ initial, owned, onClose, onSave }: EditProfileProps) {
-  const [profile, setProfile] = useState(initial);
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  async function save() {
-    setBusy(true);
-    setError('');
-    try {
-      await onSave(profile);
-      onClose();
-    } catch (e) {
-      setError(errorText(e));
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Sheet title="내 캐릭터 바꾸기" onClose={onClose}>
-      <ProfileForm value={profile} onChange={setProfile} owned={owned} />
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
-      <Button big block disabled={busy} onClick={() => void save()}>
-        이걸로 할래요!
-      </Button>
-      <Button tone="plain" big block onClick={onClose}>
-        닫기
-      </Button>
-    </Sheet>
   );
 }
 

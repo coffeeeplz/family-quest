@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useFamilyData } from '../../app/familyData';
 import { useBackend, useSession } from '../../app/session';
 import type { AvatarChoice, WearSlot } from '../../backend/types';
@@ -16,7 +17,7 @@ import {
 } from '../../domain/wardrobe';
 import { AVATARS, AVATAR_COLORS, colorHex } from '../../lib/sprites';
 import { AvatarFrame, Avatar, PixelSprite } from '../../ui/Sprite';
-import { BackLink, Button, CoinPill } from '../../ui/kit';
+import { Button, CoinPill } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
 import { useWardrobePrices } from './useWardrobePrices';
 
@@ -39,6 +40,7 @@ export function WardrobePage() {
   const { orders } = useFamilyData();
   const prices = useWardrobePrices();
   const { busy, run } = useAction();
+  const navigate = useNavigate();
   const [draft, setDraft] = useState<AvatarChoice>(me.avatar);
   const [tab, setTab] = useState<Tab>('avatar');
 
@@ -81,7 +83,10 @@ export function WardrobePage() {
 
   return (
     <main className="screen">
-      <BackLink to={isParent ? '/family' : '/shop'} label={isParent ? '가족' : '상점'} />
+      {/* 홈의 캐릭터, 상점, 가족 화면 어디서든 들어오므로 들어온 곳으로 돌아간다. */}
+      <button type="button" className="link back-link" onClick={() => navigate(-1)}>
+        ‹ 뒤로
+      </button>
       <header className="screen-head">
         <div className="grow">
           <h1 className="t-title">캐릭터 꾸미기</h1>

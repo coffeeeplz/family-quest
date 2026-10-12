@@ -12,6 +12,14 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '1.14.1',
+    date: '2026-10-12',
+    items: [
+      '홈의 내 캐릭터를 누르면 "캐릭터·이름 바꾸기"와 "꾸미기"를 바로 고를 수 있어요',
+      '안드로이드: 앱을 보고 있을 때 온 알림과 앱을 켤 때 남은 알림을 알림창에서 지워, 아이콘 숫자가 남지 않게 했어요',
+    ],
+  },
+  {
     version: '1.14.0',
     date: '2026-10-12',
     items: [
