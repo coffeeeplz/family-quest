@@ -1504,3 +1504,10 @@ a.btn.inventory-btn {
 .wardrobe-try {
   padding: 14px;
 }
+/* 홈 위쪽의 내 캐릭터 버튼(누르면 바꾸기·꾸미기) */
+.avatar-menu-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}

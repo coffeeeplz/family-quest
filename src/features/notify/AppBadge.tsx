@@ -6,15 +6,20 @@ type BadgeNavigator = Navigator & {
   clearAppBadge?: () => Promise<void>;
 };
 
-/** 휴대폰 알림창에 쌓인 우리 앱 알림을 지운다(앱을 열었으면 본 것으로 친다). */
-async function clearShownNotifications() {
+/**
+ * 휴대폰 알림창에 쌓인 우리 앱 알림을 지운다(앱을 열었으면 본 것으로 친다).
+ * 안드로이드는 알림창에 남은 알림 개수를 앱 아이콘 숫자로 보이므로, 이것을 지워야 숫자도 사라진다.
+ * 앱을 처음 켤 때는 서비스 워커가 늦게 준비될 수 있어 넉넉히 기다리고, 실패하면 한 번 더 해 본다.
+ */
+async function clearShownNotifications(retry = true) {
   if (!('serviceWorker' in navigator)) return;
   try {
-    const registration = await serviceWorkerReady(3000);
+    const registration = await serviceWorkerReady(15_000);
     const shown = await registration.getNotifications();
     shown.forEach((notification) => notification.close());
   } catch {
-    // 알림을 지원하지 않거나 서비스 워커가 아직 없으면 그냥 둔다.
+    // 알림을 지원하지 않거나 서비스 워커가 아직 없으면 잠시 뒤 한 번만 다시 해 본다.
+    if (retry) setTimeout(() => void clearShownNotifications(false), 5_000);
   }
 }
 
@@ -36,6 +41,8 @@ function setBadge(count: number) {
 export function AppBadge({ count }: { count: number }) {
   useEffect(() => {
     setBadge(count);
+    // 앱을 보고 있는 동안 내용이 바뀌었다면(새 알림이 와서 화면에 반영됨) 알림창에 남은 알림도 정리한다.
+    if (document.visibilityState === 'visible') void clearShownNotifications();
   }, [count]);
 
   useEffect(() => {

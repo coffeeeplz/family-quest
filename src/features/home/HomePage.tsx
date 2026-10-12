@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useSession } from '../../app/session';
-import { AvatarFrame, Icon } from '../../ui/Sprite';
+import { Icon } from '../../ui/Sprite';
+import { AvatarMenu } from '../avatar/AvatarMenu';
 import { CoinPill } from '../../ui/kit';
 import { HomeEvents } from '../calendar/TodayEvents';
 import { InventoryButton } from '../inventory/InventoryButton';
@@ -21,7 +22,7 @@ export function HomePage() {
   return (
     <main className="screen">
       <header className="screen-head">
-        <AvatarFrame avatar={me.avatar} size={64} />
+        <AvatarMenu size={64} />
         <div className="grow">
           <h1 className="t-title">{me.displayName}</h1>
           <p className="t-cap">{progressText}</p>
