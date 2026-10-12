@@ -37,7 +37,7 @@ export function PixelSprite({ rows, primary, size, label, className }: PixelSpri
 export function Avatar({ avatar, size, label }: { avatar: AvatarChoice; size: number; label?: string }) {
   const primary = colorHex(avatar.color);
   const layers = avatarLayers(avatar);
-  const n = layers[0]?.rows.length ?? 32;
+  const n = layers[0]?.rows.length ?? 16;
   return (
     <svg
       className="sprite"

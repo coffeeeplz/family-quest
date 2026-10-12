@@ -35,10 +35,10 @@ beforeEach(() => {
 });
 
 describe('꾸미기 그림', () => {
-  it('모든 캐릭터는 32×32 이고, 기본 색이 있고, 처음부터 쓰는 캐릭터는 12종', () => {
+  it('모든 캐릭터는 16×16 이고, 기본 색이 있고, 처음부터 쓰는 캐릭터는 12종', () => {
     for (const a of AVATARS) {
-      expect(a.rows, a.id).toHaveLength(32);
-      for (const row of a.rows) expect(row, a.id).toHaveLength(32);
+      expect(a.rows, a.id).toHaveLength(16);
+      for (const row of a.rows) expect(row, a.id).toHaveLength(16);
       expect(AVATAR_COLORS.some((c) => c.id === a.color), a.id).toBe(true);
     }
     expect(AVATARS.filter((a) => a.price === 0)).toHaveLength(12);
@@ -64,19 +64,24 @@ describe('꾸미기 그림', () => {
   });
 
   it('검사는 틀린 곳을 알려 준다', () => {
-    const bad = checkWardrobeItem({ id: 'Hat', slot: 'shoes', name: '', price: 0, rows: ['.'.repeat(32), 'X'] });
+    const bad = checkWardrobeItem({ id: 'Hat', slot: 'shoes', name: '', price: 0, rows: ['.'.repeat(16), 'X'] });
     const text = bad.join('\n');
     expect(text).toMatch(/아이템 id/);
     expect(text).toMatch(/칸/);
     expect(text).toMatch(/이름/);
     expect(text).toMatch(/가격/);
-    expect(text).toMatch(/줄이 32개/);
+    expect(text).toMatch(/줄이 16개/);
   });
 
   it('층은 배경, 캐릭터, 옷, 얼굴, 모자, 소품 순이고 모자는 캐릭터마다 위치를 옮긴다', () => {
     const layers = avatarLayers({ id: 'astronaut', color: 'peach', wear: { hand: 'wand', hat: 'crown', bg: 'sky', face: 'blush', outfit: 'cape' } });
     expect(layers.map((l) => l.key)).toEqual(['bg', 'avatar', 'outfit', 'face', 'hat', 'hand']);
-    expect(layers.find((l) => l.key === 'hat')!.dy).toBe(AVATARS.find((a) => a.id === 'astronaut')!.hatY);
+    const astronaut = AVATARS.find((a) => a.id === 'astronaut')!;
+    expect(layers.find((l) => l.key === 'hat')!.dy).toBe(astronaut.hatY);
+    expect(layers.find((l) => l.key === 'face')!.dy).toBe(astronaut.faceY);
+    // 눈이 위에 있는 개구리는 얼굴 아이템을 위로 옮긴다
+    const frog = avatarLayers({ id: 'frog', color: 'mint', wear: { face: 'round-glasses' } });
+    expect(frog.find((l) => l.key === 'face')!.dy).toBeLessThan(0);
     // 옛 데이터(입은 것 없음)는 캐릭터만
     expect(avatarLayers({ id: 'rabbit', color: 'pink' }).map((l) => l.key)).toEqual(['avatar']);
     // 칸이 틀린 아이템은 그리지 않는다

@@ -7,7 +7,7 @@
 
 | 기능 | 상태 |
 |---|---|
-| 캐릭터(32×32 도트 아바타 12종, 색 8가지)와 이름 정하기 | 완료 |
+| 캐릭터(도트 아바타 12종, 색 8가지)와 이름 정하기 | 완료 |
 | 가족 만들기, 초대코드(부모용/자녀용, 7일 유효)로 들어오기 | 완료 |
 | 퀘스트 만들기·고치기·지우기 (한 번 / 매일 / 요일마다, "꼭" 표시) | 완료 |
 | 자녀 홈 세 구역: 놓친 일 / 오늘 할 일 / 다가오는 일 | 완료 |
@@ -225,8 +225,9 @@ npm run build:demo 파일 하나짜리 체험판 만들기 (dist-demo/index.html
 
 ## 캐릭터와 꾸미기 아이템 더하기
 
-- 캐릭터와 첫 아이템 세트는 `tools/avatar_art.py` 가 그린다(`python3 tools/avatar_art.py`). 모두 같은 32×32 뼈대 위에 그려서 아이템이 어느 캐릭터에도 맞는다.
-  뼈대: 머리 위 끝 y 6, 눈 y 13~14(x 10~11, 20~21), 몸통 y 20~30(x 9~22), 오른손 x 24 y 24 근처.
+- 파는 캐릭터와 첫 아이템 세트는 `tools/avatar_art.py` 에 16×16 글자 그림으로 들어 있다(`python3 tools/avatar_art.py` 로 JSON 에 넣음). 처음부터 쓰는 12종은 그대로 둔다.
+  기준 위치(토끼·곰): 머리 위 끝 y 4~5, 눈 y 7~8(x 4, 11), 볼 y 9(x 3, 12), 몸통 y 11~15(x 3~12), 소품은 오른쪽 x 12~15.
+  머리나 눈 위치가 다른 캐릭터는 `hatY`(모자), `faceY`(얼굴 아이템)로 위아래를 맞춘다.
 - 다른 AI 가 그린 아이템은 JSON(`id, slot, name, price, rows`)으로 받아 `npx tsx tools/add-wardrobe-item.ts 아이템.json` 으로 더한다.
   칸(slot)은 hat, face, outfit, hand, bg. 글자는 `.`(투명), `A a L`(캐릭터 색), 팔레트 `K W C P Y O R G B M N D E F`.
 - 두 도구 모두 `firestore.rules` 의 상품 목록(`wardrobeDefaultPrices`, `freeAvatarIds`)을 함께 고친다. 테스트가 둘이 맞는지 검사한다.

@@ -13,7 +13,7 @@ export interface WardrobeItem {
   name: string;
   /** 처음 가격(코인). 부모가 상점 관리에서 바꿀 수 있다. */
   price: number;
-  /** 32줄 × 32글자. 글자는 팔레트와 . (투명), 캐릭터 색 A a L */
+  /** 16줄 × 16글자. 글자는 팔레트와 . (투명), 캐릭터 색 A a L */
   rows: string[];
 }
 
@@ -26,7 +26,7 @@ export interface WardrobeEntry {
 }
 
 export const WARDROBE_ITEMS: WardrobeItem[] = catalog as WardrobeItem[];
-export const WARDROBE_SIZE = 32;
+export const WARDROBE_SIZE = 16;
 export const MAX_WARDROBE_PRICE = 1000;
 /** 칸을 그리는 순서(아래부터). 'avatar' 는 캐릭터 자신 */
 export const LAYER_ORDER: (WearSlot | 'avatar')[] = ['bg', 'avatar', 'outfit', 'face', 'hat', 'hand'];
@@ -99,7 +99,7 @@ export function avatarLayers(avatar: AvatarChoice): { key: string; rows: string[
     }
     const id = avatar.wear?.[slot];
     const item = id ? findItem(id) : null;
-    if (item && item.slot === slot) layers.push({ key: slot, rows: item.rows, dy: slot === 'hat' ? def.hatY : 0 });
+    if (item && item.slot === slot) layers.push({ key: slot, rows: item.rows, dy: slot === 'hat' ? def.hatY : slot === 'face' ? def.faceY : 0 });
   }
   return layers;
 }
