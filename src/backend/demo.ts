@@ -746,7 +746,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       return watch(
         () =>
           Object.values(state.runs[familyId] ?? {})
-            .filter((r) => r.dateKey >= sinceDateKey || r.status === 'submitted')
+            .filter((r) => r.dateKey >= sinceDateKey || r.status === 'submitted' || r.status === 'skipped' || r.status === 'rejected')
             .map((r) => ({ ...r })),
         cb,
       );
@@ -758,6 +758,11 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       const stored = state.quests[familyId]?.[quest.id];
       if (!stored || !stored.active) throw new AppError('지금은 할 수 없는 퀘스트예요.');
       if (stored.assigneeUid !== uid) throw new AppError('내 퀘스트만 완료할 수 있어요.');
+      // 서버 규칙과 같은 날짜 검사: 한 번짜리는 기한 날짜로만, 미래 날짜는 안 되고, 지난 날은 늦은 것으로만
+      if (stored.repeat.type === 'none' ? day !== stored.repeat.date : day > dateKey()) {
+        throw new AppError('이 날짜로는 완료할 수 없어요.');
+      }
+      if (!late && day < dateKey()) throw new AppError('지난 날의 퀘스트는 늦게 한 것으로만 낼 수 있어요.');
       const id = runId(stored.id, day);
       const existing = state.runs[familyId][id];
       if (existing && existing.status !== 'rejected') throw new AppError('이미 완료를 알린 퀘스트예요.');

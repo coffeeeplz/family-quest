@@ -201,12 +201,15 @@ const toEvent = (id: string, d: Doc): CalendarEvent => ({
 
 /** 자녀가 오늘(놓친 날 포함) 아직 하지 않은 "꼭" 퀘스트의 이름 */
 async function unfinishedImportant(fid: string, uid: string, day: string): Promise<string[]> {
-  const [questSnap, runSnap] = await Promise.all([
+  // 기한이 오래 지난 한 번짜리 퀘스트의 포기·반려 기록도 읽어야 포기한 일을 다시 알리지 않는다.
+  const [questSnap, runSnap, closedSnap] = await Promise.all([
     db.collection(`families/${fid}/quests`).where('assigneeUid', '==', uid).get(),
     db.collection(`families/${fid}/runs`).where('dateKey', '>=', addDays(day, -MISSED_DAYS)).get(),
+    db.collection(`families/${fid}/runs`).where('status', 'in', ['skipped', 'rejected']).get(),
   ]);
   const quests = questSnap.docs.map((d) => toQuest(d.id, d.data())).filter((q) => q.active);
-  const runs = runSnap.docs.map((d) => toRun(d.id, d.data())).filter((r) => r.assigneeUid === uid);
+  const byId = new Map([...runSnap.docs, ...closedSnap.docs].map((d) => [d.id, toRun(d.id, d.data())]));
+  const runs = [...byId.values()].filter((r) => r.assigneeUid === uid);
   const board = buildBoard(quests, runs, [], uid, day);
   return [...board.missed, ...board.today]
     .filter((item) => item.kind === 'quest' && item.important && (item.state === 'todo' || item.state === 'rejected'))

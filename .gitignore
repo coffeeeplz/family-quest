@@ -4,3 +4,5 @@ dist-demo/
 dist-e2e/
 *.local
 .DS_Store
+e2e-shots/
+firestore-debug.log

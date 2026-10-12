@@ -21,6 +21,7 @@ import type {
   StickerPrice,
 } from '../src/backend/types';
 import { categoryOf, ratingSummary } from '../src/domain/foods';
+import { buildBoard } from '../src/domain/quests';
 import { DEFAULT_SETTINGS } from '../src/domain/settings';
 import { planStreak } from '../src/domain/streak';
 import { addDays, dateKey } from '../src/lib/dates';
@@ -915,5 +916,21 @@ describe('놓친 퀘스트 포기', () => {
     await expect(backend.giveUpRun(FAMILY, shoes, day, 'demo-kid')).rejects.toThrow('이미');
     as('demo-dad');
     await expect(backend.giveUpRun(FAMILY, shoes, day, 'demo-dad')).rejects.toThrow('내 퀘스트만');
+  });
+
+  it('기한이 오래 지난 한 번짜리 퀘스트를 포기하면, 일주일이 지나도 다시 나타나지 않는다', async () => {
+    as('demo-dad');
+    const due = addDays(today, -20);
+    const id = await backend.createQuest(
+      FAMILY,
+      { title: '오래된 숙제', note: '', assigneeUid: 'demo-kid', reward: 10, repeat: { type: 'none', date: due }, important: false },
+      'demo-dad',
+    );
+    as('demo-kid');
+    await backend.giveUpRun(FAMILY, questById(id), due, 'demo-kid');
+    // 앱이 실제로 구독하는 범위(최근 7일)로 읽는다.
+    const recent = snapshot<Run[]>((cb) => backend.watchRuns(FAMILY, addDays(today, -7), cb));
+    const board = buildBoard(quests(), recent, [], 'demo-kid', today);
+    expect([...board.missed, ...board.today].some((item) => item.title === '오래된 숙제')).toBe(false);
   });
 });

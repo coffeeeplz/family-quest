@@ -441,6 +441,7 @@ export interface StreakUpdate {
 
 export interface ApproveOptions {
   praise: string;
+  /** 화면이 미리 계산한 연속 달성. 실제 서버(firebase)는 승인 묶음 안에서 최신 기록으로 다시 계산한다. */
   streak: StreakUpdate | null;
 }
 

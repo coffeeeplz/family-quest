@@ -1,6 +1,7 @@
 // 다른 AI 가 그려 준 스티커 팩 JSON 을 검사해서 src/assets/stickers.json 에 더한다.
 // 쓰는 법: npx tsx tools/add-sticker-pack.ts 팩.json
 // 처음 가격은 100코인(서버 규칙의 stickerPrice 와 같아야 한다). 다른 가격은 앱의 상점 관리에서 바꾼다.
+// firestore.rules 의 팩 id 목록(stickerPackIds)도 함께 고친다.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { checkPack, STICKER_PACKS, type StickerPack } from '../src/domain/stickers';
 
@@ -34,4 +35,11 @@ const json = (p: StickerPack) =>
     .join(',\n') +
   `\n    ]\n  }`;
 writeFileSync(new URL('../src/assets/stickers.json', import.meta.url), `[\n${all.map(json).join(',\n')}\n]\n`);
+// 서버 규칙의 팩 id 목록(stickerPackIds)도 함께 고친다. 목록에 없는 팩은 살 수 없다.
+const rulesUrl = new URL('../firestore.rules', import.meta.url);
+const rules = readFileSync(rulesUrl, 'utf8');
+const ids = `[${all.map((p) => `'${p.id}'`).join(', ')}]`;
+const updated = rules.replace(/(function stickerPackIds\(\) \{\s*return )\[[^\]]*\]/, `$1${ids}`);
+if (updated === rules) console.error('firestore.rules 의 stickerPackIds 를 찾지 못했어요. 직접 고쳐 주세요.');
+writeFileSync(rulesUrl, updated);
 console.log(`더했어요: ${pack.name} (${pack.stickers.length}개, ${pack.price}코인)`);

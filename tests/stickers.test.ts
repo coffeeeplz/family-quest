@@ -14,6 +14,13 @@ describe('스티커', () => {
     for (const pack of STICKER_PACKS) expect(pack.price, pack.id).toBe(pack.id === 'basic' ? 50 : 100);
   });
 
+  it('서버 규칙의 팩 id 목록이 stickers.json 과 같다', () => {
+    const rules = readFileSync('firestore.rules', 'utf8');
+    const list = rules.match(/function stickerPackIds\(\) \{\s*return \[([^\]]*)\]/)?.[1] ?? '';
+    const ids = [...list.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+    expect(ids).toEqual(STICKER_PACKS.map((p) => p.id));
+  });
+
   it('검사는 틀린 곳을 알려 준다', () => {
     const rows = Array(16).fill('.'.repeat(16));
     expect(checkPack({ id: 'sea', name: '바다 팩', stickers: [{ id: 'whale', label: '고래', rows }] })).toEqual([]);
