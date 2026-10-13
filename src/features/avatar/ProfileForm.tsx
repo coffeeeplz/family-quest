@@ -12,7 +12,7 @@ interface Props {
   owned?: Owned;
 }
 
-/** 이름, 캐릭터, 색을 고르는 입력 묶음. 가입할 때와 프로필을 바꿀 때 함께 쓴다. */
+/** 이름, 캐릭터, 색을 고르는 입력 묶음. 가입할 때 쓴다(가입한 뒤에는 내 캐릭터 화면에서 바꾼다). */
 export function ProfileForm({ value, onChange, owned = [] }: Props) {
   const current = avatarDef(value.avatar.id);
   const choices = AVATARS.filter((avatar) => canUseAvatar(owned, avatar.id));

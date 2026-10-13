@@ -474,6 +474,18 @@ describe('상점', () => {
     await expect(buy('r-game')).rejects.toThrow('오늘은 더 바꿀 수 없어요'); // 받은 뒤에도 오늘은 끝
   });
 
+  it('구매 제한이 있는 보상은 번호표 id 로 신청하고, 거절되면 다음 번호를 쓴다', async () => {
+    as('demo-dad');
+    await backend.giveCoins(FAMILY, 'demo-kid', 100, '', 'demo-dad');
+    const first = await buy('r-game');
+    expect(first).toBe(`limit_demo-kid_r-game_${today}_1`);
+    expect(orders().find((o) => o.id === first)).toMatchObject({ periodKey: today, slot: 1 });
+    as('demo-dad');
+    await backend.rejectOrder(FAMILY, first, 'demo-dad', '');
+    expect(await buy('r-game')).toBe(`limit_demo-kid_r-game_${today}_2`);
+    expect((await buy('r-snack')).startsWith('limit_')).toBe(false); // 제한 없는 보상은 보통 id
+  });
+
   it('자녀는 승인하거나 보상을 올릴 수 없고, 남의 신청을 취소할 수 없다', async () => {
     const id = await buy('r-snack');
     const input = { title: '무제한 게임', note: '', price: 1, icon: 'game', limit: { period: 'none' as const, count: 1 } };

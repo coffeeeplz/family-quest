@@ -58,7 +58,7 @@ import { canCounter, cleanProposalInput, turnOf } from '../src/domain/proposals'
 import { buildBoard, cleanQuestInput, relativeDay, repeatLabel, scheduledOn, todayProgress } from '../src/domain/quests';
 import { DEFAULT_SETTINGS, cleanSettings, halfReward, normalizeSettings } from '../src/domain/settings';
 import { currentStreak, planStreak } from '../src/domain/streak';
-import { availableCoins, buyBlockReason, buyState, cleanRewardInput, limitUsage, reservedCoins } from '../src/domain/shop';
+import { availableCoins, buyBlockReason, buyState, cleanRewardInput, limitUsage, nextOrderSlot, orderSlotId, reservedCoins } from '../src/domain/shop';
 import { addDays, dateKey, dayNumber, formatDay, formatTime, isDateKey, parseDateKey, weekStart, weekdayOf } from '../src/lib/dates';
 
 const TODAY = '2026-10-06'; // 화요일
@@ -483,6 +483,20 @@ describe('shop', () => {
     ];
     expect(limitUsage(weekly, orders, 'kid', TODAY)).toEqual({ used: 2, reached: true });
     expect(buyBlockReason(weekly, rich, orders, TODAY)).toBe('이번 주에는 더 바꿀 수 없어요.');
+  });
+
+  it('picks order slots so the server can enforce the limit', () => {
+    const daily = reward({ limit: { period: 'day', count: 1 } });
+    const weekly = reward({ limit: { period: 'week', count: 2 } });
+    const id = (key: string, slot: number) => orderSlotId('kid', daily.id, key, slot);
+    expect(nextOrderSlot(reward(), [], 'kid', TODAY)).toBeNull();
+    expect(nextOrderSlot(daily, [], 'kid', TODAY)).toEqual({ id: id(TODAY, 1), periodKey: TODAY, slot: 1 });
+    // 거절된 번호 다음 번호를 쓰고, 승인된 번호가 있으면 다 쓴 것이다
+    expect(nextOrderSlot(daily, [order({ id: id(TODAY, 1), status: 'rejected' })], 'kid', TODAY)?.slot).toBe(2);
+    expect(nextOrderSlot(daily, [order({ id: id(TODAY, 1), status: 'approved' })], 'kid', TODAY)).toBeNull();
+    // 일주일 제한은 월요일 번호표, 빈 번호부터
+    expect(nextOrderSlot(weekly, [order({ id: id('2026-10-05', 1) })], 'kid', TODAY)).toEqual({ id: id('2026-10-05', 2), periodKey: '2026-10-05', slot: 2 });
+    expect(nextOrderSlot(weekly, [order({ id: id('2026-10-05', 1), status: 'rejected' }), order({ id: id('2026-10-05', 2) })], 'kid', TODAY)?.slot).toBe(3);
   });
 
   it('validates reward input', () => {

@@ -78,7 +78,7 @@ import {
   halfReward,
   normalizeSettings,
 } from '../domain/settings';
-import { buyBlockReason, cleanRewardInput } from '../domain/shop';
+import { buyBlockReason, buyLimitText, cleanRewardInput, nextOrderSlot } from '../domain/shop';
 import { dateKey, dayNumber, weekStart } from '../lib/dates';
 import {
   AppError,
@@ -978,8 +978,13 @@ export function createFirebaseBackend(): Backend {
         for (const s of [...openSnap.docs, ...recentSnap.docs]) orders.set(s.id, toOrder(s.id, s.data()));
         const blocked = buyBlockReason(reward, toMember(uid, memberData), [...orders.values()], today);
         if (blocked) throw new AppError(blocked);
-        const ref = doc(ordersCol(familyId));
+        // 구매 제한이 있으면 번호표 id 로 만든다. 서버 규칙이 번호로 횟수를 확인한다.
+        const slot = nextOrderSlot(reward, [...orders.values()], uid, today);
+        if (reward.limit.period !== 'none' && !slot) throw new AppError(buyLimitText(reward));
+        const ref = slot ? doc(ordersCol(familyId), slot.id) : doc(ordersCol(familyId));
+        if (slot && (await getDoc(ref)).exists()) throw new AppError(buyLimitText(reward));
         await setDoc(ref, {
+          ...(slot ? { periodKey: slot.periodKey, slot: slot.slot } : {}),
           rewardId: reward.id,
           rewardTitle: reward.title,
           icon: reward.icon,
