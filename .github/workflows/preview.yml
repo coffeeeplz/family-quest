@@ -1,0 +1,72 @@
+# PR 미리보기: PR이 열리거나 새 커밋이 올라오면 체험 모드 앱을 Firebase Hosting 의 임시 주소(7일)에 올리고,
+# 그 주소를 PR 댓글로 남긴다. 체험 모드라서 실제 가족 데이터는 건드리지 않는다.
+name: 미리보기
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    name: 체험 모드 미리보기
+    # 다른 사람 저장소에서 온 PR에는 배포 키를 쓰지 않는다.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    env:
+      FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+    steps:
+      - name: 키가 없으면 알림
+        if: ${{ env.FIREBASE_SERVICE_ACCOUNT == '' }}
+        run: echo "::warning::FIREBASE_SERVICE_ACCOUNT 가 없어 미리보기를 건너뜁니다."
+      - uses: actions/checkout@v4
+        if: ${{ env.FIREBASE_SERVICE_ACCOUNT != '' }}
+      - uses: actions/setup-node@v4
+        if: ${{ env.FIREBASE_SERVICE_ACCOUNT != '' }}
+        with:
+          node-version: 22
+          cache: npm
+      - name: 체험 모드 빌드
+        if: ${{ env.FIREBASE_SERVICE_ACCOUNT != '' }}
+        run: |
+          npm ci
+          npm run build:e2e
+          rm -rf dist
+          mv dist-e2e dist
+      - name: 임시 주소에 올리기
+        id: deploy
+        if: ${{ env.FIREBASE_SERVICE_ACCOUNT != '' }}
+        run: |
+          set -o pipefail
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/sa.json"
+          GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json" \
+            npx --yes firebase-tools@15 hosting:channel:deploy "pr-${{ github.event.pull_request.number }}" \
+              --expires 7d --project family-quest-22c44 --non-interactive --json > "$RUNNER_TEMP/out.json"
+          cat "$RUNNER_TEMP/out.json"
+          echo "url=$(jq -r '.result | to_entries[0].value.url' "$RUNNER_TEMP/out.json")" >> "$GITHUB_OUTPUT"
+      - name: 키 파일 지우기
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sa.json"
+      - name: PR에 주소 남기기
+        if: ${{ steps.deploy.outputs.url != '' }}
+        uses: actions/github-script@v7
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+        with:
+          script: |
+            const marker = '<!-- preview-url -->';
+            const body = `${marker}\n📱 **미리보기(체험 모드)**: ${process.env.URL}\n\n` +
+              `폰에서 열어 눌러 볼 수 있어요. 예시 가족으로 보이고, 실제 가족 데이터는 바뀌지 않아요. 7일 뒤 사라져요.\n` +
+              `(커밋 ${context.payload.pull_request.head.sha.slice(0, 7)})`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const old = comments.find((c) => c.body.includes(marker));
+            if (old) await github.rest.issues.updateComment({ owner, repo, comment_id: old.id, body });
+            else await github.rest.issues.createComment({ owner, repo, issue_number, body });
