@@ -5,13 +5,11 @@ import type { Invite, Role } from '../../backend/types';
 import { Avatar } from '../../ui/Sprite';
 import { BackLink, Button, CoinInline, Sheet } from '../../ui/kit';
 import { errorText, useToast } from '../../ui/toast';
-import { MyProfileSheet } from '../avatar/MyProfileSheet';
 
 /** 가족 구성원, 내 캐릭터 바꾸기, 초대코드 */
 export function FamilyPage() {
   const backend = useBackend();
   const { family, members, me, isParent } = useSession();
-  const [editing, setEditing] = useState(false);
   const [inviting, setInviting] = useState(false);
 
   return (
@@ -40,11 +38,8 @@ export function FamilyPage() {
         ))}
       </div>
 
-      <Button big block onClick={() => setEditing(true)}>
-        내 캐릭터와 이름 바꾸기
-      </Button>
-      <Link className="btn plain big block" to="/wardrobe">
-        캐릭터 꾸미기
+      <Link className="btn big block" to="/wardrobe">
+        내 캐릭터 꾸미기
       </Link>
       {isParent && (
         <Button tone="mint" big block onClick={() => setInviting(true)}>
@@ -52,7 +47,6 @@ export function FamilyPage() {
         </Button>
       )}
 
-      {editing && <MyProfileSheet onClose={() => setEditing(false)} />}
       {inviting && (
         <InviteSheet
           familyName={family.name}

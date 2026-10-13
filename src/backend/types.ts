@@ -342,6 +342,9 @@ export interface Order {
   requestedAt: number;
   /** 신청한 날(구매 제한을 셀 때 쓴다) */
   requestedDay: string;
+  /** 구매 제한이 있는 보상의 번호표(domain/shop 의 nextOrderSlot) */
+  periodKey?: string;
+  slot?: number;
   decidedBy: string | null;
   decidedAt: number | null;
   rejectReason: string;

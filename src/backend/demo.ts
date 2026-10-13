@@ -21,7 +21,7 @@ import {
 } from '../domain/settings';
 import { MAX_NOTES, activeNoteCount, canEditNote, cleanNoteInput, isNoteFor } from '../domain/notes';
 import { normalizePushPrefs, type PushPrefs } from '../domain/push';
-import { MAX_REWARDS, availableCoins, buyBlockReason, cleanRewardInput } from '../domain/shop';
+import { MAX_REWARDS, availableCoins, buyBlockReason, buyLimitText, cleanRewardInput, nextOrderSlot } from '../domain/shop';
 import { MAX_STICKER_PRICE, canUsePack, cleanSaid, findPack, findSticker, packOffer, stickerLedgerId } from '../domain/stickers';
 import { MAX_DECLINE_NOTE, MAX_OPEN_WISHES, WISH_KEEP_DAYS, canCounterWish, checkWishTurn, cleanWishInput, cleanWishPrice, openWishCount } from '../domain/wishes';
 import { addDays, dateKey, dayNumber, parseDateKey } from '../lib/dates';
@@ -1092,11 +1092,16 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       const member = requireMember(familyId);
       const stored = state.rewards[familyId]?.[reward.id];
       if (!stored || !stored.active) throw new AppError('지금은 바꿀 수 없는 보상이에요.');
-      const blocked = buyBlockReason(stored, member, Object.values(state.orders[familyId]), today);
+      const orders = Object.values(state.orders[familyId]);
+      const blocked = buyBlockReason(stored, member, orders, today);
       if (blocked) throw new AppError(blocked);
-      const id = newId('o');
+      // 실제 서버처럼 구매 제한이 있으면 번호표 id 를 쓴다.
+      const slot = nextOrderSlot(stored, orders, uid, today);
+      if (stored.limit.period !== 'none' && (!slot || state.orders[familyId][slot.id])) throw new AppError(buyLimitText(stored));
+      const id = slot?.id ?? newId('o');
       state.orders[familyId][id] = {
         id,
+        ...(slot ? { periodKey: slot.periodKey, slot: slot.slot } : {}),
         rewardId: stored.id,
         rewardTitle: stored.title,
         icon: stored.icon,

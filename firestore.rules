@@ -147,18 +147,45 @@ service cloud.firestore {
         && run.assigneeUid == request.resource.data.uid;
     }
 
-    // 보상 신청: 내 이름으로, 상점에 올라 있는 보상을 적힌 가격 그대로 신청해야 한다.
-    function validOrder(fid) {
+    // 보상 신청: 내 이름으로, 상점에 올라 있는 보상을 적힌 가격 그대로, 오늘 날짜로 신청해야 한다.
+    // 가진 코인보다 비싼 보상은 신청할 수 없다(다른 신청에 묶인 코인은 승인할 때 다시 확인한다).
+    function validOrder(fid, oid) {
       let d = request.resource.data;
       let reward = get(/databases/$(database)/documents/families/$(fid)/rewards/$(d.rewardId)).data;
       return d.keys().hasOnly(['rewardId', 'rewardTitle', 'icon', 'price', 'uid', 'status', 'requestedAt', 'requestedDay',
-            'decidedBy', 'decidedAt', 'rejectReason', 'deliveredBy', 'deliveredAt'])
+            'decidedBy', 'decidedAt', 'rejectReason', 'deliveredBy', 'deliveredAt', 'periodKey', 'slot'])
         && d.rewardTitle == reward.title
         && d.uid == request.auth.uid
         && d.status == 'requested'
         && d.decidedBy == null
         && reward.active == true
-        && d.price == reward.price;
+        && d.price == reward.price
+        && isTodayKey(d.requestedDay)
+        && get(/databases/$(database)/documents/families/$(fid)/members/$(request.auth.uid)).data.coins >= d.price
+        && validOrderSlot(fid, oid, reward.get('limit', {'period': 'none'}));
+    }
+
+    // 구매 제한: 제한이 있는 보상은 번호표 id(domain/shop 의 orderSlotId)로만 신청한다.
+    // 기간마다 번호 1~count 이고, 그보다 큰 번호는 count 앞 번호가 거절됐을 때만 쓸 수 있다(거절은 횟수에 안 센다).
+    // 같은 id 의 문서는 하나뿐이라 기간 안의 신청이 count 번을 넘지 못한다.
+    function validOrderSlot(fid, oid, limit) {
+      let d = request.resource.data;
+      return limit.period == 'none'
+        ? d.get('slot', null) == null && d.get('periodKey', null) == null
+        : d.slot is int && d.slot >= 1
+          && isDateKey(d.periodKey)
+          && (limit.period == 'day'
+            ? d.periodKey == d.requestedDay
+            : keyDay(d.periodKey).dayOfWeek() == 1
+              && keyDay(d.requestedDay) >= keyDay(d.periodKey)
+              && keyDay(d.requestedDay) < keyDay(d.periodKey) + duration.value(7, 'd'))
+          && oid == orderSlotId(d, d.slot)
+          && (d.slot <= limit.count
+            || get(/databases/$(database)/documents/families/$(fid)/orders/$(orderSlotId(d, d.slot - limit.count))).data.status == 'rejected');
+    }
+
+    function orderSlotId(d, slot) {
+      return 'limit_' + d.uid + '_' + d.rewardId + '_' + d.periodKey + '_' + string(slot);
     }
 
     // 보상 코인 차감: 같은 묶음에서 승인된 신청과 금액(음수), 사람이 일치해야 한다.
@@ -403,7 +430,9 @@ service cloud.firestore {
       let d = request.resource.data;
       return d.title is string && d.title.size() > 0 && d.title.size() <= 40
         && d.price is int && d.price > 0 && d.price <= 10000
-        && d.active is bool;
+        && d.active is bool
+        && (!('limit' in d) || d.limit.period == 'none'
+          || (d.limit.period in ['day', 'week'] && d.limit.count is int && d.limit.count >= 1 && d.limit.count <= 20));
     }
 
     function familyPath(fid) {
@@ -634,7 +663,7 @@ service cloud.firestore {
 
       match /orders/{oid} {
         allow read: if isMember(fid);
-        allow create: if isMember(fid) && validOrder(fid);
+        allow create: if isMember(fid) && validOrder(fid, oid);
         allow update: if
           // 부모가 신청을 승인하거나 거절
           (isParent(fid)

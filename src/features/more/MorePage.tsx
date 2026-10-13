@@ -47,7 +47,9 @@ export function MorePage() {
   return (
     <main className="screen">
       <header className="screen-head">
-        <AvatarFrame avatar={me.avatar} size={64} />
+        <Link className="avatar-menu-btn" to="/wardrobe" aria-label="내 캐릭터 바꾸기">
+          <AvatarFrame avatar={me.avatar} size={64} />
+        </Link>
         <div className="grow">
           <h1 className="t-title">{me.displayName}</h1>
           <p className="t-cap">

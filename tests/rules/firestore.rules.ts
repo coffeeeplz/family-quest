@@ -239,6 +239,16 @@ describe('보상 사용 완료(orders)', () => {
     await assertFails(setDoc(doc(as('kid'), path('orders/new4')), { ...order('requested'), extra: true }));
   });
 
+  it('가진 코인보다 비싼 보상은 신청할 수 없다', async () => {
+    await seed({ [path('rewards/r1')]: { title: '게임 30분', price: 300, active: true } });
+    await assertFails(setDoc(doc(as('kid'), path('orders/new1')), { ...order('requested'), price: 300 }));
+  });
+
+  it('신청 날짜는 오늘이어야 한다', async () => {
+    await seed({ [path('rewards/r1')]: { title: '게임 30분', price: 30, active: true } });
+    await assertFails(setDoc(doc(as('kid'), path('orders/new1')), { ...order('requested'), requestedDay: kstKey(-3) }));
+  });
+
   it('승인된 보상은 자녀 본인이 사용 완료할 수 있다', async () => {
     await seed({ [path('orders/o1')]: order('approved') });
     await assertSucceeds(updateDoc(doc(as('kid'), path('orders/o1')), deliver('kid')));
@@ -362,5 +372,57 @@ describe('캐릭터 꾸미기(입기)', () => {
     await assertFails(join({ stickerPacks: ['animal'] }));
     await assertFails(join({ avatar: { id: 'whale', color: 'sky' } }));
     await assertSucceeds(join({}));
+  });
+});
+
+describe.skipIf(nearMidnight)('보상 구매 제한(번호표)', () => {
+  const today = kstKey();
+  const slotId = (periodKey: string, slot: number) => `limit_kid_r1_${periodKey}_${slot}`;
+  const order = (periodKey: string, slot: number, overrides: object = {}) => ({
+    rewardId: 'r1', rewardTitle: '게임 30분', icon: 'game', price: 30, uid: 'kid', status: 'requested',
+    requestedAt: 1, requestedDay: today, decidedBy: null, decidedAt: null,
+    rejectReason: '', deliveredBy: null, deliveredAt: null, periodKey, slot, ...overrides,
+  });
+  const reward = (period: string, count: number) => ({ title: '게임 30분', price: 30, active: true, limit: { period, count } });
+  /** 오늘이 든 주의 월요일 */
+  const monday = (() => {
+    const weekday = new Date(`${today}T00:00:00Z`).getUTCDay();
+    return kstKey(weekday === 0 ? -6 : 1 - weekday);
+  })();
+
+  it('하루 1번 보상은 번호 1만 신청할 수 있다', async () => {
+    await seed({ [path('rewards/r1')]: reward('day', 1) });
+    await assertFails(setDoc(doc(as('kid'), path('orders/random')), order(today, 1)));
+    await assertFails(setDoc(doc(as('kid'), path(`orders/${slotId(today, 2)}`)), order(today, 2)));
+    await assertFails(setDoc(doc(as('kid'), path(`orders/${slotId(kstKey(-1), 1)}`)), order(kstKey(-1), 1)));
+    await assertSucceeds(setDoc(doc(as('kid'), path(`orders/${slotId(today, 1)}`)), order(today, 1)));
+  });
+
+  it('같은 번호로 다시 신청할 수 없다', async () => {
+    await seed({ [path('rewards/r1')]: reward('day', 1), [path(`orders/${slotId(today, 1)}`)]: order(today, 1) });
+    await assertFails(setDoc(doc(as('kid'), path(`orders/${slotId(today, 1)}`)), order(today, 1)));
+  });
+
+  it('거절된 번호가 있으면 다음 번호를 쓸 수 있다', async () => {
+    await seed({ [path('rewards/r1')]: reward('day', 1), [path(`orders/${slotId(today, 1)}`)]: order(today, 1, { status: 'rejected' }) });
+    await assertSucceeds(setDoc(doc(as('kid'), path(`orders/${slotId(today, 2)}`)), order(today, 2)));
+  });
+
+  it('승인된 번호 다음 번호는 쓸 수 없다', async () => {
+    await seed({ [path('rewards/r1')]: reward('day', 1), [path(`orders/${slotId(today, 1)}`)]: order(today, 1, { status: 'approved' }) });
+    await assertFails(setDoc(doc(as('kid'), path(`orders/${slotId(today, 2)}`)), order(today, 2)));
+  });
+
+  it('일주일 제한은 그 주 월요일 번호표를 쓴다', async () => {
+    await seed({ [path('rewards/r1')]: reward('week', 2) });
+    // 월요일이면 오늘이 곧 주의 첫날이라 이 확인은 건너뛴다.
+    if (today !== monday) await assertFails(setDoc(doc(as('kid'), path(`orders/${slotId(today, 1)}`)), order(today, 1)));
+    await assertSucceeds(setDoc(doc(as('kid'), path(`orders/${slotId(monday, 2)}`)), order(monday, 2)));
+    await assertFails(setDoc(doc(as('kid'), path(`orders/${slotId(monday, 3)}`)), order(monday, 3)));
+  });
+
+  it('제한 없는 보상에는 번호표를 붙일 수 없다', async () => {
+    await seed({ [path('rewards/r1')]: { title: '게임 30분', price: 30, active: true } });
+    await assertFails(setDoc(doc(as('kid'), path(`orders/${slotId(today, 1)}`)), order(today, 1)));
   });
 });

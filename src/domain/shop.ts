@@ -76,6 +76,42 @@ export function limitUsage(reward: Reward, orders: Order[], uid: string, today: 
   return { used, reached: used >= reward.limit.count };
 }
 
+/** 구매 제한이 있는 보상의 신청 번호표 */
+export interface OrderSlot {
+  id: string;
+  /** 기간의 첫날: 하루 제한은 그날, 일주일 제한은 그 주 월요일 */
+  periodKey: string;
+  slot: number;
+}
+
+/** 번호표 신청서의 문서 id. firestore.rules 의 orderSlotId 와 같은 모양이어야 한다. */
+export function orderSlotId(uid: string, rewardId: string, periodKey: string, slot: number): string {
+  return `limit_${uid}_${rewardId}_${periodKey}_${slot}`;
+}
+
+/**
+ * 다음에 쓸 번호표. 기간마다 1~count 번만 쓸 수 있고, 그보다 큰 번호는 count 앞 번호가 거절됐을 때만 쓴다.
+ * 같은 번호의 문서는 하나뿐이므로 서버 규칙이 횟수를 지킬 수 있다. 제한이 없거나 다 썼으면 null.
+ */
+export function nextOrderSlot(reward: Reward, orders: Order[], uid: string, today: string): OrderSlot | null {
+  if (reward.limit.period === 'none') return null;
+  const periodKey = reward.limit.period === 'day' ? today : weekStart(today);
+  const byId = new Map(orders.map((o) => [o.id, o]));
+  const { count } = reward.limit;
+  let best: number | null = null;
+  for (let first = 1; first <= count; first++) {
+    for (let slot = first; ; slot += count) {
+      const taken = byId.get(orderSlotId(uid, reward.id, periodKey, slot));
+      if (!taken) {
+        if (best === null || slot < best) best = slot;
+        break;
+      }
+      if (taken.status !== 'rejected') break;
+    }
+  }
+  return best === null ? null : { id: orderSlotId(uid, reward.id, periodKey, best), periodKey, slot: best };
+}
+
 export type BuyState =
   | { kind: 'ok' }
   | { kind: 'short'; missing: number } // 코인이 모자람
@@ -91,9 +127,11 @@ export function buyState(reward: Reward, member: Member, orders: Order[], today:
 /** 신청할 수 없는 이유를 문장으로. 신청할 수 있으면 null. */
 export function buyBlockReason(reward: Reward, member: Member, orders: Order[], today: string): string | null {
   const state = buyState(reward, member, orders, today);
-  if (state.kind === 'limit') {
-    return reward.limit.period === 'day' ? '오늘은 더 바꿀 수 없어요.' : '이번 주에는 더 바꿀 수 없어요.';
-  }
+  if (state.kind === 'limit') return buyLimitText(reward);
   if (state.kind === 'short') return `코인이 ${state.missing}개 모자라요.`;
   return null;
+}
+
+export function buyLimitText(reward: Reward): string {
+  return reward.limit.period === 'day' ? '오늘은 더 바꿀 수 없어요.' : '이번 주에는 더 바꿀 수 없어요.';
 }

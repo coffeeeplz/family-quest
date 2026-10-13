@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useFamilyData } from '../../app/familyData';
 import { useBackend, useSession } from '../../app/session';
 import type { AvatarChoice, WearSlot } from '../../backend/types';
+import { MAX_NAME } from '../../domain/profile';
 import { availableCoins } from '../../domain/shop';
 import {
   SLOT_NAMES,
@@ -17,7 +18,7 @@ import {
 } from '../../domain/wardrobe';
 import { AVATARS, AVATAR_COLORS, colorHex } from '../../lib/sprites';
 import { AvatarFrame, Avatar, PixelSprite } from '../../ui/Sprite';
-import { Button, CoinPill } from '../../ui/kit';
+import { Button, CoinPill, Field } from '../../ui/kit';
 import { useAction } from '../../ui/toast';
 import { useWardrobePrices } from './useWardrobePrices';
 
@@ -31,7 +32,8 @@ function sameLook(a: AvatarChoice, b: AvatarChoice): boolean {
 }
 
 /**
- * 캐릭터 꾸미기: 캐릭터와 색을 고르고 모자, 얼굴, 옷, 소품을 입어 본다.
+ * 내 캐릭터: 이름, 캐릭터와 색을 고르고 모자, 얼굴, 옷, 소품을 입어 본다.
+ * 홈과 승인 화면의 내 캐릭터, 더보기 맨 위, 가족 화면, 상점에서 들어온다.
  * 갖지 않은 것도 눌러서 입어 볼 수 있고, 마음에 들면 바로 산다(스티커처럼 승인 없이, 부모에게 알림). 부모는 모두 무료.
  */
 export function WardrobePage() {
@@ -42,6 +44,7 @@ export function WardrobePage() {
   const { busy, run } = useAction();
   const navigate = useNavigate();
   const [draft, setDraft] = useState<AvatarChoice>(me.avatar);
+  const [name, setName] = useState(me.displayName);
   const [tab, setTab] = useState<Tab>('avatar');
 
   const owned = ownedOf(me);
@@ -58,7 +61,7 @@ export function WardrobePage() {
     .filter((id): id is string => Boolean(id) && !owns(owned, id) && !(id === draft.id && canUseAvatar(owned, id)))
     .map((id) => findEntry(id))
     .filter((entry): entry is WardrobeEntry => entry !== null);
-  const changed = !sameLook(draft, me.avatar);
+  const changed = !sameLook(draft, me.avatar) || name.trim() !== me.displayName;
 
   function wear(slot: WearSlot, id: string | null) {
     const next = { ...(draft.wear ?? {}) };
@@ -72,7 +75,7 @@ export function WardrobePage() {
   }
 
   function save() {
-    void run(() => backend.updateMyProfile(family.id, me.uid, { displayName: me.displayName, avatar: draft }), '꾸민 모습을 저장했어요!');
+    void run(() => backend.updateMyProfile(family.id, me.uid, { displayName: name, avatar: draft }), '저장했어요!');
   }
 
   const priceTag = (id: string) => {
@@ -89,7 +92,7 @@ export function WardrobePage() {
       </button>
       <header className="screen-head">
         <div className="grow">
-          <h1 className="t-title">캐릭터 꾸미기</h1>
+          <h1 className="t-title">내 캐릭터</h1>
           <p className="t-cap">{isParent ? '부모는 모두 무료예요' : '눌러서 입어 보고, 마음에 들면 사요'}</p>
         </div>
         <CoinPill amount={me.coins} />
@@ -162,6 +165,20 @@ export function WardrobePage() {
               />
             ))}
           </div>
+          <Field label="이름">
+            {(id) => (
+              <input
+                id={id}
+                className="input"
+                type="text"
+                value={name}
+                maxLength={MAX_NAME}
+                placeholder="가족이 부르는 이름"
+                autoComplete="nickname"
+                onChange={(event) => setName(event.target.value)}
+              />
+            )}
+          </Field>
         </>
       ) : (
         <div className="avatar-grid" role="radiogroup" aria-label={SLOT_NAMES[tab]}>
@@ -189,7 +206,15 @@ export function WardrobePage() {
         이 모습으로 저장하기
       </Button>
       {changed && (
-        <Button tone="plain" big block onClick={() => setDraft(me.avatar)}>
+        <Button
+          tone="plain"
+          big
+          block
+          onClick={() => {
+            setDraft(me.avatar);
+            setName(me.displayName);
+          }}
+        >
           처음 모습으로
         </Button>
       )}
