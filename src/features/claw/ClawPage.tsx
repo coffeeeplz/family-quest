@@ -3,18 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import { useFamilyData } from '../../app/familyData';
 import { useBackend, useSession } from '../../app/session';
 import type { ClawRound } from '../../backend/types';
-import { BOARD, LEVELS, cannotStart, clawAt, playsToday, seededRandom, winLabel } from '../../domain/claw';
+import { BOARD, boxAt, cannotStart, clawAt, playsToday, winLabel } from '../../domain/claw';
 import { availableCoins } from '../../domain/shop';
 import { findPack } from '../../domain/stickers';
 import { findEntry } from '../../domain/wardrobe';
 import { buzz, markCelebrating, playTune, previewTune, reducedMotion } from '../../lib/feedback';
-import { spriteRects } from '../../lib/sprites';
 import { Icon } from '../../ui/Sprite';
 import { Button, CoinPill } from '../../ui/kit';
 import { errorText } from '../../ui/toast';
 import { PackPreview } from '../stickers/StickerShop';
 import { EntryPicture } from '../wardrobe/WardrobeAdmin';
-import { BOX, BOX_COLORS, BOX_LIFT, CLAW_CLOSED, CLAW_HALF, CLAW_OPEN, SPARKLE } from './clawArt';
+import { ClawBoard, Pix, boxColors } from './ClawBoard';
+import { BOX, BOX_LIFT, CLAW_CLOSED, CLAW_HALF, CLAW_OPEN } from './clawArt';
 
 /*
  * 인형뽑기 화면. 시간 흐름(ms, 움직임 줄이기 설정이면 짧게):
@@ -40,47 +40,8 @@ const EXIT = { x: 7, y: 93 };
 const DROP_AT = 0.62;
 const CRISES = [0.3, 0.48];
 
-/** 게임판 좌표(0~100, 아래가 0) → 그림 좌표 */
-const sx = (x: number) => 10 + x;
-const sy = (y: number) => 122 - y;
-/** 집게 그림 가운데에서 조준점(집게 끝 사이)까지의 거리(그림 좌표, 크기 1일 때) */
-const AIM_DROP = 3.3;
-
 const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
 const clamp01 = (t: number) => Math.max(0, Math.min(1, t));
-
-/** 그림 좌표 (cx, cy)를 가운데로 한 변 size 인 도트 그림 */
-function Pix({ rows, cx, cy, size, color = '#FFB3D1', opacity }: { rows: string[]; cx: number; cy: number; size: number; color?: string; opacity?: number }) {
-  const n = rows.length;
-  const s = size / n;
-  return (
-    <g transform={`translate(${cx - size / 2} ${cy - size / 2}) scale(${s})`} opacity={opacity}>
-      {spriteRects(rows, color).map((r) => (
-        <rect key={`${r.x}-${r.y}`} x={r.x} y={r.y} width={r.w} height={1} fill={r.fill} />
-      ))}
-    </g>
-  );
-}
-
-interface Deco {
-  x: number;
-  y: number;
-  color: string;
-}
-
-/** 목표가 아닌 장식 상자들(판마다 씨앗값으로 같은 자리에) */
-function decorations(seed: number, target: { x: number; y: number } | null): Deco[] {
-  const random = seededRandom(seed);
-  const out: Deco[] = [];
-  for (let i = 0; out.length < 7 && i < 60; i++) {
-    const x = 18 + random() * 76;
-    const y = 8 + random() * 26;
-    if (target && Math.abs(x - target.x) < 14 && Math.abs(y - target.y) < 14) continue;
-    if (out.some((d) => Math.abs(d.x - x) < 11 && Math.abs(d.y - y) < 8)) continue;
-    out.push({ x, y, color: BOX_COLORS[Math.floor(random() * BOX_COLORS.length)] });
-  }
-  return out;
-}
 
 export function ClawPage() {
   const backend = useBackend();
@@ -98,12 +59,21 @@ export function ClawPage() {
   const [error, setError] = useState('');
   const [, setFrame] = useState(0);
   // 움직임에 쓰는 값들: 그릴 때마다 바뀌므로 ref 에 둔다.
-  const g = useRef({ t0: 0, phaseAt: 0, press1: null as number | null, press2: null as number | null, crisesPlayed: 0, drumAt: 0, finishing: false, cues: new Set<string>() });
+  const g = useRef({
+    t0: 0,
+    phaseAt: 0,
+    press1: null as number | null,
+    press2: null as number | null,
+    crisesPlayed: 0,
+    drumAt: 0,
+    finishing: false,
+    cues: new Set<string>(),
+  });
 
   const free = availableCoins(me, orders);
   const plays = playsToday(rounds, me.uid, today);
   const blocked = cannotStart(settings, isParent, free, plays);
-  const decos = useMemo(() => decorations(round?.seed ?? 5, round?.target ?? null), [round]);
+  const colors = useMemo(() => (round ? boxColors(round.seed, round.targets.length) : []), [round]);
 
   // ── 시간이 흐르게 하기 ─────────────────────────────────────────────────────
   const moving = phase !== 'idle' && phase !== 'done' && phase !== 'starting';
@@ -171,7 +141,16 @@ export function ClawPage() {
     setPhase('starting');
     try {
       const r = await backend.startClaw(family.id, me.uid);
-      g.current = { t0: performance.now(), phaseAt: performance.now(), press1: null, press2: null, crisesPlayed: 0, drumAt: 0, finishing: false, cues: new Set() };
+      g.current = {
+        t0: performance.now(),
+        phaseAt: performance.now(),
+        press1: null,
+        press2: null,
+        crisesPlayed: 0,
+        drumAt: 0,
+        finishing: false,
+        cues: new Set(),
+      };
       setRound(r);
       setPhase('x');
     } catch (e) {
@@ -224,10 +203,11 @@ export function ClawPage() {
       claw = stop;
       clawScale = 1 - 0.2 * Math.sin(Math.min(p, 1) * Math.PI * 0.5);
       clawRows = p < 0.35 ? CLAW_OPEN : p < 0.65 ? CLAW_HALF : CLAW_CLOSED;
-      if (p >= 0.65) cue('grab', () => {
-        playTune('grab');
-        buzz([40]);
-      });
+      if (p >= 0.65)
+        cue('grab', () => {
+          playTune('grab');
+          buzz([40]);
+        });
     } else if (phase === 'miss') {
       const p = clamp01(inPhase / (900 * k));
       claw = stop;
@@ -307,21 +287,23 @@ export function ClawPage() {
       playTune('drum');
       buzz([20]);
     }
-    if (stage === 4) cue('reveal', () => {
-      playTune(result?.prize?.kind === 'coin' ? 'coin' : 'reward');
-      buzz([60, 40, 120]);
-    });
+    if (stage === 4)
+      cue('reveal', () => {
+        playTune(result?.prize?.kind === 'coin' ? 'coin' : 'reward');
+        buzz([60, 40, 120]);
+      });
   }
   const rays = phase === 'open' && openMs > 1900 && openMs < 3000;
   const flash = phase === 'open' && openMs >= 2700 && openMs < 3000 ? 1 - (openMs - 2700) / 300 : 0;
   const revealed = phase === 'done' || (phase === 'open' && openMs >= 2700);
 
   const tapToPress = phase === 'x' || phase === 'y';
-  const level = LEVELS[settings.level];
-  // 맞출 곳: 목표 상자 둘레의 점선 네모(잡히는 범위). 쉬움에서는 조준점이 들어오면 반짝인다.
-  const reach = round ? LEVELS[round.level].reach : 0;
-  const inZone = !!round && tapToPress && Math.abs(claw.x - round.target.x) <= reach && Math.abs(claw.y - round.target.y) <= reach;
-  const glow = inZone && round?.level === 'easy';
+  // 맞출 곳: 상자마다 둘레의 점선 네모(잡히는 범위). 반짝 도움이 켜져 있으면 조준점이 들어간 네모가 반짝인다.
+  const glowBox = round?.glow && tapToPress ? boxAt(round, claw) : null;
+  // 잡은 상자는 바닥에서 빼고 집게와 함께 그린다.
+  const caught = result?.caught ?? null;
+  const lifted = caught !== null && phase !== 'grab' && phase !== 'wait';
+  const caughtColor = caught !== null ? colors[caught] : '#FFB3D1';
 
   return (
     <main className="screen claw-screen">
@@ -331,77 +313,41 @@ export function ClawPage() {
       <header className="screen-head">
         <div className="grow">
           <h1 className="t-title">인형뽑기</h1>
-          <p className="t-cap">
-            {isParent ? `연습 판(공짜) · 난이도 ${level.name}` : `한 판 ${settings.price}코인${settings.perDay > 0 ? ` · 오늘 ${plays}/${settings.perDay}번` : ''}`}
-          </p>
+          <p className="t-cap">{isParent ? '연습 판(공짜)' : `한 판 ${settings.price}코인${settings.perDay > 0 ? ` · 오늘 ${plays}/${settings.perDay}번` : ''}`}</p>
         </div>
         <CoinPill amount={me.coins} />
       </header>
 
       <div className="claw-machine" onPointerDown={tapToPress ? press : undefined}>
-        <svg viewBox="0 0 120 140" className="claw-svg" role="img" aria-label="인형뽑기 기계">
-          {/* 기계 틀과 유리 */}
-          <rect x="2" y="2" width="116" height="136" rx="3" fill="var(--pink)" stroke="#4B3B66" strokeWidth="2" />
-          <rect x="8" y="12" width="104" height="114" fill="#E8F4FF" stroke="#4B3B66" strokeWidth="1.5" />
-          <rect x="8" y="12" width="104" height="4" fill="#FFFFFF" opacity="0.6" />
-          {/* 출구 */}
-          <rect x="9" y="17" width="16" height="12" fill="#4B3B66" />
-          <text x="17" y="9" textAnchor="middle" fontSize="6" fill="#4B3B66" fontFamily="var(--font-title)">
-            출구
-          </text>
-          {/* 바닥의 상자들 */}
-          {decos.map((d, i) => (
-            <Pix key={i} rows={BOX} cx={sx(d.x)} cy={sy(d.y)} size={14} color={d.color} opacity={0.9} />
-          ))}
-          {/* 목표 상자(잡히기 전) */}
-          {round && !carried && !falling && !(opening || phase === 'done' && result?.outcome !== 'miss') && (
-            <>
-              {tapToPress && (
-                <rect
-                  x={sx(round.target.x - reach)}
-                  y={sy(round.target.y + reach)}
-                  width={reach * 2}
-                  height={reach * 2}
-                  fill={glow ? '#FFE38A' : '#FFFFFF'}
-                  fillOpacity={glow ? 0.7 : 0.45}
-                  stroke="#FF5C8A"
-                  strokeWidth={glow ? 1.3 : 0.9}
-                  strokeDasharray={glow ? undefined : '2 1.5'}
-                />
-              )}
-              <Pix rows={BOX} cx={sx(round.target.x)} cy={sy(round.target.y)} size={15} color="#FFB3D1" />
-              <Pix rows={SPARKLE} cx={sx(round.target.x) + 7} cy={sy(round.target.y) - 8} size={5} opacity={0.5 + 0.5 * Math.abs(Math.sin(now / 250))} />
-            </>
-          )}
-          {/* 들고 가는 상자, 떨어지는 상자 */}
-          {carried && <Pix rows={BOX} cx={sx(carried.x)} cy={sy(carried.y)} size={15} color="#FFB3D1" />}
-          {falling && (
-            <g transform={`rotate(${falling.spin} ${sx(falling.x)} ${sy(falling.y)})`}>
-              <Pix rows={BOX} cx={sx(falling.x)} cy={sy(falling.y)} size={15} color="#FFB3D1" />
-            </g>
-          )}
-          {/* 집게 그림자와 집게 */}
-          {/* 오른쪽으로 갈 때: 위로 올라갈 길을 점선으로 */}
-          {phase === 'x' && <line x1={sx(claw.x)} y1={sy(claw.y) - 8} x2={sx(claw.x)} y2={sy(BOARD)} stroke="#4B3B66" strokeWidth="0.5" strokeDasharray="1.5 1.5" opacity="0.45" />}
-          <ellipse cx={sx(claw.x)} cy={sy(claw.y) + 5} rx={6 * clawScale} ry={1.5} fill="#4B3B66" opacity="0.18" />
-          <Pix rows={clawRows} cx={sx(claw.x)} cy={sy(claw.y) - AIM_DROP * clawScale} size={20 * clawScale} />
-          {/* 조준점: 이 점이 점선 네모 안에 있을 때 멈추면 잡혀요 */}
-          {tapToPress && <circle cx={sx(claw.x)} cy={sy(claw.y)} r={1.3} fill="#FF5C8A" stroke="#FFFFFF" strokeWidth="0.5" />}
-          {bubble && (
-            <text x={Math.min(100, Math.max(20, sx(claw.x)))} y={Math.max(24, sy(claw.y) - 14)} textAnchor="middle" fontSize="7" fill="#4B3B66" fontFamily="var(--font-title)">
-              {bubble}
-            </text>
-          )}
-          {/* 버튼 판 */}
-          <rect x="8" y="128" width="104" height="8" fill="#4B3B66" />
-        </svg>
+        <ClawBoard
+          boxes={round?.targets ?? []}
+          colors={colors}
+          hidden={lifted ? caught : null}
+          reach={round && tapToPress ? round.reach : null}
+          glowBox={glowBox}
+          claw={claw}
+          clawRows={clawRows}
+          clawScale={clawScale}
+          aim={tapToPress}
+          guide={phase === 'x'}
+          carried={carried && { ...carried, color: caughtColor }}
+          falling={falling && { ...falling, color: caughtColor }}
+          bubble={bubble}
+        />
 
         {opening && (
           <div className="claw-open" aria-live="polite">
             {rays && <div className="claw-rays" aria-hidden="true" />}
             {!revealed && (
-              <svg viewBox="0 0 40 40" className="claw-bigbox" style={{ transform: `translateX(${boxShake}px) rotate(${boxShake * 1.5}deg)` }} aria-hidden="true">
-                <Pix rows={lid ? BOX_LIFT : BOX} cx={20} cy={20} size={36} color="#FFB3D1" />
+              <svg
+                viewBox="0 0 40 40"
+                className="claw-bigbox"
+                style={{
+                  transform: `translateX(${boxShake}px) rotate(${boxShake * 1.5}deg)`,
+                }}
+                aria-hidden="true"
+              >
+                <Pix rows={lid ? BOX_LIFT : BOX} cx={20} cy={20} size={36} color={caughtColor} />
               </svg>
             )}
             {revealed && result?.prize && <PrizeReveal round={result} />}
@@ -427,7 +373,15 @@ export function ClawPage() {
       ) : (
         <>
           <Button big block disabled={!!blocked || (phase !== 'idle' && phase !== 'done')} onClick={() => void start()}>
-            {phase === 'starting' ? '준비 중…' : phase !== 'idle' && phase !== 'done' ? '두근두근…' : isParent ? '연습하기(공짜)' : phase === 'done' ? `한 번 더! (${settings.price}코인)` : `시작! (${settings.price}코인)`}
+            {phase === 'starting'
+              ? '준비 중…'
+              : phase !== 'idle' && phase !== 'done'
+                ? '두근두근…'
+                : isParent
+                  ? '연습하기(공짜)'
+                  : phase === 'done'
+                    ? `한 번 더! (${settings.price}코인)`
+                    : `시작! (${settings.price}코인)`}
           </Button>
           {blocked && (phase === 'idle' || phase === 'done') && <p className="t-capb center">{blocked}</p>}
         </>
@@ -438,7 +392,9 @@ export function ClawPage() {
         </p>
       )}
       {(phase === 'idle' || phase === 'starting') && (
-        <p className="t-cap center">집게가 오른쪽으로 가요. 버튼을 누르면 위로, 한 번 더 누르면 집어요. 집게 끝의 빨간 점이 상자 둘레 점선 네모 안에 있을 때 멈추면 잡혀요!</p>
+        <p className="t-cap center">
+          집게가 오른쪽으로 가요. 버튼을 누르면 위로, 한 번 더 누르면 집어요. 집게 끝의 빨간 점이 아무 상자의 점선 네모 안에 있을 때 멈추면 그 상자를 잡아요!
+        </p>
       )}
     </main>
   );

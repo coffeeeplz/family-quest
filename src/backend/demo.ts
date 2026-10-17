@@ -7,7 +7,7 @@ import { MAX_EVENTS, canEditEvent, cleanEventInput } from '../domain/calendar';
 import { MAX_FOODS, canEditFood, cleanFoodInput, cleanStars, findSameName, withEaten } from '../domain/foods';
 import { MAX_PLACES, cleanFix, cleanPlaceInput, planCheckin } from '../domain/location';
 import { cleanFamilyName, cleanProfile } from '../domain/profile';
-import { ROUND_TIMEOUT_MS, cannotStart, chooseWin, isCatch, makeRound, pickPrize, playsToday } from '../domain/claw';
+import { DEFAULT_PRESETS, ROUND_TIMEOUT_MS, cannotStart, caughtBox, chooseWin, makeRound, pickPrize, playsToday } from '../domain/claw';
 import { MAX_WARDROBE_PRICE, entryOffer, findEntry, ownedOf, wardrobeLedgerId } from '../domain/wardrobe';
 import { MAX_OFFER_NOTE, canCounter, cleanOfferAmount, cleanProposalInput, turnOf } from '../domain/proposals';
 import { cleanPresetInput, cleanQuestInput, runId } from '../domain/quests';
@@ -63,7 +63,7 @@ interface DemoUser {
 }
 
 interface DemoState {
-  v: 14;
+  v: 15;
   currentUid: string | null;
   users: Record<string, DemoUser>;
   families: Record<string, Family>;
@@ -93,7 +93,7 @@ export interface KeyValueStore {
   setItem(key: string, value: string): void;
 }
 
-const STORAGE_KEY = 'family-quest-demo-v14';
+const STORAGE_KEY = 'family-quest-demo-v15';
 const FAMILY = 'demo-family';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -242,7 +242,7 @@ function seed(now: number = Date.now()): DemoState {
   });
 
   return {
-    v: 14,
+    v: 15,
     currentUid: null,
     users: {
       'demo-dad': { uid: 'demo-dad', email: 'dad@example.com', label: '아빠', hint: '퀘스트를 만들고 승인해요', familyId: FAMILY },
@@ -262,6 +262,7 @@ function seed(now: number = Date.now()): DemoState {
           claw: {
             ...DEFAULT_SETTINGS.claw,
             on: true,
+            tune: DEFAULT_PRESETS[0].tune,
             prizes: [
               { kind: 'coin', amount: 5, weight: 35 },
               { kind: 'coin', amount: 20, weight: 25 },
@@ -438,7 +439,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       const raw = store?.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as DemoState;
-        if (parsed.v === 14) return parsed;
+        if (parsed.v === 15) return parsed;
       }
     } catch {
       // 저장소를 못 읽으면 새로 시작한다.
@@ -1508,7 +1509,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       if (blocked) throw new AppError(blocked);
       const id = newId('claw');
       const now = Date.now();
-      const round: ClawRound = { id, uid, day, startedAt: now, ...makeRound(settings.level, Math.random), practice: isParent, status: 'playing' };
+      const round: ClawRound = { id, uid, day, startedAt: now, ...makeRound(settings.tune, Math.random), practice: isParent, status: 'playing' };
       if (!isParent && settings.price > 0) {
         addLedger(familyId, { id: `claw-${id}`, uid, amount: -settings.price, type: 'claw', refId: id, memo: '인형뽑기', note: '', by: uid, at: now });
       }
@@ -1524,10 +1525,10 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       if (round.status === 'done') return { ...round };
       const settings = state.families[familyId].settings.claw;
       const late = Date.now() - round.startedAt > ROUND_TIMEOUT_MS;
-      const caught = !late && isCatch(round, presses[0], presses[1]);
+      const caught = late ? null : caughtBox(round, presses[0], presses[1]);
       let done: ClawRound;
-      if (!caught) done = { ...round, status: 'done', outcome: 'miss' };
-      else if (Math.random() * 100 < settings.dropRate) done = { ...round, status: 'done', outcome: 'drop' };
+      if (caught === null) done = { ...round, status: 'done', outcome: 'miss' };
+      else if (Math.random() * 100 < settings.dropRate) done = { ...round, status: 'done', outcome: 'drop', caught };
       else {
         const prize = pickPrize(settings.prizes, Math.random);
         const hidden = {
@@ -1569,7 +1570,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
             win = { ...win, orderId };
           }
         }
-        done = { ...round, status: 'done', outcome: 'win', prize: win };
+        done = { ...round, status: 'done', outcome: 'win', caught, prize: win };
       }
       state.clawRounds[familyId][roundId] = done;
       commit();

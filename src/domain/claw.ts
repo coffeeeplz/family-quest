@@ -1,52 +1,67 @@
-import { AppError, type ClawLevel, type ClawPrize, type ClawRound, type ClawSettings, type ClawWin } from '../backend/types';
+import { AppError, type ClawPrize, type ClawPreset, type ClawRound, type ClawSettings, type ClawTune, type ClawWin } from '../backend/types';
 import { STICKER_PACKS } from './stickers';
 import { WARDROBE_ENTRIES } from './wardrobe';
 
 /**
  * 인형뽑기: 순발력과 타이밍 게임.
  * 집게가 왼쪽 아래(0, 0)에서 출발해 오른쪽으로 가다가, 버튼을 누르면 그 자리에서 위로 간다.
- * 다시 누르면 멈추고 집는다. 목표 상자 위에 멈췄을 때만 잡고, 옮기다 떨어뜨릴 수 있으며,
- * 출구까지 오면 상자가 열려 내용물(코인, 꾸미기, 스티커 팩, 현실 보상)을 받는다.
+ * 다시 누르면 멈추고 집는다. 집게 조준점이 아무 상자의 잡히는 범위(점선 네모) 안에 멈췄을 때만 잡고,
+ * 옮기다 떨어뜨릴 수 있으며, 출구까지 오면 상자가 열려 내용물(코인, 꾸미기, 스티커 팩, 현실 보상)을 받는다.
  *
  * 판정 계산은 여기 순수 함수로 두고, 화면·체험 모드·서버(Cloud Functions)·테스트가 함께 쓴다.
- * 판(round)의 목표 위치와 속도는 서버가 정하고, 폰은 "버튼을 누른 시각(ms)"만 보낸다.
+ * 판(round)의 상자 자리·속도·잡히는 범위는 시작할 때 정해 판에 적고, 폰은 "버튼을 누른 시각(ms)"만 보낸다.
  */
 
 /** 게임판 크기(가로·세로 0~100) */
 export const BOARD = 100;
 /** 판이 시작된 뒤 이 시간이 지나면 끝내지 못한 것으로 친다 */
 export const ROUND_TIMEOUT_MS = 2 * 60_000;
+/** 통신이 늦어 버튼 누른 시각이 늦게 잡혀도 봐주는 시간(ms) */
+export const LAG_MS = 130;
 export const MAX_CLAW_PRICE = 1000;
 export const MAX_CLAW_PER_DAY = 20;
 export const MAX_CLAW_PRIZES = 8;
 export const MAX_CLAW_COINS = 1000;
 export const MAX_CLAW_TITLE = 20;
 export const MAX_DROP_RATE = 90;
+export const MAX_PRESETS = 5;
+export const MAX_PRESET_NAME = 10;
 
-export interface LevelSpec {
-  name: string;
-  /** 집게 조준점(집게 끝 사이)이 목표 상자 중심에서 이만큼(가로·세로 각각) 안에 멈추면 잡는다. 화면에 점선 네모로 보인다 */
-  reach: number;
-  /** 가로·세로 속도(칸/초)의 범위. 판마다 이 안에서 정해진다 */
-  speed: [number, number];
-  /** 위로 갈 때 좌우로 흔들리는 폭(칸) */
-  wobble: number;
-  /** 통신이 늦어 버튼 누른 시각이 늦게 잡혀도 봐주는 시간(ms) */
-  lagMs: number;
-}
+/** 세부 옵션의 범위(설정 화면의 슬라이더와 검사에 같이 쓴다) */
+export const TUNE_LIMITS = {
+  reach: { min: 3, max: 15, step: 1 },
+  speed: { min: 8, max: 50, step: 1 },
+  wobble: { min: 0, max: 6, step: 0.5 },
+  boxes: { min: 3, max: 8, step: 1 },
+} as const;
 
-export const LEVELS: Record<ClawLevel, LevelSpec> = {
-  easy: { name: '쉬움', reach: 12, speed: [14, 18], wobble: 0, lagMs: 150 },
-  normal: { name: '보통', reach: 8, speed: [20, 28], wobble: 2, lagMs: 120 },
-  hard: { name: '어려움', reach: 5, speed: [32, 44], wobble: 3.5, lagMs: 90 },
+export const DEFAULT_PRESETS: ClawPreset[] = [
+  {
+    name: '쉽게',
+    tune: { reach: 10, speed: 16, wobble: 0, boxes: 6, glow: true },
+  },
+  {
+    name: '보통',
+    tune: { reach: 6, speed: 24, wobble: 2, boxes: 6, glow: false },
+  },
+  {
+    name: '어렵게',
+    tune: { reach: 4, speed: 34, wobble: 3.5, boxes: 5, glow: false },
+  },
+];
+/** 예전 난이도 값(level)을 세부 옵션으로 옮길 때 */
+const OLD_LEVELS: Record<string, ClawTune> = {
+  easy: DEFAULT_PRESETS[0].tune,
+  normal: DEFAULT_PRESETS[1].tune,
+  hard: DEFAULT_PRESETS[2].tune,
 };
-export const LEVEL_ORDER: ClawLevel[] = ['easy', 'normal', 'hard'];
 
 export const DEFAULT_CLAW: ClawSettings = {
   on: false,
   price: 10,
   perDay: 3,
-  level: 'normal',
+  tune: DEFAULT_PRESETS[1].tune,
+  presets: DEFAULT_PRESETS,
   dropRate: 20,
   fallbackCoins: 20,
   prizes: [
@@ -60,7 +75,7 @@ export const DEFAULT_CLAW: ClawSettings = {
 
 // ── 난수 ─────────────────────────────────────────────────────────────────────
 
-/** 씨앗값으로 늘 같은 순서를 내는 난수(0 이상 1 미만). 테스트와 화면 장식에 쓴다. */
+/** 씨앗값으로 늘 같은 순서를 내는 난수(0 이상 1 미만). 테스트와 화면(상자 색, 미리보기)에 쓴다. */
 export function seededRandom(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
@@ -76,17 +91,31 @@ const between = (random: () => number, min: number, max: number) => min + (max -
 
 // ── 판 만들기와 집게 위치 ───────────────────────────────────────────────────
 
-export type RoundSpec = Pick<ClawRound, 'level' | 'target' | 'vx' | 'vy' | 'wobblePeriod' | 'wobblePhase' | 'seed'>;
+export type RoundSpec = Pick<ClawRound, 'targets' | 'reach' | 'wobble' | 'glow' | 'vx' | 'vy' | 'wobblePeriod' | 'wobblePhase' | 'seed'>;
 
-/** 새 판의 목표 위치와 속도를 정한다(서버나 체험 모드가 부른다). */
-export function makeRound(level: ClawLevel, random: () => number): RoundSpec {
-  const spec = LEVELS[level];
+/** 상자 자리: 출발점·출구·벽에서 떨어진 곳에, 서로 겹치지 않게(가로 16칸이나 세로 14칸 이상) */
+export function placeBoxes(count: number, random: () => number): { x: number; y: number }[] {
+  const out: { x: number; y: number }[] = [];
+  for (let i = 0; out.length < count && i < 400; i++) {
+    const x = Math.round(between(random, 22, 92));
+    const y = Math.round(between(random, 14, 80));
+    if (x < 30 && y > 66) continue; // 출구 앞은 비운다
+    if (out.some((b) => Math.abs(b.x - x) < 16 && Math.abs(b.y - y) < 14)) continue;
+    out.push({ x, y });
+  }
+  return out;
+}
+
+/** 새 판의 상자 자리와 속도를 정한다(서버나 체험 모드가 부른다). */
+export function makeRound(tune: ClawTune, random: () => number): RoundSpec {
+  const speed = () => Math.round(tune.speed * between(random, 0.85, 1.15) * 10) / 10;
   return {
-    level,
-    // 목표는 출발점과 벽에서 조금 떨어진 곳에
-    target: { x: Math.round(between(random, 28, 88)), y: Math.round(between(random, 28, 88)) },
-    vx: Math.round(between(random, spec.speed[0], spec.speed[1]) * 10) / 10,
-    vy: Math.round(between(random, spec.speed[0], spec.speed[1]) * 10) / 10,
+    targets: placeBoxes(tune.boxes, random),
+    reach: tune.reach,
+    wobble: tune.wobble,
+    glow: tune.glow,
+    vx: speed(),
+    vy: speed(),
     wobblePeriod: Math.round(between(random, 700, 1100)),
     wobblePhase: Math.round(between(random, 0, 628)) / 100,
     seed: Math.floor(random() * 2 ** 31),
@@ -96,47 +125,83 @@ export function makeRound(level: ClawLevel, random: () => number): RoundSpec {
 const clampBoard = (v: number) => Math.max(0, Math.min(BOARD, v));
 
 /** 위로 갈 때의 좌우 흔들림(칸). up = 위로 가기 시작한 뒤 지난 시간(ms) */
-function sway(round: RoundSpec, upMs: number): number {
-  const amp = LEVELS[round.level].wobble;
-  if (amp === 0 || upMs <= 0) return 0;
-  return amp * Math.sin((2 * Math.PI * upMs) / round.wobblePeriod + round.wobblePhase);
+function sway(round: Pick<RoundSpec, 'wobble' | 'wobblePeriod' | 'wobblePhase'>, upMs: number): number {
+  if (round.wobble === 0 || upMs <= 0) return 0;
+  return round.wobble * Math.sin((2 * Math.PI * upMs) / round.wobblePeriod + round.wobblePhase);
 }
 
 /**
  * 시각 t(ms)의 집게 위치. press1 = 첫 번째 버튼(오른쪽→위로 바꿈), press2 = 두 번째 버튼(멈춤).
  * 아직 누르지 않은 버튼은 null.
  */
-export function clawAt(round: RoundSpec, t: number, press1: number | null, press2: number | null): { x: number; y: number } {
+export function clawAt(
+  round: Pick<RoundSpec, 'vx' | 'vy' | 'wobble' | 'wobblePeriod' | 'wobblePhase'>,
+  t: number,
+  press1: number | null,
+  press2: number | null,
+): { x: number; y: number } {
   const turn = press1 ?? t;
   const x0 = clampBoard((round.vx * Math.max(0, Math.min(t, turn))) / 1000);
   if (press1 === null || t <= press1) return { x: x0, y: 0 };
   const end = press2 === null ? t : Math.min(t, press2);
   const upMs = end - press1;
-  return { x: clampBoard(x0 + sway(round, upMs)), y: clampBoard((round.vy * upMs) / 1000) };
+  return {
+    x: clampBoard(x0 + sway(round, upMs)),
+    y: clampBoard((round.vy * upMs) / 1000),
+  };
 }
 
-/** 집게가 목표 위에 멈췄는지(꼭 맞는 시각 기준) */
-export function onTarget(round: RoundSpec, press1: number, press2: number): boolean {
-  const { x, y } = clawAt(round, press2, press1, press2);
-  const reach = LEVELS[round.level].reach;
-  return Math.abs(x - round.target.x) <= reach && Math.abs(y - round.target.y) <= reach;
+/** 이 자리의 조준점이 들어간 상자 번호(여럿이면 가장 가까운 것). 없으면 null */
+export function boxAt(round: Pick<RoundSpec, 'targets' | 'reach'>, at: { x: number; y: number }): number | null {
+  let best: number | null = null;
+  let bestD = Infinity;
+  round.targets.forEach((b, i) => {
+    const d = Math.max(Math.abs(at.x - b.x), Math.abs(at.y - b.y));
+    if (d <= round.reach && d < bestD) {
+      best = i;
+      bestD = d;
+    }
+  });
+  return best;
 }
 
 /**
- * 잡았는지 판정. 버튼 누른 시각은 통신 때문에 늦게 잡힐 수 있으므로,
- * 각 버튼을 0~lagMs 만큼 앞당긴 경우 가운데 하나라도 목표 위면 잡은 것으로 본다.
+ * 잡은 상자 번호(못 잡았으면 null). 버튼 누른 시각은 통신 때문에 늦게 잡힐 수 있으므로,
+ * 각 버튼을 0~lagMs 만큼 앞당긴 경우도 살펴 가장 가까이 맞은 상자를 고른다.
  */
-export function isCatch(round: RoundSpec, press1: number, press2: number, lagMs = LEVELS[round.level].lagMs): boolean {
-  if (!(press1 >= 0 && press2 > press1)) return false;
+export function caughtBox(round: RoundSpec, press1: number, press2: number, lagMs = LAG_MS): number | null {
+  if (!(press1 >= 0 && press2 > press1)) return null;
   const steps = 6;
+  let best: number | null = null;
+  let bestD = Infinity;
   for (let i = 0; i <= steps; i++) {
     const p1 = Math.max(0, press1 - (lagMs * i) / steps);
     for (let j = 0; j <= steps; j++) {
       const p2 = press2 - (lagMs * j) / steps;
-      if (p2 > p1 && onTarget(round, p1, p2)) return true;
+      if (p2 <= p1) continue;
+      const at = clawAt(round, p2, p1, p2);
+      const box = boxAt(round, at);
+      if (box === null) continue;
+      const d = Math.max(Math.abs(at.x - round.targets[box].x), Math.abs(at.y - round.targets[box].y));
+      if (d < bestD) {
+        best = box;
+        bestD = d;
+      }
     }
   }
-  return false;
+  return best;
+}
+
+export const isCatch = (round: RoundSpec, press1: number, press2: number, lagMs = LAG_MS) => caughtBox(round, press1, press2, lagMs) !== null;
+
+/**
+ * 대략의 잡을 확률(부모 화면의 참고값). 버튼 누르는 시각이 0.25초쯤 어긋난다고 보고,
+ * 가로·세로 각각 1 - e^(-네모 반쪽 / 어긋나는 거리)를 곱한다. 흔들림은 가로 범위를 줄인다.
+ */
+export function estimateCatch(tune: ClawTune): number {
+  const spread = 0.25 * tune.speed; // 어긋나는 거리(칸)
+  const axis = (half: number) => 1 - Math.exp(-Math.max(0, half) / spread);
+  return Math.round(axis(tune.reach - tune.wobble * 0.6) * axis(tune.reach) * 100) / 100;
 }
 
 // ── 상품 ─────────────────────────────────────────────────────────────────────
@@ -179,9 +244,31 @@ export function expectedCoins(settings: ClawSettings, catchRate: number): number
 
 const isInt = (n: unknown, min: number, max: number): n is number => typeof n === 'number' && Number.isInteger(n) && n >= min && n <= max;
 
-/** 저장된 값이 없거나 일부만 있어도 완전한 설정을 돌려준다. */
+const isNum = (n: unknown, min: number, max: number, step: number): n is number =>
+  typeof n === 'number' && Number.isFinite(n) && n >= min && n <= max && Math.abs(n / step - Math.round(n / step)) < 1e-9;
+
+function validTune(t: unknown): t is ClawTune {
+  const r = (t ?? {}) as Partial<ClawTune>;
+  const L = TUNE_LIMITS;
+  return (
+    isNum(r.reach, L.reach.min, L.reach.max, L.reach.step) &&
+    isNum(r.speed, L.speed.min, L.speed.max, L.speed.step) &&
+    isNum(r.wobble, L.wobble.min, L.wobble.max, L.wobble.step) &&
+    isNum(r.boxes, L.boxes.min, L.boxes.max, L.boxes.step) &&
+    typeof r.glow === 'boolean'
+  );
+}
+const copyTune = (t: ClawTune): ClawTune => ({
+  reach: t.reach,
+  speed: t.speed,
+  wobble: t.wobble,
+  boxes: t.boxes,
+  glow: t.glow,
+});
+
+/** 저장된 값이 없거나 일부만 있어도 완전한 설정을 돌려준다. 예전 난이도(level)는 같은 이름의 기본 세팅으로 옮긴다. */
 export function normalizeClaw(raw: unknown): ClawSettings {
-  const r = (raw ?? {}) as Partial<ClawSettings>;
+  const r = (raw ?? {}) as Partial<ClawSettings> & { level?: string };
   const prizes = Array.isArray(r.prizes)
     ? r.prizes
         .filter((p): p is ClawPrize => !!p && typeof p === 'object' && ['coin', 'wardrobe', 'sticker', 'reward'].includes((p as ClawPrize).kind))
@@ -190,14 +277,29 @@ export function normalizeClaw(raw: unknown): ClawSettings {
           kind: p.kind,
           weight: isInt(p.weight, 0, 100) ? p.weight : 0,
           ...(p.kind === 'coin' ? { amount: isInt(p.amount, 1, MAX_CLAW_COINS) ? p.amount : 1 } : {}),
-          ...(p.kind === 'reward' ? { title: typeof p.title === 'string' ? p.title.slice(0, MAX_CLAW_TITLE) : '현실 보상' } : {}),
+          ...(p.kind === 'reward'
+            ? {
+                title: typeof p.title === 'string' ? p.title.slice(0, MAX_CLAW_TITLE) : '현실 보상',
+              }
+            : {}),
         }))
     : DEFAULT_CLAW.prizes;
+  const tune = validTune(r.tune) ? copyTune(r.tune) : r.level && OLD_LEVELS[r.level] ? OLD_LEVELS[r.level] : DEFAULT_CLAW.tune;
+  const presets = Array.isArray(r.presets)
+    ? r.presets
+        .filter((p): p is ClawPreset => !!p && typeof p.name === 'string' && p.name.trim() !== '' && validTune(p.tune))
+        .slice(0, MAX_PRESETS)
+        .map((p) => ({
+          name: p.name.trim().slice(0, MAX_PRESET_NAME),
+          tune: copyTune(p.tune),
+        }))
+    : DEFAULT_PRESETS;
   return {
     on: r.on === true,
     price: isInt(r.price, 0, MAX_CLAW_PRICE) ? r.price : DEFAULT_CLAW.price,
     perDay: isInt(r.perDay, 0, MAX_CLAW_PER_DAY) ? r.perDay : DEFAULT_CLAW.perDay,
-    level: r.level && r.level in LEVELS ? r.level : DEFAULT_CLAW.level,
+    tune,
+    presets,
     dropRate: isInt(r.dropRate, 0, MAX_DROP_RATE) ? r.dropRate : DEFAULT_CLAW.dropRate,
     fallbackCoins: isInt(r.fallbackCoins, 1, MAX_CLAW_COINS) ? r.fallbackCoins : DEFAULT_CLAW.fallbackCoins,
     prizes,
@@ -208,7 +310,16 @@ export function normalizeClaw(raw: unknown): ClawSettings {
 export function cleanClaw(input: ClawSettings): ClawSettings {
   if (!isInt(input.price, 0, MAX_CLAW_PRICE)) throw new AppError(`한 판 가격은 0부터 ${MAX_CLAW_PRICE} 코인 사이로 정해 주세요.`);
   if (!isInt(input.perDay, 0, MAX_CLAW_PER_DAY)) throw new AppError(`하루 횟수는 0(제한 없음)부터 ${MAX_CLAW_PER_DAY}번 사이로 정해 주세요.`);
-  if (!(input.level in LEVELS)) throw new AppError('난이도를 골라 주세요.');
+  if (!validTune(input.tune)) throw new AppError('네모 크기, 집게 속도, 흔들림, 상자 수를 다시 확인해 주세요.');
+  if (!Array.isArray(input.presets) || input.presets.length > MAX_PRESETS) throw new AppError(`세팅은 ${MAX_PRESETS}개까지 저장할 수 있어요.`);
+  const presets = input.presets.map((p) => {
+    const name = (p.name ?? '').trim();
+    if (!name) throw new AppError('세팅 이름을 적어 주세요.');
+    if (name.length > MAX_PRESET_NAME) throw new AppError(`세팅 이름은 ${MAX_PRESET_NAME}자까지 쓸 수 있어요.`);
+    if (!validTune(p.tune)) throw new AppError(`"${name}" 세팅의 값을 다시 확인해 주세요.`);
+    return { name, tune: copyTune(p.tune) };
+  });
+  if (new Set(presets.map((p) => p.name)).size !== presets.length) throw new AppError('같은 이름의 세팅이 두 개 있어요.');
   if (!isInt(input.dropRate, 0, MAX_DROP_RATE)) throw new AppError(`떨어뜨릴 확률은 0부터 ${MAX_DROP_RATE}% 사이로 정해 주세요.`);
   if (!isInt(input.fallbackCoins, 1, MAX_CLAW_COINS)) throw new AppError(`대신 줄 코인은 1부터 ${MAX_CLAW_COINS} 사이로 정해 주세요.`);
   if (input.prizes.length === 0) throw new AppError('상품을 하나 이상 넣어 주세요.');
@@ -229,12 +340,33 @@ export function cleanClaw(input: ClawSettings): ClawSettings {
   });
   const total = prizes.reduce((sum, p) => sum + p.weight, 0);
   if (total !== 100) throw new AppError(`상품 확률의 합이 100%가 되어야 해요. 지금 ${total}%예요.`);
-  return { on: input.on === true, price: input.price, perDay: input.perDay, level: input.level, dropRate: input.dropRate, fallbackCoins: input.fallbackCoins, prizes };
+  return {
+    on: input.on === true,
+    price: input.price,
+    perDay: input.perDay,
+    tune: copyTune(input.tune),
+    presets,
+    dropRate: input.dropRate,
+    fallbackCoins: input.fallbackCoins,
+    prizes,
+  };
 }
 
+/** 같은 이름이면 덮어쓰고, 없으면 끝에 더한 세팅 목록(최대 개수를 넘으면 오류) */
+export function savePreset(presets: ClawPreset[], name: string, tune: ClawTune): ClawPreset[] {
+  const clean = name.trim();
+  if (!clean) throw new AppError('세팅 이름을 적어 주세요.');
+  if (clean.length > MAX_PRESET_NAME) throw new AppError(`세팅 이름은 ${MAX_PRESET_NAME}자까지 쓸 수 있어요.`);
+  if (presets.some((p) => p.name === clean)) return presets.map((p) => (p.name === clean ? { name: clean, tune: copyTune(tune) } : p));
+  if (presets.length >= MAX_PRESETS) throw new AppError(`세팅은 ${MAX_PRESETS}개까지 저장할 수 있어요. 하나를 지우고 저장해 주세요.`);
+  return [...presets, { name: clean, tune: copyTune(tune) }];
+}
+
+/** 두 세부 옵션이 같은지(지금 값이 어느 세팅과 같은지 표시할 때) */
+export const sameTune = (a: ClawTune, b: ClawTune) => a.reach === b.reach && a.speed === b.speed && a.wobble === b.wobble && a.boxes === b.boxes && a.glow === b.glow;
+
 /** 오늘 이 사람이 한 판 수 */
-export const playsToday = (rounds: Pick<ClawRound, 'uid' | 'day'>[], uid: string, day: string) =>
-  rounds.filter((r) => r.uid === uid && r.day === day).length;
+export const playsToday = (rounds: Pick<ClawRound, 'uid' | 'day'>[], uid: string, day: string) => rounds.filter((r) => r.uid === uid && r.day === day).length;
 
 /** 새 판을 시작할 수 없는 이유(없으면 null). 부모는 연습이라 막지 않는다 */
 export function cannotStart(settings: ClawSettings, isParent: boolean, freeCoins: number, todayPlays: number): string | null {
@@ -257,7 +389,7 @@ export function chooseWin(
   fallbackCoins: number,
   random: () => number,
 ): ClawWin {
-  const pick = <T,>(list: T[]) => list[Math.floor(random() * list.length)];
+  const pick = <T>(list: T[]) => list[Math.floor(random() * list.length)];
   if (prize.kind === 'coin') return { kind: 'coin', amount: prize.amount ?? 0 };
   if (prize.kind === 'reward') return { kind: 'reward', title: prize.title ?? '현실 보상', orderId: '' };
   if (prize.kind === 'wardrobe') {

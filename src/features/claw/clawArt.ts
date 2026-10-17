@@ -79,8 +79,5 @@ export const BOX_LIFT = [
   '............',
 ];
 
-/** 반짝이(목표 상자 위) */
-export const SPARKLE = ['..Y..', '..Y..', 'YYWYY', '..Y..', '..Y..'];
-
-/** 장식 상자 색(avatarColors 의 hex 와 비슷한 파스텔) */
+/** 상자 색(avatarColors 의 hex 와 비슷한 파스텔) */
 export const BOX_COLORS = ['#FFB3D1', '#A9D4FF', '#A6E8D0', '#FFE38A', '#CDBBFF', '#FFC2A1'];

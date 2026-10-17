@@ -1527,6 +1527,22 @@ a.btn.inventory-btn {
   user-select: none;
   -webkit-user-select: none;
 }
+.claw-preview-wrap {
+  /* 슬라이더를 움직이는 동안에도 보이게 위에 붙여 둔다 */
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 4px 0 6px;
+  background: var(--bg);
+}
+.claw-preview {
+  width: min(100%, 190px);
+}
+.claw-range {
+  width: 100%;
+  height: 32px;
+  accent-color: var(--pink-deep);
+}
 .claw-banner {
   position: absolute;
   left: 8%;

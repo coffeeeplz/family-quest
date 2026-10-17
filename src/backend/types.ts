@@ -56,7 +56,25 @@ export interface FamilySettings {
   claw: ClawSettings;
 }
 
-export type ClawLevel = 'easy' | 'normal' | 'hard';
+/** 인형뽑기 세부 옵션(부모가 미리보기를 보며 정함) */
+export interface ClawTune {
+  /** 잡히는 범위: 상자 가운데에서 가로·세로 이만큼(칸). 화면에 점선 네모로 보인다 */
+  reach: number;
+  /** 집게 속도(칸/초). 판마다 ±15% 안에서 달라진다 */
+  speed: number;
+  /** 위로 갈 때 좌우로 흔들리는 폭(칸) */
+  wobble: number;
+  /** 기계 안 상자 수 */
+  boxes: number;
+  /** 조준점이 네모 안에 들어오면 네모가 반짝인다 */
+  glow: boolean;
+}
+
+/** 이름 붙여 저장해 둔 세부 옵션 */
+export interface ClawPreset {
+  name: string;
+  tune: ClawTune;
+}
 
 /** 인형뽑기 상자에 들어갈 수 있는 것 한 칸. weight = 확률(%) */
 export interface ClawPrize {
@@ -74,7 +92,9 @@ export interface ClawSettings {
   price: number;
   /** 자녀 한 명이 하루에 할 수 있는 판 수(0이면 제한 없음) */
   perDay: number;
-  level: ClawLevel;
+  tune: ClawTune;
+  /** 저장해 둔 세팅들 */
+  presets: ClawPreset[];
   /** 잡은 상자를 옮기다 떨어뜨릴 확률(%) */
   dropRate: number;
   /** 꾸미기·스티커가 나왔는데 이미 다 가졌을 때 대신 주는 코인 */
@@ -89,27 +109,33 @@ export type ClawWin =
   | { kind: 'sticker'; packId: string; name: string }
   | { kind: 'reward'; title: string; orderId: string };
 
-/** 인형뽑기 한 판. 목표 위치와 속도는 판을 시작할 때 정해지고, 결과는 끝낼 때 정해진다 */
+/** 인형뽑기 한 판. 상자 자리와 속도, 잡히는 범위는 판을 시작할 때 정해지고, 결과는 끝낼 때 정해진다 */
 export interface ClawRound {
   id: string;
   uid: string;
   /** 시작한 날(하루 횟수를 셀 때) */
   day: string;
   startedAt: number;
-  level: ClawLevel;
-  target: { x: number; y: number };
+  /** 잡을 수 있는 상자들의 가운데 자리 */
+  targets: { x: number; y: number }[];
+  /** 잡히는 범위(칸), 흔들림 폭(칸), 반짝 도움: 시작할 때의 설정을 그대로 적어 둔다 */
+  reach: number;
+  wobble: number;
+  glow: boolean;
   /** 가로·세로 속도(칸/초) */
   vx: number;
   vy: number;
   wobblePeriod: number;
   wobblePhase: number;
-  /** 화면 장식(다른 상자들의 자리)에 쓰는 씨앗값 */
+  /** 상자 색을 정하는 씨앗값 */
   seed: number;
   /** 부모의 연습 판: 코인을 내지 않고 상품도 받지 않는다 */
   practice: boolean;
   status: 'playing' | 'done';
   /** miss=못 잡음, drop=옮기다 떨어뜨림, win=상자를 열어 상품을 받음 */
   outcome?: 'miss' | 'drop' | 'win';
+  /** 잡은 상자 번호(targets 의 순서) */
+  caught?: number;
   prize?: ClawWin;
 }
 
