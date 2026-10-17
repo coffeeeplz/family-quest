@@ -15,6 +15,11 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '1.17.1',
+    date: '2026-10-17',
+    items: ['인형뽑기 시작 버튼을 눌러도 시작되지 않던 문제를 고쳤어요'],
+  },
+  {
     version: '1.17.0',
     date: '2026-10-17',
     items: ['인형뽑기를 이제 진짜 앱에서도 할 수 있어요! 홈의 [게임] 버튼을 눌러 보세요'],
