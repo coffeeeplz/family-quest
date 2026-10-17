@@ -7,11 +7,11 @@
 // 날짜 계산(오늘, 어제)을 서울 시각으로 한다.
 process.env.TZ = 'Asia/Seoul';
 
+import './options';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, type DocumentSnapshot } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
 import { logger } from 'firebase-functions';
-import { setGlobalOptions } from 'firebase-functions/v2';
 import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import type { CalendarEvent, Quest, Run } from '../../src/backend/types';
@@ -34,8 +34,6 @@ import { buildBoard } from '../../src/domain/quests';
 import { MISSED_DAYS } from '../../src/domain/settings';
 import { addDays } from '../../src/lib/dates';
 
-// Firestore 가 서울(asia-northeast3)에 있으므로 함수도 같은 곳에서 돈다.
-setGlobalOptions({ region: 'asia-northeast3', maxInstances: 2, memory: '256MiB' });
 initializeApp();
 const db = getFirestore();
 

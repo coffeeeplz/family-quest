@@ -2,6 +2,7 @@
 // 코인 차감, 하루 횟수, 잡았는지, 떨어뜨렸는지, 상자 내용물과 지급은 모두 여기서 정한다.
 // 계산은 체험 모드와 같은 src/domain/claw.ts 를 그대로 쓴다.
 
+import { REGION } from './options';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import type { ClawRound } from '../../src/backend/types';
@@ -23,7 +24,7 @@ function familyIdOf(data: Record<string, unknown>): string {
 }
 
 /** 새 판: 하루 횟수와 코인을 확인하고, 판값을 장부에 남긴 뒤 판 정보를 돌려준다. */
-export const clawStart = onCall(async (request) => {
+export const clawStart = onCall({ region: REGION }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError('unauthenticated', '로그인이 필요해요.');
   const data = args(request.data);
@@ -65,7 +66,7 @@ export const clawStart = onCall(async (request) => {
 });
 
 /** 판 끝내기: 버튼 누른 시각으로 잡았는지 다시 계산하고, 상품을 정해 지급한다. 같은 판은 한 번만 끝난다. */
-export const clawFinish = onCall(async (request) => {
+export const clawFinish = onCall({ region: REGION }, async (request) => {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError('unauthenticated', '로그인이 필요해요.');
   const data = args(request.data);
