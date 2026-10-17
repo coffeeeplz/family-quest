@@ -16,6 +16,8 @@ import {
   normalizeClaw,
   pickPrize,
   placeBoxes,
+  playsToday,
+  practiceLeft,
   savePreset,
   seededRandom,
   type RoundSpec,
@@ -34,6 +36,9 @@ const round: RoundSpec = {
   reach: 9,
   wobble: 0,
   glow: false,
+  grabMs: 900,
+  carryMs: 2800,
+  openMs: 3600,
   vx: 20,
   vy: 20,
   wobblePeriod: 1000,
@@ -222,8 +227,24 @@ describe('설정 검사', () => {
     ).toThrow('이름');
   });
 
+  it('네모는 0.5칸 단위로 1칸까지, 연출 시간은 0.1초 단위로 정할 수 있다', () => {
+    expect(cleanClaw({ ...DEFAULT_CLAW, tune: { ...DEFAULT_CLAW.tune, reach: 1.5 } }).tune.reach).toBe(1.5);
+    expect(() => cleanClaw({ ...DEFAULT_CLAW, tune: { ...DEFAULT_CLAW.tune, reach: 0.5 } })).toThrow('네모 크기');
+    expect(cleanClaw({ ...DEFAULT_CLAW, tune: { ...DEFAULT_CLAW.tune, carryMs: 6300 } }).tune.carryMs).toBe(6300);
+    expect(() => cleanClaw({ ...DEFAULT_CLAW, tune: { ...DEFAULT_CLAW.tune, openMs: 9000 } })).toThrow('연출 시간');
+    expect(() => cleanClaw({ ...DEFAULT_CLAW, practicePerDay: 11 })).toThrow('연습 횟수');
+  });
+
+  it('연출 시간이 없던 예전 세팅에는 기본 연출 시간을 채운다', () => {
+    const old = { reach: 5, speed: 20, wobble: 1, boxes: 4, glow: false };
+    const n = normalizeClaw({ tune: old, presets: [{ name: '옛날', tune: old }] });
+    expect(n.tune).toMatchObject({ ...old, grabMs: 900, carryMs: 2800, openMs: 3600 });
+    expect(n.presets[0].tune.openMs).toBe(3600);
+    expect(n.practicePerDay).toBe(3);
+  });
+
   it('세팅 저장: 같은 이름은 덮어쓰고, 5개가 넘으면 막는다', () => {
-    const tune = { reach: 8, speed: 20, wobble: 1, boxes: 4, glow: true };
+    const tune = { reach: 8, speed: 20, wobble: 1, boxes: 4, glow: true, grabMs: 1500, carryMs: 4000, openMs: 5000 };
     const saved = savePreset(DEFAULT_PRESETS, ' 동생용 ', tune);
     expect(saved).toHaveLength(4);
     expect(saved[3]).toEqual({ name: '동생용', tune });
@@ -255,8 +276,8 @@ const kidSum = () =>
 /** 상자 하나(기본은 첫 상자) 위에 정확히 멈추는 버튼 시각 */
 function perfect(r: ClawRound, box = 0): [number, number] {
   const t1 = (r.targets[box].x / r.vx) * 1000;
-  // 흔들림 때문에 가로가 조금 어긋날 수 있으니, 위로 가는 시간을 조금씩 바꿔 가며 그 상자를 잡는 시각을 찾는다.
-  for (let t2 = t1 + 1; t2 < t1 + 10_000; t2 += 5) if (caughtBox(r, t1, t2, 0) === box) return [t1, t2];
+  // 흔들림과 이웃 상자의 네모 때문에 어긋날 수 있으니, 위로 가는 시간을 조금씩 바꿔 가며 판정이 그 상자를 고르는 시각을 찾는다.
+  for (let t2 = t1 + 1; t2 < t1 + 10_000; t2 += 5) if (caughtBox(r, t1, t2) === box) return [t1, t2];
   throw new Error('상자에 닿는 시각을 못 찾음');
 }
 
@@ -397,6 +418,34 @@ describe('인형뽑기(체험 모드)', () => {
     const done = await backend.finishClaw(FAMILY, r.id, perfect(r));
     expect(done.outcome).toBe('win');
     expect(ledger().length).toBe(count);
+  });
+
+  it('자녀는 하루 정해진 횟수만큼 공짜로 연습하고, 연습은 빈 상자에 하루 횟수에도 세지 않는다', async () => {
+    await setClaw({ dropRate: 0, practicePerDay: 2, prizes: [{ kind: 'coin', amount: 50, weight: 100 }] });
+    const before = kid().coins;
+    const count = ledger().length;
+    for (let i = 0; i < 2; i++) {
+      const r = await backend.startClaw(FAMILY, 'demo-kid', true);
+      expect(r.practice).toBe(true);
+      const done = await backend.finishClaw(FAMILY, r.id, perfect(r));
+      expect(done.outcome).toBe('win');
+      expect(done.prize).toBeUndefined();
+    }
+    expect(kid().coins).toBe(before);
+    expect(ledger().length).toBe(count);
+    await expect(backend.startClaw(FAMILY, 'demo-kid', true)).rejects.toThrow('연습은 다 했어요');
+    // 진짜 판은 그대로 3번 할 수 있다(연습은 세지 않음).
+    const rounds = () => snapshot<ClawRound[]>((cb) => backend.watchMyClawRounds(FAMILY, 'demo-kid', dateKey(), cb));
+    expect(playsToday(rounds(), 'demo-kid', dateKey())).toBe(0);
+    expect(practiceLeft({ ...DEFAULT_CLAW, practicePerDay: 2 }, rounds(), 'demo-kid', dateKey())).toBe(0);
+    await backend.startClaw(FAMILY, 'demo-kid');
+    expect(playsToday(rounds(), 'demo-kid', dateKey())).toBe(1);
+  });
+
+  it('판에는 시작할 때의 연출 시간이 적힌다', async () => {
+    await setClaw({ tune: { ...DEFAULT_CLAW.tune, grabMs: 2000, carryMs: 5000, openMs: 6000 } });
+    const r = await backend.startClaw(FAMILY, 'demo-kid');
+    expect(r).toMatchObject({ grabMs: 2000, carryMs: 5000, openMs: 6000 });
   });
 
   it('남의 판은 끝낼 수 없다', async () => {

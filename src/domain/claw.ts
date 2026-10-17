@@ -26,27 +26,34 @@ export const MAX_CLAW_TITLE = 20;
 export const MAX_DROP_RATE = 90;
 export const MAX_PRESETS = 5;
 export const MAX_PRESET_NAME = 10;
+export const MAX_PRACTICE_PER_DAY = 10;
 
 /** 세부 옵션의 범위(설정 화면의 슬라이더와 검사에 같이 쓴다) */
 export const TUNE_LIMITS = {
-  reach: { min: 3, max: 15, step: 1 },
+  reach: { min: 1, max: 15, step: 0.5 },
   speed: { min: 8, max: 50, step: 1 },
   wobble: { min: 0, max: 6, step: 0.5 },
   boxes: { min: 3, max: 8, step: 1 },
+  grabMs: { min: 500, max: 4000, step: 100 },
+  carryMs: { min: 1500, max: 8000, step: 100 },
+  openMs: { min: 2000, max: 8000, step: 100 },
 } as const;
+
+/** 연출 시간 기본값(ms) */
+const SHOW = { grabMs: 900, carryMs: 2800, openMs: 3600 };
 
 export const DEFAULT_PRESETS: ClawPreset[] = [
   {
     name: '쉽게',
-    tune: { reach: 10, speed: 16, wobble: 0, boxes: 6, glow: true },
+    tune: { reach: 10, speed: 16, wobble: 0, boxes: 6, glow: true, ...SHOW },
   },
   {
     name: '보통',
-    tune: { reach: 6, speed: 24, wobble: 2, boxes: 6, glow: false },
+    tune: { reach: 6, speed: 24, wobble: 2, boxes: 6, glow: false, ...SHOW },
   },
   {
     name: '어렵게',
-    tune: { reach: 4, speed: 34, wobble: 3.5, boxes: 5, glow: false },
+    tune: { reach: 4, speed: 34, wobble: 3.5, boxes: 5, glow: false, ...SHOW },
   },
 ];
 /** 예전 난이도 값(level)을 세부 옵션으로 옮길 때 */
@@ -62,6 +69,7 @@ export const DEFAULT_CLAW: ClawSettings = {
   perDay: 3,
   tune: DEFAULT_PRESETS[1].tune,
   presets: DEFAULT_PRESETS,
+  practicePerDay: 3,
   dropRate: 20,
   fallbackCoins: 20,
   prizes: [
@@ -91,7 +99,7 @@ const between = (random: () => number, min: number, max: number) => min + (max -
 
 // ── 판 만들기와 집게 위치 ───────────────────────────────────────────────────
 
-export type RoundSpec = Pick<ClawRound, 'targets' | 'reach' | 'wobble' | 'glow' | 'vx' | 'vy' | 'wobblePeriod' | 'wobblePhase' | 'seed'>;
+export type RoundSpec = Pick<ClawRound, 'targets' | 'reach' | 'wobble' | 'glow' | 'grabMs' | 'carryMs' | 'openMs' | 'vx' | 'vy' | 'wobblePeriod' | 'wobblePhase' | 'seed'>;
 
 /** 상자 자리: 출발점·출구·벽에서 떨어진 곳에, 서로 겹치지 않게(가로 16칸이나 세로 14칸 이상) */
 export function placeBoxes(count: number, random: () => number): { x: number; y: number }[] {
@@ -114,6 +122,9 @@ export function makeRound(tune: ClawTune, random: () => number): RoundSpec {
     reach: tune.reach,
     wobble: tune.wobble,
     glow: tune.glow,
+    grabMs: tune.grabMs,
+    carryMs: tune.carryMs,
+    openMs: tune.openMs,
     vx: speed(),
     vy: speed(),
     wobblePeriod: Math.round(between(random, 700, 1100)),
@@ -255,7 +266,10 @@ function validTune(t: unknown): t is ClawTune {
     isNum(r.speed, L.speed.min, L.speed.max, L.speed.step) &&
     isNum(r.wobble, L.wobble.min, L.wobble.max, L.wobble.step) &&
     isNum(r.boxes, L.boxes.min, L.boxes.max, L.boxes.step) &&
-    typeof r.glow === 'boolean'
+    typeof r.glow === 'boolean' &&
+    isNum(r.grabMs, L.grabMs.min, L.grabMs.max, L.grabMs.step) &&
+    isNum(r.carryMs, L.carryMs.min, L.carryMs.max, L.carryMs.step) &&
+    isNum(r.openMs, L.openMs.min, L.openMs.max, L.openMs.step)
   );
 }
 const copyTune = (t: ClawTune): ClawTune => ({
@@ -264,7 +278,12 @@ const copyTune = (t: ClawTune): ClawTune => ({
   wobble: t.wobble,
   boxes: t.boxes,
   glow: t.glow,
+  grabMs: t.grabMs,
+  carryMs: t.carryMs,
+  openMs: t.openMs,
 });
+/** 연출 시간이 없던 예전 값에는 기본 연출 시간을 채운다 */
+const withShow = (t: unknown): unknown => (t && typeof t === 'object' && !('grabMs' in t) ? { ...SHOW, ...t } : t);
 
 /** 저장된 값이 없거나 일부만 있어도 완전한 설정을 돌려준다. 예전 난이도(level)는 같은 이름의 기본 세팅으로 옮긴다. */
 export function normalizeClaw(raw: unknown): ClawSettings {
@@ -284,9 +303,11 @@ export function normalizeClaw(raw: unknown): ClawSettings {
             : {}),
         }))
     : DEFAULT_CLAW.prizes;
-  const tune = validTune(r.tune) ? copyTune(r.tune) : r.level && OLD_LEVELS[r.level] ? OLD_LEVELS[r.level] : DEFAULT_CLAW.tune;
+  const rawTune = withShow(r.tune);
+  const tune = validTune(rawTune) ? copyTune(rawTune) : r.level && OLD_LEVELS[r.level] ? OLD_LEVELS[r.level] : DEFAULT_CLAW.tune;
   const presets = Array.isArray(r.presets)
     ? r.presets
+        .map((p) => (p && typeof p === 'object' ? { ...p, tune: withShow(p.tune) } : p) as ClawPreset)
         .filter((p): p is ClawPreset => !!p && typeof p.name === 'string' && p.name.trim() !== '' && validTune(p.tune))
         .slice(0, MAX_PRESETS)
         .map((p) => ({
@@ -300,6 +321,7 @@ export function normalizeClaw(raw: unknown): ClawSettings {
     perDay: isInt(r.perDay, 0, MAX_CLAW_PER_DAY) ? r.perDay : DEFAULT_CLAW.perDay,
     tune,
     presets,
+    practicePerDay: isInt(r.practicePerDay, 0, MAX_PRACTICE_PER_DAY) ? r.practicePerDay : DEFAULT_CLAW.practicePerDay,
     dropRate: isInt(r.dropRate, 0, MAX_DROP_RATE) ? r.dropRate : DEFAULT_CLAW.dropRate,
     fallbackCoins: isInt(r.fallbackCoins, 1, MAX_CLAW_COINS) ? r.fallbackCoins : DEFAULT_CLAW.fallbackCoins,
     prizes,
@@ -310,7 +332,8 @@ export function normalizeClaw(raw: unknown): ClawSettings {
 export function cleanClaw(input: ClawSettings): ClawSettings {
   if (!isInt(input.price, 0, MAX_CLAW_PRICE)) throw new AppError(`한 판 가격은 0부터 ${MAX_CLAW_PRICE} 코인 사이로 정해 주세요.`);
   if (!isInt(input.perDay, 0, MAX_CLAW_PER_DAY)) throw new AppError(`하루 횟수는 0(제한 없음)부터 ${MAX_CLAW_PER_DAY}번 사이로 정해 주세요.`);
-  if (!validTune(input.tune)) throw new AppError('네모 크기, 집게 속도, 흔들림, 상자 수를 다시 확인해 주세요.');
+  if (!validTune(input.tune)) throw new AppError('네모 크기, 집게 속도, 흔들림, 상자 수, 연출 시간을 다시 확인해 주세요.');
+  if (!isInt(input.practicePerDay, 0, MAX_PRACTICE_PER_DAY)) throw new AppError(`연습 횟수는 0부터 ${MAX_PRACTICE_PER_DAY}번 사이로 정해 주세요.`);
   if (!Array.isArray(input.presets) || input.presets.length > MAX_PRESETS) throw new AppError(`세팅은 ${MAX_PRESETS}개까지 저장할 수 있어요.`);
   const presets = input.presets.map((p) => {
     const name = (p.name ?? '').trim();
@@ -346,6 +369,7 @@ export function cleanClaw(input: ClawSettings): ClawSettings {
     perDay: input.perDay,
     tune: copyTune(input.tune),
     presets,
+    practicePerDay: input.practicePerDay,
     dropRate: input.dropRate,
     fallbackCoins: input.fallbackCoins,
     prizes,
@@ -363,10 +387,16 @@ export function savePreset(presets: ClawPreset[], name: string, tune: ClawTune):
 }
 
 /** 두 세부 옵션이 같은지(지금 값이 어느 세팅과 같은지 표시할 때) */
-export const sameTune = (a: ClawTune, b: ClawTune) => a.reach === b.reach && a.speed === b.speed && a.wobble === b.wobble && a.boxes === b.boxes && a.glow === b.glow;
+const TUNE_KEYS: Record<keyof ClawTune, true> = { reach: true, speed: true, wobble: true, boxes: true, glow: true, grabMs: true, carryMs: true, openMs: true };
+export const sameTune = (a: ClawTune, b: ClawTune) => (Object.keys(TUNE_KEYS) as (keyof ClawTune)[]).every((k) => a[k] === b[k]);
 
-/** 오늘 이 사람이 한 판 수 */
-export const playsToday = (rounds: Pick<ClawRound, 'uid' | 'day'>[], uid: string, day: string) => rounds.filter((r) => r.uid === uid && r.day === day).length;
+/** 오늘 이 사람이 코인을 내고 한 판 수(연습 판은 세지 않는다) */
+export const playsToday = (rounds: Pick<ClawRound, 'uid' | 'day' | 'practice'>[], uid: string, day: string) =>
+  rounds.filter((r) => r.uid === uid && r.day === day && !r.practice).length;
+
+/** 오늘 남은 연습 판 수(자녀) */
+export const practiceLeft = (settings: ClawSettings, rounds: Pick<ClawRound, 'uid' | 'day' | 'practice'>[], uid: string, day: string) =>
+  Math.max(0, settings.practicePerDay - rounds.filter((r) => r.uid === uid && r.day === day && r.practice).length);
 
 /** 새 판을 시작할 수 없는 이유(없으면 null). 부모는 연습이라 막지 않는다 */
 export function cannotStart(settings: ClawSettings, isParent: boolean, freeCoins: number, todayPlays: number): string | null {
@@ -374,6 +404,13 @@ export function cannotStart(settings: ClawSettings, isParent: boolean, freeCoins
   if (!settings.on) return '지금은 인형뽑기를 할 수 없어요.';
   if (settings.perDay > 0 && todayPlays >= settings.perDay) return `오늘은 ${settings.perDay}번 다 했어요. 내일 또 해요!`;
   if (freeCoins < settings.price) return `코인이 ${settings.price - freeCoins}개 모자라요.`;
+  return null;
+}
+
+/** 자녀가 연습 판을 시작할 수 없는 이유(없으면 null) */
+export function cannotPractice(settings: ClawSettings, left: number): string | null {
+  if (!settings.on) return '지금은 인형뽑기를 할 수 없어요.';
+  if (left <= 0) return '오늘 연습은 다 했어요.';
   return null;
 }
 

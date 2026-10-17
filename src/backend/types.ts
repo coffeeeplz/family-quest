@@ -68,6 +68,10 @@ export interface ClawTune {
   boxes: number;
   /** 조준점이 네모 안에 들어오면 네모가 반짝인다 */
   glow: boolean;
+  /** 연출 시간(ms): 집게가 오므리며 뜸 들이는 시간, 출구까지 옮기는 시간, 상자가 흔들리다 열리는 시간 */
+  grabMs: number;
+  carryMs: number;
+  openMs: number;
 }
 
 /** 이름 붙여 저장해 둔 세부 옵션 */
@@ -95,6 +99,8 @@ export interface ClawSettings {
   tune: ClawTune;
   /** 저장해 둔 세팅들 */
   presets: ClawPreset[];
+  /** 자녀가 하루에 공짜로 해 볼 수 있는 연습 판 수(0이면 연습 없이 바로 시작) */
+  practicePerDay: number;
   /** 잡은 상자를 옮기다 떨어뜨릴 확률(%) */
   dropRate: number;
   /** 꾸미기·스티커가 나왔는데 이미 다 가졌을 때 대신 주는 코인 */
@@ -122,6 +128,10 @@ export interface ClawRound {
   reach: number;
   wobble: number;
   glow: boolean;
+  /** 연출 시간(ms) */
+  grabMs: number;
+  carryMs: number;
+  openMs: number;
   /** 가로·세로 속도(칸/초) */
   vx: number;
   vy: number;
@@ -129,7 +139,7 @@ export interface ClawRound {
   wobblePhase: number;
   /** 상자 색을 정하는 씨앗값 */
   seed: number;
-  /** 부모의 연습 판: 코인을 내지 않고 상품도 받지 않는다 */
+  /** 연습 판(부모는 늘, 자녀는 하루 정해진 횟수): 코인을 내지 않고 상품도 받지 않으며 하루 횟수에 세지 않는다 */
   practice: boolean;
   status: 'playing' | 'done';
   /** miss=못 잡음, drop=옮기다 떨어뜨림, win=상자를 열어 상품을 받음 */
@@ -658,10 +668,10 @@ export interface Backend {
   buyWardrobeItem(familyId: string, uid: string, itemId: string): Promise<void>;
 
   // 인형뽑기
-  /** 오늘 내가 한 판들(하루 횟수 표시) */
+  /** 오늘 내가 한 판들(연습 판 포함, 하루 횟수와 남은 연습 표시) */
   watchMyClawRounds(familyId: string, uid: string, day: string, cb: (rounds: ClawRound[]) => void): Unsub;
-  /** 새 판: 가격을 내고 목표 위치와 속도를 받는다(부모는 연습 판) */
-  startClaw(familyId: string, uid: string): Promise<ClawRound>;
+  /** 새 판: 가격을 내고 상자 자리와 속도를 받는다. practice=true 면 자녀의 공짜 연습 판(부모는 늘 연습 판) */
+  startClaw(familyId: string, uid: string, practice?: boolean): Promise<ClawRound>;
   /** 판 끝내기: 버튼 두 번 누른 시각(판 시작부터 ms)을 보내고 결과를 받는다 */
   finishClaw(familyId: string, roundId: string, presses: [number, number]): Promise<ClawRound>;
 

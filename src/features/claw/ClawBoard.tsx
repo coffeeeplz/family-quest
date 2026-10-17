@@ -120,13 +120,28 @@ export function ClawBoard({
       <Pix rows={clawRows} cx={sx(claw.x)} cy={sy(claw.y) - AIM_DROP * clawScale} size={20 * clawScale} />
       {/* 조준점: 이 점이 점선 네모 안에 있을 때 멈추면 잡혀요 */}
       {aim && <circle cx={sx(claw.x)} cy={sy(claw.y)} r={1.3} fill="#FF5C8A" stroke="#FFFFFF" strokeWidth="0.5" />}
-      {bubble && (
-        <text x={Math.min(100, Math.max(20, sx(claw.x)))} y={Math.max(24, sy(claw.y) - 14)} textAnchor="middle" fontSize="7" fill="#4B3B66" fontFamily="var(--font-title)">
-          {bubble}
-        </text>
-      )}
+      {bubble && <Bubble text={bubble} at={claw} />}
       {/* 버튼 판 */}
       <rect x="8" y="128" width="104" height="8" fill="#4B3B66" />
     </svg>
+  );
+}
+
+/** 집게 옆 말풍선. 흰 바탕을 깔아 어디서나 읽히게 하고, 어두운 출구 칸과 겹치면 오른쪽 아래로 비킨다 */
+function Bubble({ text, at }: { text: string; at: Point }) {
+  const w = text.length * 6 + 6;
+  let x = Math.min(112 - w / 2, Math.max(8 + w / 2, sx(at.x)));
+  let y = Math.max(22, sy(at.y) - 14);
+  if (x - w / 2 < 27 && y - 6 < 31) {
+    x = 30 + w / 2;
+    y = 40;
+  }
+  return (
+    <g>
+      <rect x={x - w / 2} y={y - 7} width={w} height={10} rx={2} fill="#FFFFFF" stroke="#4B3B66" strokeWidth="0.6" />
+      <text x={x} y={y} textAnchor="middle" fontSize="7" fill="#4B3B66" fontFamily="var(--font-title)">
+        {text}
+      </text>
+    </g>
   );
 }

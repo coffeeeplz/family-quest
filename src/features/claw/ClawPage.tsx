@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useFamilyData } from '../../app/familyData';
 import { useBackend, useSession } from '../../app/session';
 import type { ClawRound } from '../../backend/types';
-import { BOARD, boxAt, cannotStart, clawAt, playsToday, winLabel } from '../../domain/claw';
+import { BOARD, boxAt, cannotPractice, cannotStart, clawAt, playsToday, practiceLeft, winLabel } from '../../domain/claw';
 import { availableCoins } from '../../domain/shop';
 import { findPack } from '../../domain/stickers';
 import { findEntry } from '../../domain/wardrobe';
@@ -27,13 +27,13 @@ import { BOX, BOX_LIFT, CLAW_CLOSED, CLAW_HALF, CLAW_OPEN } from './clawArt';
 type Phase = 'idle' | 'starting' | 'x' | 'y' | 'grab' | 'wait' | 'miss' | 'rise' | 'carry' | 'open' | 'done';
 
 const slow = () => (reducedMotion() ? 0.4 : 1);
+/** 고정 연출 시간(ms). 집기·옮기기·열기 시간은 부모가 정해 판에 적힌 값(grabMs, carryMs, openMs)을 쓴다 */
 const T = {
-  grab: 900,
   rise: 650,
-  carry: 2800,
   dropFall: 1500,
-  open: 3600,
 };
+/** 상자 열기 단계는 기본 3.6초를 기준으로 그린다(정한 시간에 맞춰 늘이고 줄임) */
+const OPEN_BASE = 3600;
 /** 출구(왼쪽 위)의 게임판 위치 */
 const EXIT = { x: 7, y: 93 };
 /** 떨어뜨리는 판에서 상자가 미끄러지는 지점(옮기는 길의 비율)과 위기 순간들 */
@@ -73,6 +73,11 @@ export function ClawPage() {
   const free = availableCoins(me, orders);
   const plays = playsToday(rounds, me.uid, today);
   const blocked = cannotStart(settings, isParent, free, plays);
+  const practices = isParent ? 0 : practiceLeft(settings, rounds, me.uid, today);
+  const practiceBlocked = isParent ? null : cannotPractice(settings, practices);
+  const grabMs = round?.grabMs ?? 900;
+  const carryMs = round?.carryMs ?? 2800;
+  const openTotal = round?.openMs ?? OPEN_BASE;
   const colors = useMemo(() => (round ? boxColors(round.seed, round.targets.length) : []), [round]);
 
   // ── 시간이 흐르게 하기 ─────────────────────────────────────────────────────
@@ -109,7 +114,7 @@ export function ClawPage() {
     // 끝까지 가도록 누르지 않으면 벽에서 저절로 다음으로 넘어간다.
     if (round && phase === 'x' && clawAt(round, sinceStart, null, null).x >= BOARD) press();
     if (round && phase === 'y' && clawAt(round, sinceStart, g.current.press1, null).y >= BOARD) press();
-    if (phase === 'grab' && inPhase >= T.grab * slow()) go(result ? (result.outcome === 'miss' ? 'miss' : 'rise') : 'wait');
+    if (phase === 'grab' && inPhase >= grabMs * slow()) go(result ? (result.outcome === 'miss' ? 'miss' : 'rise') : 'wait');
     if (phase === 'wait' && result) go(result.outcome === 'miss' ? 'miss' : 'rise');
     if (phase === 'miss' && inPhase >= 900 * slow()) {
       playTune('fail');
@@ -118,7 +123,7 @@ export function ClawPage() {
     }
     if (phase === 'rise' && inPhase >= T.rise * slow()) go('carry');
     if (phase === 'carry') {
-      const total = (result?.outcome === 'drop' ? T.carry * DROP_AT + T.dropFall : T.carry) * slow();
+      const total = (result?.outcome === 'drop' ? carryMs * DROP_AT + T.dropFall : carryMs) * slow();
       if (inPhase >= total) {
         if (result?.outcome === 'win') {
           go('open');
@@ -129,18 +134,18 @@ export function ClawPage() {
         }
       }
     }
-    if (phase === 'open' && inPhase >= T.open * slow()) setPhase('done');
+    if (phase === 'open' && inPhase >= openTotal * slow()) setPhase('done');
   });
 
   // ── 버튼 ───────────────────────────────────────────────────────────────────
-  async function start() {
+  async function start(practice = false) {
     if (phase !== 'idle' && phase !== 'done') return;
     setError('');
     setResult(null);
     previewTune('tick');
     setPhase('starting');
     try {
-      const r = await backend.startClaw(family.id, me.uid);
+      const r = await backend.startClaw(family.id, me.uid, practice);
       g.current = {
         t0: performance.now(),
         phaseAt: performance.now(),
@@ -175,7 +180,7 @@ export function ClawPage() {
         .finishClaw(family.id, round.id, [g.current.press1 ?? 0, t])
         .then((done) => {
           // 상품 코인이 들어와도 위쪽 숫자는 연출이 끝날 즈음에 올라가게 한다.
-          markCelebrating((T.grab + T.rise + T.carry + T.open) * slow());
+          markCelebrating((done.grabMs + T.rise + done.carryMs + done.openMs) * slow());
           setResult(done);
         })
         .catch((e) => {
@@ -199,7 +204,7 @@ export function ClawPage() {
   else if (stop) {
     const k = slow();
     if (phase === 'grab' || phase === 'wait') {
-      const p = phase === 'wait' ? 1 : clamp01(inPhase / (T.grab * k));
+      const p = phase === 'wait' ? 1 : clamp01(inPhase / (grabMs * k));
       claw = stop;
       clawScale = 1 - 0.2 * Math.sin(Math.min(p, 1) * Math.PI * 0.5);
       clawRows = p < 0.35 ? CLAW_OPEN : p < 0.65 ? CLAW_HALF : CLAW_CLOSED;
@@ -224,7 +229,7 @@ export function ClawPage() {
       cue('caught', () => buzz([30, 40, 30]));
     } else if (phase === 'carry' || (phase === 'done' && result?.outcome === 'drop')) {
       const dropping = result?.outcome === 'drop';
-      const pathMs = T.carry * k;
+      const pathMs = carryMs * k;
       // 끝난 뒤에는 마지막 모습(상자는 바닥, 집게는 출구)에 멈춰 둔다.
       const elapsed = phase === 'done' ? pathMs * DROP_AT + T.dropFall * k : inPhase;
       const p = clamp01(elapsed / pathMs);
@@ -272,24 +277,26 @@ export function ClawPage() {
 
   // ── 상자 열기 연출 ─────────────────────────────────────────────────────────
   const opening = phase === 'open' || (phase === 'done' && result?.outcome === 'win');
-  const openMs = phase === 'open' ? inPhase / slow() : Infinity;
+  // openMs: 기본 3.6초 기준으로 바꾼 시각(단계·빛줄기·번쩍임), openReal: 실제 지난 시간(흔들림·북소리 빠르기)
+  const openReal = phase === 'open' ? inPhase / slow() : Infinity;
+  const openMs = openReal / (openTotal / OPEN_BASE);
   let boxShake = 0;
   let lid = false;
   if (phase === 'open') {
     const stage = openMs < 1000 ? 1 : openMs < 1900 ? 2 : openMs < 2700 ? 3 : 4;
     const amp = [0, 1.5, 3, 5, 0][stage];
     const hz = [0, 5, 10, 18, 0][stage];
-    boxShake = amp * Math.sin((openMs / 1000) * hz * Math.PI * 2);
-    lid = stage === 3 && Math.sin((openMs / 1000) * 14 * Math.PI) > 0;
+    boxShake = amp * Math.sin((openReal / 1000) * hz * Math.PI * 2);
+    lid = stage === 3 && Math.sin((openReal / 1000) * 14 * Math.PI) > 0;
     const beat = [0, 500, 300, 160, 0][stage];
-    if (beat && openMs - g.current.drumAt >= beat) {
-      g.current.drumAt = openMs;
+    if (beat && openReal - g.current.drumAt >= beat) {
+      g.current.drumAt = openReal;
       playTune('drum');
       buzz([20]);
     }
     if (stage === 4)
       cue('reveal', () => {
-        playTune(result?.prize?.kind === 'coin' ? 'coin' : 'reward');
+        playTune(result?.prize?.kind === 'coin' ? 'coin' : result?.prize ? 'reward' : 'tick');
         buzz([60, 40, 120]);
       });
   }
@@ -313,7 +320,11 @@ export function ClawPage() {
       <header className="screen-head">
         <div className="grow">
           <h1 className="t-title">인형뽑기</h1>
-          <p className="t-cap">{isParent ? '연습 판(공짜)' : `한 판 ${settings.price}코인${settings.perDay > 0 ? ` · 오늘 ${plays}/${settings.perDay}번` : ''}`}</p>
+          <p className="t-cap">
+            {isParent || (round?.practice && phase !== 'idle')
+              ? '연습 판(공짜)'
+              : `한 판 ${settings.price}코인${settings.perDay > 0 ? ` · 오늘 ${plays}/${settings.perDay}번` : ''}`}
+          </p>
         </div>
         <CoinPill amount={me.coins} />
       </header>
@@ -351,6 +362,12 @@ export function ClawPage() {
               </svg>
             )}
             {revealed && result?.prize && <PrizeReveal round={result} />}
+            {revealed && result && !result.prize && (
+              <div className="claw-prize">
+                <p className="t-title">빈 상자!</p>
+                <p className="t-cap">연습이라 상품은 없어요. 이제 진짜로 해 볼까요?</p>
+              </div>
+            )}
             {flash > 0 && <div className="claw-flash" style={{ opacity: flash }} aria-hidden="true" />}
           </div>
         )}
@@ -372,17 +389,27 @@ export function ClawPage() {
         </>
       ) : (
         <>
-          <Button big block disabled={!!blocked || (phase !== 'idle' && phase !== 'done')} onClick={() => void start()}>
-            {phase === 'starting'
-              ? '준비 중…'
-              : phase !== 'idle' && phase !== 'done'
-                ? '두근두근…'
-                : isParent
-                  ? '연습하기(공짜)'
-                  : phase === 'done'
-                    ? `한 번 더! (${settings.price}코인)`
-                    : `시작! (${settings.price}코인)`}
-          </Button>
+          {/* 자녀: 남은 연습이 있으면 연습과 바로 시작 중에서 고른다(한 화면에 보이게 나란히) */}
+          <div className="claw-actions">
+            {!isParent && settings.practicePerDay > 0 && !practiceBlocked && (phase === 'idle' || phase === 'done') && (
+              <Button big tone="mint" onClick={() => void start(true)}>
+                연습(공짜) 남은 {practices}번
+              </Button>
+            )}
+            <Button big tone={!isParent && practices > 0 ? 'plain' : 'pink'} disabled={!!blocked || (phase !== 'idle' && phase !== 'done')} onClick={() => void start()}>
+              {phase === 'starting'
+                ? '준비 중…'
+                : phase !== 'idle' && phase !== 'done'
+                  ? '두근두근…'
+                  : isParent
+                    ? '연습하기(공짜)'
+                    : practices > 0
+                      ? `바로 시작 (${settings.price}코인)`
+                      : phase === 'done'
+                        ? `한 번 더! (${settings.price}코인)`
+                        : `시작! (${settings.price}코인)`}
+            </Button>
+          </div>
           {blocked && (phase === 'idle' || phase === 'done') && <p className="t-capb center">{blocked}</p>}
         </>
       )}

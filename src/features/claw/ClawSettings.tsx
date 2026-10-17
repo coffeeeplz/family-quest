@@ -21,6 +21,7 @@ import { errorText } from '../../ui/toast';
 import { ClawPreview } from './ClawPreview';
 
 const PER_DAY_CHOICES = [0, 1, 2, 3, 5, 10];
+const PRACTICE_CHOICES = [0, 1, 2, 3, 5, 10];
 const DROP_CHOICES = [0, 10, 20, 30, 50];
 
 const KIND_NAMES: Record<ClawPrize['kind'], string> = {
@@ -51,24 +52,46 @@ const fromRow = (r: Row): ClawPrize => ({
   ...(r.kind === 'reward' ? { title: r.title } : {}),
 });
 
-/** 세부 옵션 슬라이더 한 줄 */
+/** 세부 옵션 한 줄: 슬라이더와 한 칸씩 움직이는 [−] [+] 버튼. scale 은 보여 줄 때 나누는 값(ms → 초) */
 function TuneSlider({
   label,
   value,
   limits,
   unit,
+  scale = 1,
   onChange,
 }: {
   label: string;
   value: number;
   limits: { min: number; max: number; step: number };
   unit: string;
+  scale?: number;
   onChange: (v: number) => void;
 }) {
+  // 0.1 같은 소수 단계에서 생기는 아주 작은 오차를 없앤다.
+  const snap = (v: number) => Math.min(limits.max, Math.max(limits.min, Math.round(v / limits.step) * limits.step));
+  const shown = Math.round((value / scale) * 10) / 10;
   return (
-    <Field label={`${label}: ${value}${unit}`}>
+    <Field label={`${label}: ${shown}${unit}`}>
       {(id) => (
-        <input id={id} type="range" className="claw-range" min={limits.min} max={limits.max} step={limits.step} value={value} onChange={(e) => onChange(Number(e.target.value))} />
+        <div className="row claw-slider">
+          <button type="button" className="chip" aria-label={`${label} 줄이기`} disabled={value <= limits.min} onClick={() => onChange(snap(value - limits.step))}>
+            −
+          </button>
+          <input
+            id={id}
+            type="range"
+            className="claw-range grow"
+            min={limits.min}
+            max={limits.max}
+            step={limits.step}
+            value={value}
+            onChange={(e) => onChange(snap(Number(e.target.value)))}
+          />
+          <button type="button" className="chip" aria-label={`${label} 늘리기`} disabled={value >= limits.max} onClick={() => onChange(snap(value + limits.step))}>
+            +
+          </button>
+        </div>
       )}
     </Field>
   );
@@ -85,6 +108,7 @@ export function ClawSettingsBody({ save, error, busy }: { save: (patch: { claw: 
   const [on, setOn] = useState(now.on);
   const [price, setPrice] = useState(String(now.price));
   const [perDay, setPerDay] = useState(now.perDay);
+  const [practicePerDay, setPracticePerDay] = useState(now.practicePerDay);
   const [tune, setTune] = useState<ClawTune>(now.tune);
   const [presets, setPresets] = useState<ClawPreset[]>(now.presets);
   const [presetName, setPresetName] = useState('');
@@ -99,6 +123,7 @@ export function ClawSettingsBody({ save, error, busy }: { save: (patch: { claw: 
     perDay,
     tune,
     presets,
+    practicePerDay,
     dropRate,
     fallbackCoins: parseCoins(fallback),
     prizes: rows.map(fromRow),
@@ -147,6 +172,17 @@ export function ClawSettingsBody({ save, error, busy }: { save: (patch: { claw: 
         </div>
       </FieldGroup>
 
+      <FieldGroup label="자녀가 하루에 공짜로 연습할 수 있는 횟수">
+        <div className="chips six">
+          {PRACTICE_CHOICES.map((n) => (
+            <button key={n} type="button" role="radio" className="chip" aria-checked={practicePerDay === n} onClick={() => setPracticePerDay(n)}>
+              {n === 0 ? '없음' : `${n}번`}
+            </button>
+          ))}
+        </div>
+        <p className="t-cap">연습 판은 코인을 내지 않고 상품도 없어요. 아이가 연습하지 않고 바로 시작할 수도 있어요.</p>
+      </FieldGroup>
+
       <section className="stack claw-tune" aria-label="게임 세부 옵션">
         <p className="t-capb">게임 세부 옵션(미리보기를 보며 정해요)</p>
         <ClawPreview tune={tune} />
@@ -192,6 +228,11 @@ export function ClawSettingsBody({ save, error, busy }: { save: (patch: { claw: 
             </button>
           </div>
         </FieldGroup>
+
+        <p className="t-capb">연출 시간(맨 아래 '연습해 보기'로 확인해요)</p>
+        <TuneSlider label="집게가 오므리며 뜸 들이는 시간" value={tune.grabMs} limits={TUNE_LIMITS.grabMs} unit="초" scale={1000} onChange={(v) => setTuneValue({ grabMs: v })} />
+        <TuneSlider label="출구까지 옮기는 시간" value={tune.carryMs} limits={TUNE_LIMITS.carryMs} unit="초" scale={1000} onChange={(v) => setTuneValue({ carryMs: v })} />
+        <TuneSlider label="상자가 흔들리다 열리는 시간" value={tune.openMs} limits={TUNE_LIMITS.openMs} unit="초" scale={1000} onChange={(v) => setTuneValue({ openMs: v })} />
 
         <Field label="지금 값을 세팅으로 저장" hint="같은 이름이면 덮어써요. 아래 '설정 저장하기'를 눌러야 가족 설정에 남아요.">
           {(id) => (
