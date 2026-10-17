@@ -77,6 +77,11 @@ describe('보낼 알림 정하기', () => {
     expect(orderNotices('o1', undefined, { ...o, status: 'requested' }, '딸')[0]).toMatchObject({ to: 'parents', type: 'shop' });
     expect(orderNotices('o1', { ...o, status: 'requested' }, { ...o, status: 'approved' }, '딸')[0]).toMatchObject({ to: ['kid'], msg: { title: '보상 획득!' } });
     expect(orderNotices('o1', { ...o, status: 'approved' }, { ...o, status: 'delivered' }, '딸')).toEqual([]); // 현실 보상은 알리지 않음
+    // 인형뽑기에서 나온 현실 보상은 부모에게 알린다
+    expect(orderNotices('clawwin-r1', undefined, { ...o, price: 0, rewardId: 'claw', status: 'approved' }, '딸')[0]).toMatchObject({
+      to: 'parents',
+      msg: { title: '인형뽑기 상품', body: '딸이(가) 인형뽑기에서 게임 30분을(를) 뽑았어요' },
+    });
     const used = orderNotices('o1', { ...o, status: 'approved', useMode: 'instant' }, { ...o, status: 'delivered', useMode: 'instant' }, '딸');
     expect(used).toHaveLength(1);
     expect(used[0]).toMatchObject({ to: 'parents', type: 'shop' });

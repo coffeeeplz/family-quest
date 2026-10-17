@@ -1,4 +1,4 @@
-import { AppError, type ClawPrize, type ClawPreset, type ClawRound, type ClawSettings, type ClawTune, type ClawWin } from '../backend/types';
+import { AppError, type ClawPrize, type ClawPreset, type ClawRound, type ClawSettings, type ClawTune, type ClawWin, type Order } from '../backend/types';
 import { STICKER_PACKS } from './stickers';
 import { WARDROBE_ENTRIES } from './wardrobe';
 
@@ -453,6 +453,55 @@ export function chooseWin(
     }
   }
   return { kind: 'coin', amount: fallbackCoins, converted: true };
+}
+
+/** 판을 끝낼 때 필요한 것: 끝내는 사람, 가진 꾸미기·스티커, 숨긴 상품 */
+export interface SettleContext {
+  isParent: boolean;
+  owned: { wardrobe: string[]; stickerPacks: string[] };
+  hidden: { wardrobe: string[]; stickerPacks: string[] };
+}
+
+/** 현실 보상 상품이 들어갈 주문 번호(판마다 하나라 두 번 지급되지 않는다) */
+export const clawOrderId = (roundId: string) => `clawwin-${roundId}`;
+
+/**
+ * 판을 끝낸다: 잡았는지, 옮기다 떨어뜨렸는지, 상자에서 무엇이 나왔는지 정한다.
+ * 지급(장부, 잔액, 가진 것, 주문)은 부르는 쪽(서버, 체험 모드)이 결과를 보고 한다. 연습 판은 지급하지 않는다.
+ * 자녀의 연습 판은 잡아도 빈 상자다(prize 없음). 부모 연습은 무엇이 나오는지 보여 준다.
+ */
+export function settleRound(round: ClawRound, presses: unknown, now: number, settings: ClawSettings, ctx: SettleContext, random: () => number): ClawRound {
+  const ok = Array.isArray(presses) && presses.length === 2 && presses.every((p) => typeof p === 'number' && Number.isFinite(p));
+  const late = now - round.startedAt > ROUND_TIMEOUT_MS;
+  const caught = ok && !late ? caughtBox(round, presses[0] as number, presses[1] as number) : null;
+  if (caught === null) return { ...round, status: 'done', outcome: 'miss' };
+  if (random() * 100 < settings.dropRate) return { ...round, status: 'done', outcome: 'drop', caught };
+  if (round.practice && !ctx.isParent) return { ...round, status: 'done', outcome: 'win', caught };
+  const prize = pickPrize(settings.prizes, random);
+  let win: ClawWin = prize ? chooseWin(prize, ctx.owned, ctx.hidden, settings.fallbackCoins, random) : { kind: 'coin', amount: settings.fallbackCoins, converted: true };
+  if (win.kind === 'reward') win = { ...win, orderId: clawOrderId(round.id) };
+  return { ...round, status: 'done', outcome: 'win', caught, prize: win };
+}
+
+/** 인형뽑기에서 나온 현실 보상: 이미 승인된 주문으로 인벤토리에 넣는다 */
+export function clawRewardOrder(id: string, title: string, uid: string, now: number, day: string): Order {
+  return {
+    id,
+    rewardId: 'claw',
+    rewardTitle: title,
+    icon: 'game',
+    price: 0,
+    uid,
+    status: 'approved',
+    requestedAt: now,
+    requestedDay: day,
+    decidedBy: uid,
+    decidedAt: now,
+    rejectReason: '',
+    deliveredBy: null,
+    deliveredAt: null,
+    useMode: 'inPerson',
+  };
 }
 
 /** 결과 화면의 이름 */

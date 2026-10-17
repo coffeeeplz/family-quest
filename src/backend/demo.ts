@@ -7,7 +7,7 @@ import { MAX_EVENTS, canEditEvent, cleanEventInput } from '../domain/calendar';
 import { MAX_FOODS, canEditFood, cleanFoodInput, cleanStars, findSameName, withEaten } from '../domain/foods';
 import { MAX_PLACES, cleanFix, cleanPlaceInput, planCheckin } from '../domain/location';
 import { cleanFamilyName, cleanProfile } from '../domain/profile';
-import { DEFAULT_PRESETS, ROUND_TIMEOUT_MS, cannotPractice, cannotStart, caughtBox, chooseWin, makeRound, pickPrize, playsToday, practiceLeft } from '../domain/claw';
+import { DEFAULT_PRESETS, cannotPractice, cannotStart, clawRewardOrder, makeRound, playsToday, practiceLeft, settleRound } from '../domain/claw';
 import { MAX_WARDROBE_PRICE, entryOffer, findEntry, ownedOf, wardrobeLedgerId } from '../domain/wardrobe';
 import { MAX_OFFER_NOTE, canCounter, cleanOfferAmount, cleanProposalInput, turnOf } from '../domain/proposals';
 import { cleanPresetInput, cleanQuestInput, runId } from '../domain/quests';
@@ -1525,55 +1525,27 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       if (!round || round.uid !== member.uid) throw new AppError('판을 찾을 수 없어요.');
       if (round.status === 'done') return { ...round };
       const settings = state.families[familyId].settings.claw;
-      const late = Date.now() - round.startedAt > ROUND_TIMEOUT_MS;
-      const caught = late ? null : caughtBox(round, presses[0], presses[1]);
-      let done: ClawRound;
-      if (caught === null) done = { ...round, status: 'done', outcome: 'miss' };
-      else if (Math.random() * 100 < settings.dropRate) done = { ...round, status: 'done', outcome: 'drop', caught };
-      else {
-        const prize = pickPrize(settings.prizes, Math.random);
-        const hidden = {
-          wardrobe: Object.values(state.wardrobePrices[familyId] ?? {}).filter((p) => p.hidden).map((p) => p.itemId),
-          stickerPacks: Object.values(state.stickerPrices[familyId] ?? {}).filter((p) => p.hidden).map((p) => p.packId),
-        };
-        // 자녀의 연습 판은 상자를 열어도 빈 상자(상품 없음). 부모 연습은 무엇이 나오는지 보여 준다.
-        const kidPractice = round.practice && member.role !== 'parent';
-        let win = prize ? chooseWin(prize, member, hidden, settings.fallbackCoins, Math.random) : { kind: 'coin' as const, amount: settings.fallbackCoins, converted: true };
-        // 연습 판은 결과만 보여 주고 아무것도 주지 않는다.
-        if (!round.practice) {
-          const now = Date.now();
-          const ref = { refId: round.id, note: '', by: member.uid, at: now };
-          if (win.kind === 'coin') {
-            addLedger(familyId, { id: `clawwin-${round.id}`, uid: member.uid, amount: win.amount, type: 'clawPrize', memo: '인형뽑기 상품', ...ref });
-          } else if (win.kind === 'wardrobe') {
-            const m = state.members[familyId][member.uid];
-            state.members[familyId][member.uid] = { ...m, wardrobe: [...m.wardrobe, win.itemId] };
-          } else if (win.kind === 'sticker') {
-            const m = state.members[familyId][member.uid];
-            state.members[familyId][member.uid] = { ...m, stickerPacks: [...m.stickerPacks, win.packId] };
-          } else {
-            const orderId = `clawwin-${round.id}`;
-            state.orders[familyId][orderId] = {
-              id: orderId,
-              rewardId: 'claw',
-              rewardTitle: win.title,
-              icon: 'game',
-              price: 0,
-              uid: member.uid,
-              status: 'approved',
-              requestedAt: now,
-              requestedDay: dateKey(),
-              decidedBy: member.uid,
-              decidedAt: now,
-              rejectReason: '',
-              deliveredBy: null,
-              deliveredAt: null,
-              useMode: 'inPerson',
-            };
-            win = { ...win, orderId };
-          }
+      const hidden = {
+        wardrobe: Object.values(state.wardrobePrices[familyId] ?? {}).filter((p) => p.hidden).map((p) => p.itemId),
+        stickerPacks: Object.values(state.stickerPrices[familyId] ?? {}).filter((p) => p.hidden).map((p) => p.packId),
+      };
+      const done = settleRound(round, presses, Date.now(), settings, { isParent: member.role === 'parent', owned: member, hidden }, Math.random);
+      // 연습 판은 결과만 보여 주고 아무것도 주지 않는다.
+      const win = done.prize;
+      if (!round.practice && win) {
+        const now = Date.now();
+        const ref = { refId: round.id, note: '', by: member.uid, at: now };
+        if (win.kind === 'coin') {
+          addLedger(familyId, { id: `clawwin-${round.id}`, uid: member.uid, amount: win.amount, type: 'clawPrize', memo: '인형뽑기 상품', ...ref });
+        } else if (win.kind === 'wardrobe') {
+          const m = state.members[familyId][member.uid];
+          state.members[familyId][member.uid] = { ...m, wardrobe: [...m.wardrobe, win.itemId] };
+        } else if (win.kind === 'sticker') {
+          const m = state.members[familyId][member.uid];
+          state.members[familyId][member.uid] = { ...m, stickerPacks: [...m.stickerPacks, win.packId] };
+        } else {
+          state.orders[familyId][win.orderId] = clawRewardOrder(win.orderId, win.title, member.uid, now, dateKey());
         }
-        done = kidPractice ? { ...round, status: 'done', outcome: 'win', caught } : { ...round, status: 'done', outcome: 'win', caught, prize: win };
       }
       state.clawRounds[familyId][roundId] = done;
       commit();

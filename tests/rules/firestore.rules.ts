@@ -1,7 +1,7 @@
 // 서버 규칙(firestore.rules) 테스트. Firestore 에뮬레이터가 있어야 한다: npm run test:rules
 import { readFileSync } from 'node:fs';
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { doc, increment, arrayUnion, setDoc, updateDoc, writeBatch, type Firestore } from 'firebase/firestore';
+import { doc, getDoc, increment, arrayUnion, setDoc, updateDoc, writeBatch, type Firestore } from 'firebase/firestore';
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
 
 const FID = 'f1';
@@ -424,5 +424,32 @@ describe.skipIf(nearMidnight)('보상 구매 제한(번호표)', () => {
   it('제한 없는 보상에는 번호표를 붙일 수 없다', async () => {
     await seed({ [path('rewards/r1')]: { title: '게임 30분', price: 30, active: true } });
     await assertFails(setDoc(doc(as('kid'), path(`orders/${slotId(today, 1)}`)), order(today, 1)));
+  });
+});
+
+describe('인형뽑기(clawRounds, 장부)', () => {
+  const round = { uid: 'kid', day: kstKey(), startedAt: Date.now(), status: 'playing', practice: false, targets: [{ x: 50, y: 40 }], reach: 6 };
+  const entry = (type: string, amount: number) => ({ uid: 'kid', amount, type, refId: 'r1', memo: '인형뽑기', note: '', by: 'mom', at: Date.now() });
+
+  it('가족은 판을 읽을 수 있고, 가족이 아니면 못 읽는다', async () => {
+    await seed({ [path('clawRounds/r1')]: round });
+    await assertSucceeds(getDoc(doc(as('kid'), path('clawRounds/r1'))));
+    await assertSucceeds(getDoc(doc(as('mom'), path('clawRounds/r1'))));
+    await assertFails(getDoc(doc(as('stranger'), path('clawRounds/r1'))));
+  });
+
+  it('판은 폰에서 만들거나 고칠 수 없다(서버 함수만)', async () => {
+    await assertFails(setDoc(doc(as('kid'), path('clawRounds/r2')), round));
+    await assertFails(setDoc(doc(as('mom'), path('clawRounds/r2')), round));
+    await seed({ [path('clawRounds/r1')]: round });
+    await assertFails(updateDoc(doc(as('kid'), path('clawRounds/r1')), { status: 'done', outcome: 'win' }));
+  });
+
+  it('부모도 인형뽑기 장부(판값, 상품)는 직접 쓸 수 없다', async () => {
+    await assertFails(setDoc(doc(as('mom'), path('ledger/claw-r1')), entry('claw', -10)));
+    await assertFails(setDoc(doc(as('mom'), path('ledger/clawwin-r1')), entry('clawPrize', 50)));
+    await assertFails(setDoc(doc(as('kid'), path('ledger/clawwin-r1')), { ...entry('clawPrize', 50), by: 'kid' }));
+    // 다른 장부는 그대로 쓸 수 있다
+    await assertSucceeds(setDoc(doc(as('mom'), path('ledger/g1')), { ...entry('gift', 5), refId: 'g1', memo: '칭찬 코인' }));
   });
 });

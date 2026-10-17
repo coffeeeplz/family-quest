@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useBackend, useSession } from '../../app/session';
+import { useSession } from '../../app/session';
 import type { ClawPrize, ClawPreset, ClawSettings, ClawTune } from '../../backend/types';
 import {
   MAX_CLAW_COINS,
@@ -55,7 +55,6 @@ const fromRow = (r: Row): ClawPrize => ({
  * 확률은 부모만 본다(아이 화면에는 나오지 않는다).
  */
 export function ClawSettingsBody({ save, error, busy }: { save: (patch: { claw: ClawSettings }) => Promise<void>; error: string; busy: boolean }) {
-  const backend = useBackend();
   const { family } = useSession();
   const now = family.settings.claw;
   const [on, setOn] = useState(now.on);
@@ -90,7 +89,6 @@ export function ClawSettingsBody({ save, error, busy }: { save: (patch: { claw: 
 
   return (
     <>
-      {backend.mode === 'firebase' && <p className="t-capb">실제 앱의 인형뽑기는 다음 업데이트에서 열려요. 설정은 미리 저장해 둘 수 있어요.</p>}
 
       <FieldGroup label="인형뽑기">
         <div className="segmented" role="radiogroup" aria-label="인형뽑기 켜기">

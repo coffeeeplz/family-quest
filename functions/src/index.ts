@@ -1,6 +1,7 @@
 // 가족 퀘스트 알림 서버.
 // 저장소(Firestore)의 문서가 바뀌면 누구에게 알릴지 정해서 웹 푸시를 보낸다.
 // 15분마다 저녁 할 일 알림과 아침 일정 알림을 보낼 사람이 있는지 살핀다.
+// 인형뽑기 판정과 지급(claw.ts)도 여기서 한다.
 // 무엇을 보낼지는 앱과 같은 규칙(src/domain)을 그대로 쓴다.
 
 // 날짜 계산(오늘, 어제)을 서울 시각으로 한다.
@@ -90,6 +91,10 @@ async function deliver(fid: string, notices: Notice[], people?: Person[]): Promi
 }
 
 const dataOf = (snap: DocumentSnapshot | undefined): Doc | undefined => (snap?.exists ? (snap.data() as Doc) : undefined);
+
+// ── 인형뽑기(호출형 함수) ────────────────────────────────────────────────────
+
+export { clawFinish, clawStart } from './claw';
 
 // ── 문서가 바뀔 때 ───────────────────────────────────────────────────────────
 

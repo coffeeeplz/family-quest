@@ -56,6 +56,10 @@ export function proposalNotices(pid: string, before: Doc | undefined, after: Doc
 export function orderNotices(oid: string, before: Doc | undefined, after: Doc | undefined, buyerName: string): Notice[] {
   if (!after) return [];
   const tag = `order-${oid}`;
+  // 인형뽑기 상자에서 나온 현실 보상은 승인된 채로 들어오므로, 뽑았다는 것을 부모에게 알린다.
+  if (!before && after.rewardId === 'claw' && after.status === 'approved') {
+    return [{ to: 'parents', type: 'shop', msg: { title: '인형뽑기 상품', body: clip(`${buyerName}이(가) 인형뽑기에서 ${after.rewardTitle}을(를) 뽑았어요`), url: '#/home', tag } }];
+  }
   if (!before && after.status === 'requested') {
     return [{ to: 'parents', type: 'shop', msg: { title: '보상 신청', body: clip(`${buyerName}: ${after.rewardTitle} (${coins(after.price)})`), url: '#/home', tag } }];
   }

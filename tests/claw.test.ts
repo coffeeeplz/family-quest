@@ -21,6 +21,7 @@ import {
   playsToday,
   practiceLeft,
   savePreset,
+  settleRound,
   seededRandom,
   type RoundSpec,
 } from '../src/domain/claw';
@@ -254,6 +255,36 @@ describe('설정 검사', () => {
     const full = savePreset(saved, '주말', tune);
     expect(() => savePreset(full, '하나 더', tune)).toThrow('5개');
     expect(() => savePreset(full, '', tune)).toThrow('이름');
+  });
+});
+
+describe('판 끝내기(서버와 체험 모드가 함께 쓰는 판정)', () => {
+  const live = { ...round, id: 'r1', uid: 'kid', day: '2026-10-17', startedAt: 1_000_000, practice: false, status: 'playing' as const };
+  const ctx = { isParent: false, owned: { wardrobe: [], stickerPacks: [] }, hidden: { wardrobe: [], stickerPacks: [] } };
+  const settings = { ...DEFAULT_CLAW, dropRate: 0, prizes: [{ kind: 'reward' as const, title: '게임 30분', weight: 100 }] };
+  const hit: [number, number] = [2500, 4500];
+  const never = () => 0.99;
+
+  it('잡으면 상품과 잡은 상자, 현실 보상에는 판마다 하나인 주문 번호', () => {
+    expect(settleRound(live, hit, live.startedAt + 5000, settings, ctx, never)).toMatchObject({ outcome: 'win', caught: 0, prize: { kind: 'reward', orderId: 'clawwin-r1' } });
+  });
+
+  it('누른 시각이 이상하거나 2분이 지나면 못 잡은 것', () => {
+    expect(settleRound(live, ['a', 1], live.startedAt + 5000, settings, ctx, never).outcome).toBe('miss');
+    expect(settleRound(live, [2500], live.startedAt + 5000, settings, ctx, never).outcome).toBe('miss');
+    expect(settleRound(live, hit, live.startedAt + 3 * 60_000, settings, ctx, never).outcome).toBe('miss');
+  });
+
+  it('자녀 연습은 빈 상자, 부모 연습은 무엇이 나오는지 보여 준다', () => {
+    const practice = { ...live, practice: true };
+    expect(settleRound(practice, hit, live.startedAt + 5000, settings, ctx, never).prize).toBeUndefined();
+    expect(settleRound(practice, hit, live.startedAt + 5000, settings, { ...ctx, isParent: true }, never).prize).toMatchObject({ kind: 'reward' });
+  });
+
+  it('떨어뜨릴 확률에 걸리면 잡은 상자만 적고 상품은 없다', () => {
+    const done = settleRound(live, hit, live.startedAt + 5000, { ...settings, dropRate: 50 }, ctx, () => 0.1);
+    expect(done).toMatchObject({ outcome: 'drop', caught: 0 });
+    expect(done.prize).toBeUndefined();
   });
 });
 
