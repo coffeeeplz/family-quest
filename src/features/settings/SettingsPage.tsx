@@ -33,6 +33,7 @@ export function SettingsPage() {
     { to: '/settings/checkin', icon: 'pin', title: '위치 공유 코인', now: s.checkinCoins > 0 ? `${s.checkinCoins}코인 · 하루 ${s.checkinPerDay}번` : '코인 없이 위치만' },
     { to: '/settings/places', icon: 'home', title: '장소', now: places.length > 0 ? places.map((p) => p.name).join(', ') : '없음' },
     { to: '/food/categories', icon: 'food', title: '뭐먹지 분류', now: s.foodCategories.map((c) => c.name).join(', ') },
+    { to: '/settings/claw', icon: 'game', title: '인형뽑기', now: s.claw.on ? `한 판 ${s.claw.price}코인 · ${s.claw.perDay > 0 ? `하루 ${s.claw.perDay}번` : '횟수 제한 없음'}` : '꺼짐' },
   ];
 
   return (

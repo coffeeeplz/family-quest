@@ -17,7 +17,12 @@ describe('업데이트 소식', () => {
     for (const release of CHANGELOG) {
       expect(md).toContain(`## v${release.version} (${release.date})`);
       for (const item of release.items) expect(md).toContain(`- ${item}`);
+      for (const item of release.parentItems ?? []) expect(md).toContain(`- 부모님께: ${item}`);
     }
+  });
+
+  it('자녀에게도 보이는 줄에는 게임 확률·설정 이야기를 쓰지 않는다', () => {
+    for (const release of CHANGELOG) for (const item of release.items) expect(item).not.toMatch(/확률|세부 옵션|떨어뜨릴/);
   });
 
   it('버전 비교와 본 뒤의 소식', () => {

@@ -4,6 +4,7 @@ import { Icon } from '../../ui/Sprite';
 import { AvatarMenu } from '../avatar/AvatarMenu';
 import { CoinPill } from '../../ui/kit';
 import { HomeEvents } from '../calendar/TodayEvents';
+import { GamesButton } from '../games/GamesButton';
 import { InventoryButton } from '../inventory/InventoryButton';
 import { CheckinButton } from '../location/CheckinButton';
 import { NotesBlock } from '../notes/NotesBlock';
@@ -51,6 +52,8 @@ export function HomePage() {
           </div>
         </Link>
       )}
+
+      <GamesButton />
 
       <PushNudge />
 

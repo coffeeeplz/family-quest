@@ -1360,6 +1360,18 @@ export function createFirebaseBackend(): Backend {
         });
       }),
 
+    // 인형뽑기는 서버 판정(Cloud Functions)이 붙는 다음 단계에서 열린다. 지금은 체험 모드에서만 된다.
+    watchMyClawRounds(_familyId, _uid, _day, cb) {
+      cb([]);
+      return () => {};
+    },
+    startClaw: () => guard(async () => {
+      throw new AppError('인형뽑기는 곧 열려요! 조금만 기다려 주세요.');
+    }),
+    finishClaw: () => guard(async () => {
+      throw new AppError('인형뽑기는 곧 열려요! 조금만 기다려 주세요.');
+    }),
+
     watchNotes(familyId, cb, onError) {
       return onSnapshot(
         notesCol(familyId),

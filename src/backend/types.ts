@@ -52,6 +52,101 @@ export interface FamilySettings {
   checkinPerDay: number;
   /** 뭐먹지의 분류. 마지막은 항상 "기타" */
   foodCategories: FoodCategoryDef[];
+  /** 인형뽑기 게임 설정(부모가 정함) */
+  claw: ClawSettings;
+}
+
+/** 인형뽑기 세부 옵션(부모가 미리보기를 보며 정함) */
+export interface ClawTune {
+  /** 잡히는 범위: 상자 가운데에서 가로·세로 이만큼(칸). 화면에 점선 네모로 보인다 */
+  reach: number;
+  /** 집게 속도(칸/초). 판마다 ±15% 안에서 달라진다 */
+  speed: number;
+  /** 위로 갈 때 좌우로 흔들리는 폭(칸) */
+  wobble: number;
+  /** 기계 안 상자 수 */
+  boxes: number;
+  /** 조준점이 네모 안에 들어오면 네모가 반짝인다 */
+  glow: boolean;
+  /** 연출 시간(ms): 집게가 오므리며 뜸 들이는 시간, 출구까지 옮기는 시간, 상자가 흔들리다 열리는 시간 */
+  grabMs: number;
+  carryMs: number;
+  openMs: number;
+}
+
+/** 이름 붙여 저장해 둔 세부 옵션 */
+export interface ClawPreset {
+  name: string;
+  tune: ClawTune;
+}
+
+/** 인형뽑기 상자에 들어갈 수 있는 것 한 칸. weight = 확률(%) */
+export interface ClawPrize {
+  kind: 'coin' | 'wardrobe' | 'sticker' | 'reward';
+  weight: number;
+  /** kind=coin: 코인 개수 */
+  amount?: number;
+  /** kind=reward: 현실 보상 이름(예: 게임 30분) */
+  title?: string;
+}
+
+export interface ClawSettings {
+  on: boolean;
+  /** 한 판 가격(코인) */
+  price: number;
+  /** 자녀 한 명이 하루에 할 수 있는 판 수(0이면 제한 없음) */
+  perDay: number;
+  tune: ClawTune;
+  /** 저장해 둔 세팅들 */
+  presets: ClawPreset[];
+  /** 자녀가 하루에 공짜로 해 볼 수 있는 연습 판 수(0이면 연습 없음, -1이면 무제한) */
+  practicePerDay: number;
+  /** 잡은 상자를 옮기다 떨어뜨릴 확률(%) */
+  dropRate: number;
+  /** 꾸미기·스티커가 나왔는데 이미 다 가졌을 때 대신 주는 코인 */
+  fallbackCoins: number;
+  prizes: ClawPrize[];
+}
+
+/** 상자에서 나온 것 */
+export type ClawWin =
+  | { kind: 'coin'; amount: number; converted?: boolean }
+  | { kind: 'wardrobe'; itemId: string; name: string }
+  | { kind: 'sticker'; packId: string; name: string }
+  | { kind: 'reward'; title: string; orderId: string };
+
+/** 인형뽑기 한 판. 상자 자리와 속도, 잡히는 범위는 판을 시작할 때 정해지고, 결과는 끝낼 때 정해진다 */
+export interface ClawRound {
+  id: string;
+  uid: string;
+  /** 시작한 날(하루 횟수를 셀 때) */
+  day: string;
+  startedAt: number;
+  /** 잡을 수 있는 상자들의 가운데 자리 */
+  targets: { x: number; y: number }[];
+  /** 잡히는 범위(칸), 흔들림 폭(칸), 반짝 도움: 시작할 때의 설정을 그대로 적어 둔다 */
+  reach: number;
+  wobble: number;
+  glow: boolean;
+  /** 연출 시간(ms) */
+  grabMs: number;
+  carryMs: number;
+  openMs: number;
+  /** 가로·세로 속도(칸/초) */
+  vx: number;
+  vy: number;
+  wobblePeriod: number;
+  wobblePhase: number;
+  /** 상자 색을 정하는 씨앗값 */
+  seed: number;
+  /** 연습 판(부모는 늘, 자녀는 하루 정해진 횟수): 코인을 내지 않고 상품도 받지 않으며 하루 횟수에 세지 않는다 */
+  practice: boolean;
+  status: 'playing' | 'done';
+  /** miss=못 잡음, drop=옮기다 떨어뜨림, win=상자를 열어 상품을 받음 */
+  outcome?: 'miss' | 'drop' | 'win';
+  /** 잡은 상자 번호(targets 의 순서) */
+  caught?: number;
+  prize?: ClawWin;
 }
 
 /** 뭐먹지의 분류 하나. id 는 메뉴에 저장되고, 이름과 그림은 설정에서 바꿀 수 있다. */
@@ -146,7 +241,7 @@ export interface Run {
 }
 
 /** quest=퀘스트 완료, bonus=연속 달성 보너스, gift=칭찬 코인, reward=상점 사용, checkin=위치 공유, adjust=조정 */
-export type LedgerType = 'quest' | 'bonus' | 'gift' | 'reward' | 'checkin' | 'adjust' | 'sticker' | 'wardrobe';
+export type LedgerType = 'quest' | 'bonus' | 'gift' | 'reward' | 'checkin' | 'adjust' | 'sticker' | 'wardrobe' | 'claw' | 'clawPrize';
 
 /** 부모가 상점 관리에서 정한 스티커 팩의 가격과 숨김 */
 export interface StickerPrice {
@@ -571,6 +666,17 @@ export interface Backend {
   setWardrobePrice(familyId: string, itemId: string, price: number, hidden: boolean): Promise<void>;
   /** 자녀가 꾸미기 상품을 코인으로 바로 산다(승인 없음, 부모에게 알림) */
   buyWardrobeItem(familyId: string, uid: string, itemId: string): Promise<void>;
+
+  // 인형뽑기
+  /** 오늘 내가 한 판들(연습 판 포함, 하루 횟수와 남은 연습 표시) */
+  watchMyClawRounds(familyId: string, uid: string, day: string, cb: (rounds: ClawRound[]) => void): Unsub;
+  /**
+   * 새 판: 가격을 내고 속도를 받는다. practice=true 면 자녀의 공짜 연습 판(부모는 늘 연습 판).
+   * layout 은 대기 화면에 보여 준 상자 자리의 씨앗값(그 자리 그대로 시작한다)
+   */
+  startClaw(familyId: string, uid: string, options?: { practice?: boolean; layout?: number }): Promise<ClawRound>;
+  /** 판 끝내기: 버튼 두 번 누른 시각(판 시작부터 ms)을 보내고 결과를 받는다 */
+  finishClaw(familyId: string, roundId: string, presses: [number, number]): Promise<ClawRound>;
 
   // 자녀의 보상 제안과 가격 협상
   /** 협상 중인 제안과 최근에 끝난 제안 */

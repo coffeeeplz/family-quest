@@ -56,7 +56,25 @@ export function armSound(): () => void {
 /** [주파수(Hz), 시작(초), 길이(초)] */
 type Note = [number, number, number];
 
-const TUNES: Record<'coin' | 'big' | 'reward', Note[]> = {
+const TUNES: Record<'coin' | 'big' | 'reward' | 'tick' | 'drum' | 'fail' | 'grab', Note[]> = {
+  // 인형뽑기: 버튼 누름, 흔들흔들 위기
+  tick: [[880, 0, 0.05]],
+  // 인형뽑기: 상자를 열기 전 두근두근(낮은 북소리)
+  drum: [
+    [131, 0, 0.07],
+    [131, 0.12, 0.07],
+  ],
+  // 인형뽑기: 놓쳤을 때 내려가는 소리
+  fail: [
+    [523, 0, 0.12],
+    [392, 0.12, 0.12],
+    [262, 0.24, 0.34],
+  ],
+  // 인형뽑기: 집게가 꽉 오므리는 소리
+  grab: [
+    [330, 0, 0.06],
+    [220, 0.06, 0.1],
+  ],
   // 도트 게임의 코인 소리: 짧은 음 뒤에 높은 음
   coin: [
     [988, 0, 0.08],
@@ -131,11 +149,12 @@ export function reducedMotion(): boolean {
   return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-// 축하 화면이 떠 있는 동안에는 위쪽 코인 숫자가 화면에 가려지므로, 끝날 즈음에 올라가게 한다.
+// 축하 화면(또는 인형뽑기 연출)이 떠 있는 동안에는 위쪽 코인 숫자와 다른 축하 장면이 기다린다.
 let celebratingUntil = 0;
 
+/** 앞으로 ms 동안 연출 중이라고 알린다. 이미 더 길게 잡혀 있으면 줄이지 않는다. */
 export function markCelebrating(ms: number): void {
-  celebratingUntil = Date.now() + ms;
+  celebratingUntil = Math.max(celebratingUntil, Date.now() + ms);
 }
 
 /** 축하 화면이 앞으로 몇 ms 더 떠 있는지 */

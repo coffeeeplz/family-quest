@@ -1392,6 +1392,7 @@ button.today-line {
 .head-btns > .btn:first-child {
   flex: 1;
 }
+a.btn.games-btn,
 a.btn.inventory-btn {
   text-decoration: none;
 }
@@ -1510,4 +1511,179 @@ a.btn.inventory-btn {
   border: 0;
   background: none;
   cursor: pointer;
+}
+
+/* 인형뽑기: 기계와 버튼이 한 화면에 들어오게 촘촘히 */
+.claw-screen {
+  gap: 12px;
+  padding-top: calc(16px + var(--safe-top));
+}
+.claw-machine {
+  position: relative;
+  /* 기계 높이가 화면의 52%를 넘지 않게(그림 비율 120:140) */
+  width: min(100%, 420px, calc(52vh * 6 / 7));
+  width: min(100%, 420px, calc(52dvh * 6 / 7));
+  margin: 0 auto;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* 세부 옵션 창: 위(미리보기)와 아래(버튼)는 고정, 가운데만 스크롤 */
+.claw-editor {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+.claw-editor-top {
+  padding: calc(14px + var(--safe-top)) var(--gutter) 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 var(--px) 0 0 var(--ink);
+}
+.claw-editor-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px var(--gutter);
+}
+.claw-editor-foot {
+  display: flex;
+  gap: 8px;
+  padding: 10px var(--gutter) calc(10px + var(--safe-bottom));
+  box-shadow: 0 calc(var(--px) * -1) 0 0 var(--ink);
+}
+.claw-editor-foot .btn {
+  flex: 1;
+}
+.claw-tune-card {
+  gap: 12px;
+  align-items: center;
+}
+.claw-thumb {
+  width: 96px;
+  flex-shrink: 0;
+}
+.claw-preview {
+  width: min(100%, 22vh, 190px);
+  width: min(100%, 22dvh, 190px);
+}
+.claw-slider {
+  gap: 8px;
+  align-items: center;
+}
+.claw-slider .chip {
+  min-width: 44px;
+  padding: 0 8px;
+  font-size: 20px;
+}
+.claw-range {
+  min-width: 0;
+  width: 100%;
+  height: 32px;
+  accent-color: var(--pink-deep);
+}
+.claw-actions {
+  display: flex;
+  gap: 8px;
+}
+.claw-actions .btn {
+  flex: 1;
+  min-width: 0;
+}
+.claw-banner {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 34%;
+  padding: 10px 8px;
+  text-align: center;
+  background: var(--card);
+  border: 3px solid #4b3b66;
+  box-shadow: 0 4px 0 rgba(75, 59, 102, 0.25);
+  font-size: 18px;
+  line-height: 24px;
+  animation: claw-pop 0.35s ease-out;
+}
+.claw-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  shape-rendering: crispEdges;
+}
+.claw-open {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(75, 59, 102, 0.55);
+  overflow: hidden;
+}
+.claw-bigbox {
+  width: 55%;
+  height: auto;
+  shape-rendering: crispEdges;
+}
+.claw-rays {
+  position: absolute;
+  width: 160%;
+  aspect-ratio: 1;
+  background: repeating-conic-gradient(rgba(255, 217, 94, 0.55) 0 10deg, transparent 10deg 30deg);
+  border-radius: 50%;
+  animation: claw-spin 2.4s linear infinite;
+}
+.claw-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+}
+.claw-prize {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px;
+  background: var(--card);
+  box-shadow: var(--px-shadow);
+  text-align: center;
+  animation: claw-pop 0.5s cubic-bezier(0.2, 1.6, 0.4, 1);
+  max-width: 80%;
+}
+.claw-prize-pic {
+  display: flex;
+  justify-content: center;
+}
+@keyframes claw-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes claw-pop {
+  from {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .claw-rays,
+  .claw-banner,
+  .claw-prize {
+    animation: none;
+  }
+}
+.claw-prize-row {
+  padding: 10px 12px;
+  gap: 8px;
+}
+.claw-weight {
+  width: 64px;
+  text-align: right;
 }

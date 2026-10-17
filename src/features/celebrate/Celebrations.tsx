@@ -4,7 +4,7 @@ import { useSession } from '../../app/session';
 import type { LedgerEntry, Order, Reward } from '../../backend/types';
 import { coinScene, gainsOf, goalJustReached, latestAt, missedGains } from '../../domain/celebrate';
 import { reservedCoins } from '../../domain/shop';
-import { armSound, buzz, markCelebrating, playTune, reducedMotion } from '../../lib/feedback';
+import { armSound, buzz, celebratingFor, markCelebrating, playTune, reducedMotion } from '../../lib/feedback';
 import type { IconName } from '../../lib/sprites';
 import { Said } from '../stickers/StickerAttach';
 import { Icon } from '../../ui/Sprite';
@@ -128,7 +128,8 @@ export function Celebrations() {
     // 코인이 늘어서 채운 경우만(목표를 바꾸거나 신청을 취소해서 채워진 것은 아니다).
     if (!reachable || prev.reachable || prev.goalId !== goal.id || me.coins <= prev.coins) return;
     const scene: Scene = { kind: 'goal', id: `goal-${goal.id}-${me.coins}`, reward: goal };
-    const timer = window.setTimeout(() => setQueue((current) => [...current, scene]), GOAL_DELAY_MS);
+    // 인형뽑기처럼 결과를 보여 주는 연출이 진행 중이면 그게 끝난 뒤에 넣는다.
+    const timer = window.setTimeout(() => setQueue((current) => [...current, scene]), Math.max(GOAL_DELAY_MS, celebratingFor()));
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, me.coins, reachable, goal?.id]);
@@ -145,7 +146,11 @@ export function Celebrations() {
     const fresh = approved.filter((order) => !seenOrders.current!.has(order.id));
     if (fresh.length === 0) return;
     fresh.forEach((order) => seenOrders.current!.add(order.id));
-    setQueue((current) => [...current, ...fresh.map((order): Scene => ({ kind: 'reward', id: `order-${order.id}`, order }))]);
+    const add = () => setQueue((current) => [...current, ...fresh.map((order): Scene => ({ kind: 'reward', id: `order-${order.id}`, order }))]);
+    // 인형뽑기 상자에서 나온 현실 보상은 상자가 열린 뒤에 축하한다.
+    const wait = celebratingFor();
+    if (wait === 0) add();
+    else window.setTimeout(add, wait);
   }, [orders, loading, me.uid]);
 
   // ── 맨 앞 장면을 보여 주고, 시간이 지나면 다음으로 ──────────────────────────

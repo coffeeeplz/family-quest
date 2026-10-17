@@ -428,7 +428,7 @@ try {
   await shot(dad, '13-settings', true);
   const setMenu = dad.getByRole('navigation', { name: '설정 항목' });
   const openSetting = (title) => setMenu.getByRole('link', { name: new RegExp('^' + title) }).click();
-  check('설정 첫 화면은 항목과 지금 값만', (await setMenu.getByRole('link').count()) === 7 && (await dad.getByRole('main').locator('input').count()) === 0 && (await setMenu.getByText('제안 3번까지 · 한 번에 50코인까지').isVisible()));
+  check('설정 첫 화면은 항목과 지금 값만', (await setMenu.getByRole('link').count()) === 8 && (await dad.getByRole('main').locator('input').count()) === 0 && (await setMenu.getByText('제안 3번까지 · 한 번에 50코인까지').isVisible()));
   await openSetting('코인 협상');
   await dad.getByRole('heading', { name: '코인 협상' }).waitFor();
   await dad.getByRole('radio', { name: '1번' }).click();

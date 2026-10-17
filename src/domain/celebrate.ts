@@ -8,7 +8,8 @@ const MAX_RAIN = 28;
 
 /** 코인이 들어온 내역만(쓴 내역 제외) */
 export function gainsOf(ledger: LedgerEntry[], uid: string): LedgerEntry[] {
-  return ledger.filter((entry) => entry.uid === uid && entry.amount > 0);
+  // 인형뽑기 상품 코인은 게임 화면이 직접 보여 주므로 여기서는 뺀다(옮기는 동안 미리 알려 주지 않게).
+  return ledger.filter((entry) => entry.uid === uid && entry.amount > 0 && entry.type !== 'clawPrize');
 }
 
 /** 내역 가운데 가장 늦은 시각. 내역이 없으면 0 */
