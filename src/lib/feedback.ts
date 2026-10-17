@@ -56,7 +56,25 @@ export function armSound(): () => void {
 /** [주파수(Hz), 시작(초), 길이(초)] */
 type Note = [number, number, number];
 
-const TUNES: Record<'coin' | 'big' | 'reward', Note[]> = {
+const TUNES: Record<'coin' | 'big' | 'reward' | 'tick' | 'drum' | 'fail' | 'grab', Note[]> = {
+  // 인형뽑기: 버튼 누름, 흔들흔들 위기
+  tick: [[880, 0, 0.05]],
+  // 인형뽑기: 상자를 열기 전 두근두근(낮은 북소리)
+  drum: [
+    [131, 0, 0.07],
+    [131, 0.12, 0.07],
+  ],
+  // 인형뽑기: 놓쳤을 때 내려가는 소리
+  fail: [
+    [523, 0, 0.12],
+    [392, 0.12, 0.12],
+    [262, 0.24, 0.34],
+  ],
+  // 인형뽑기: 집게가 꽉 오므리는 소리
+  grab: [
+    [330, 0, 0.06],
+    [220, 0.06, 0.1],
+  ],
   // 도트 게임의 코인 소리: 짧은 음 뒤에 높은 음
   coin: [
     [988, 0, 0.08],

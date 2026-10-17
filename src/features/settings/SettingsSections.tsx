@@ -20,6 +20,7 @@ import { CoinInput, parseCoins } from '../../ui/CoinInput';
 import { Icon } from '../../ui/Sprite';
 import { BackLink, Button, CoinInline, Field, FieldGroup } from '../../ui/kit';
 import { errorText, useAction, useToast } from '../../ui/toast';
+import { ClawSettingsBody } from '../claw/ClawSettings';
 import { useLocations } from '../location/useLocation';
 
 const SECTIONS: Record<string, { title: string; hint: string; Body: () => ReactNode }> = {
@@ -29,6 +30,7 @@ const SECTIONS: Record<string, { title: string; hint: string; Body: () => ReactN
   presets: { title: '자주 쓰는 퀘스트 버튼', hint: '한 번만 누르면 오늘 할 일로 추가돼요', Body: PresetsSection },
   checkin: { title: '위치 공유 코인', hint: '자녀가 "지금 여기예요"를 누르면 바로 받는 코인', Body: CheckinSection },
   places: { title: '장소', hint: '이름을 붙인 장소 근처는 "학원 근처"처럼 보여요', Body: PlacesSection },
+  claw: { title: '인형뽑기', hint: '코인을 내고 하는 타이밍 게임. 가격, 횟수, 난이도, 상품 확률', Body: ClawSection },
 };
 
 /** 가족 설정의 안쪽 화면: 주소의 항목 이름에 맞는 내용을 보여 준다. */
@@ -209,6 +211,11 @@ function PraisesSection() {
       <SaveBar error={error} busy={busy} onSave={() => void save({ praises: newPraise.trim() ? [...praises, newPraise.trim()] : praises })} />
     </>
   );
+}
+
+function ClawSection() {
+  const { save, error, busy } = useSaveSettings();
+  return <ClawSettingsBody save={save} error={error} busy={busy} />;
 }
 
 function CheckinSection() {

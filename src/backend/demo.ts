@@ -7,6 +7,7 @@ import { MAX_EVENTS, canEditEvent, cleanEventInput } from '../domain/calendar';
 import { MAX_FOODS, canEditFood, cleanFoodInput, cleanStars, findSameName, withEaten } from '../domain/foods';
 import { MAX_PLACES, cleanFix, cleanPlaceInput, planCheckin } from '../domain/location';
 import { cleanFamilyName, cleanProfile } from '../domain/profile';
+import { ROUND_TIMEOUT_MS, cannotStart, chooseWin, isCatch, makeRound, pickPrize, playsToday } from '../domain/claw';
 import { MAX_WARDROBE_PRICE, entryOffer, findEntry, ownedOf, wardrobeLedgerId } from '../domain/wardrobe';
 import { MAX_OFFER_NOTE, canCounter, cleanOfferAmount, cleanProposalInput, turnOf } from '../domain/proposals';
 import { cleanPresetInput, cleanQuestInput, runId } from '../domain/quests';
@@ -47,6 +48,7 @@ import {
   type Run,
   type StickerPrice,
   type WardrobePrice,
+  type ClawRound,
   type Unsub,
   type UserProfile,
   type Wish,
@@ -61,7 +63,7 @@ interface DemoUser {
 }
 
 interface DemoState {
-  v: 13;
+  v: 14;
   currentUid: string | null;
   users: Record<string, DemoUser>;
   families: Record<string, Family>;
@@ -82,6 +84,7 @@ interface DemoState {
   pushPrefs: Record<string, Record<string, PushPrefs>>;
   stickerPrices: Record<string, Record<string, StickerPrice>>;
   wardrobePrices: Record<string, Record<string, WardrobePrice>>;
+  clawRounds: Record<string, Record<string, ClawRound>>;
   invites: Record<string, Invite>;
 }
 
@@ -90,7 +93,7 @@ export interface KeyValueStore {
   setItem(key: string, value: string): void;
 }
 
-const STORAGE_KEY = 'family-quest-demo-v13';
+const STORAGE_KEY = 'family-quest-demo-v14';
 const FAMILY = 'demo-family';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -239,7 +242,7 @@ function seed(now: number = Date.now()): DemoState {
   });
 
   return {
-    v: 13,
+    v: 14,
     currentUid: null,
     users: {
       'demo-dad': { uid: 'demo-dad', email: 'dad@example.com', label: '아빠', hint: '퀘스트를 만들고 승인해요', familyId: FAMILY },
@@ -248,7 +251,28 @@ function seed(now: number = Date.now()): DemoState {
       'demo-new': { uid: 'demo-new', email: 'new@example.com', label: '처음 온 사람', hint: '가입 과정을 처음부터 해 봐요', familyId: null },
     },
     families: {
-      [FAMILY]: { id: FAMILY, name: '우리 가족', createdBy: 'demo-dad', createdAt: startedAt, settings: { ...DEFAULT_SETTINGS } },
+      [FAMILY]: {
+        id: FAMILY,
+        name: '우리 가족',
+        createdBy: 'demo-dad',
+        createdAt: startedAt,
+        // 체험에서는 인형뽑기를 켜 두고 현실 보상도 하나 넣어 둔다.
+        settings: {
+          ...DEFAULT_SETTINGS,
+          claw: {
+            ...DEFAULT_SETTINGS.claw,
+            on: true,
+            prizes: [
+              { kind: 'coin', amount: 5, weight: 35 },
+              { kind: 'coin', amount: 20, weight: 25 },
+              { kind: 'coin', amount: 50, weight: 10 },
+              { kind: 'wardrobe', weight: 15 },
+              { kind: 'sticker', weight: 10 },
+              { kind: 'reward', title: '게임 30분', weight: 5 },
+            ],
+          },
+        },
+      },
     },
     members: {
       [FAMILY]: {
@@ -361,6 +385,7 @@ function seed(now: number = Date.now()): DemoState {
     pushPrefs: { [FAMILY]: {} },
     stickerPrices: { [FAMILY]: {} },
     wardrobePrices: { [FAMILY]: {} },
+    clawRounds: { [FAMILY]: {} },
     // 자녀가 상점에 올려 달라고 제안한 보상: 부모의 답을 기다리는 중
     wishes: {
       [FAMILY]: {
@@ -413,7 +438,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       const raw = store?.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as DemoState;
-        if (parsed.v === 13) return parsed;
+        if (parsed.v === 14) return parsed;
       }
     } catch {
       // 저장소를 못 읽으면 새로 시작한다.
@@ -597,6 +622,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       state.pushPrefs[id] = {};
       state.stickerPrices[id] = {};
       state.wardrobePrices[id] = {};
+      state.clawRounds[id] = {};
       state.users[uid].familyId = id;
       commit();
       return id;
@@ -1464,6 +1490,90 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       const after = state.members[familyId][uid];
       state.members[familyId][uid] = { ...after, wardrobe: [...after.wardrobe, itemId] };
       commit();
+    },
+
+    watchMyClawRounds(familyId, uid, day, cb) {
+      return watch(() => Object.values(state.clawRounds[familyId] ?? {}).filter((r) => r.uid === uid && r.day === day && !r.practice).map((r) => ({ ...r })), cb);
+    },
+
+    async startClaw(familyId, uid) {
+      requireSelf(uid);
+      const member = requireMember(familyId);
+      const settings = state.families[familyId].settings.claw;
+      const isParent = member.role === 'parent';
+      const day = dateKey();
+      const rounds = Object.values(state.clawRounds[familyId] ?? {}).filter((r) => !r.practice);
+      const free = availableCoins(member, Object.values(state.orders[familyId] ?? {}));
+      const blocked = cannotStart(settings, isParent, free, playsToday(rounds, uid, day));
+      if (blocked) throw new AppError(blocked);
+      const id = newId('claw');
+      const now = Date.now();
+      const round: ClawRound = { id, uid, day, startedAt: now, ...makeRound(settings.level, Math.random), practice: isParent, status: 'playing' };
+      if (!isParent && settings.price > 0) {
+        addLedger(familyId, { id: `claw-${id}`, uid, amount: -settings.price, type: 'claw', refId: id, memo: '인형뽑기', note: '', by: uid, at: now });
+      }
+      state.clawRounds[familyId][id] = round;
+      commit();
+      return { ...round };
+    },
+
+    async finishClaw(familyId, roundId, presses) {
+      const member = requireMember(familyId);
+      const round = state.clawRounds[familyId]?.[roundId];
+      if (!round || round.uid !== member.uid) throw new AppError('판을 찾을 수 없어요.');
+      if (round.status === 'done') return { ...round };
+      const settings = state.families[familyId].settings.claw;
+      const late = Date.now() - round.startedAt > ROUND_TIMEOUT_MS;
+      const caught = !late && isCatch(round, presses[0], presses[1]);
+      let done: ClawRound;
+      if (!caught) done = { ...round, status: 'done', outcome: 'miss' };
+      else if (Math.random() * 100 < settings.dropRate) done = { ...round, status: 'done', outcome: 'drop' };
+      else {
+        const prize = pickPrize(settings.prizes, Math.random);
+        const hidden = {
+          wardrobe: Object.values(state.wardrobePrices[familyId] ?? {}).filter((p) => p.hidden).map((p) => p.itemId),
+          stickerPacks: Object.values(state.stickerPrices[familyId] ?? {}).filter((p) => p.hidden).map((p) => p.packId),
+        };
+        let win = prize ? chooseWin(prize, member, hidden, settings.fallbackCoins, Math.random) : { kind: 'coin' as const, amount: settings.fallbackCoins, converted: true };
+        // 부모의 연습 판은 결과만 보여 주고 아무것도 주지 않는다.
+        if (!round.practice) {
+          const now = Date.now();
+          const ref = { refId: round.id, note: '', by: member.uid, at: now };
+          if (win.kind === 'coin') {
+            addLedger(familyId, { id: `clawwin-${round.id}`, uid: member.uid, amount: win.amount, type: 'clawPrize', memo: '인형뽑기 상품', ...ref });
+          } else if (win.kind === 'wardrobe') {
+            const m = state.members[familyId][member.uid];
+            state.members[familyId][member.uid] = { ...m, wardrobe: [...m.wardrobe, win.itemId] };
+          } else if (win.kind === 'sticker') {
+            const m = state.members[familyId][member.uid];
+            state.members[familyId][member.uid] = { ...m, stickerPacks: [...m.stickerPacks, win.packId] };
+          } else {
+            const orderId = `clawwin-${round.id}`;
+            state.orders[familyId][orderId] = {
+              id: orderId,
+              rewardId: 'claw',
+              rewardTitle: win.title,
+              icon: 'game',
+              price: 0,
+              uid: member.uid,
+              status: 'approved',
+              requestedAt: now,
+              requestedDay: dateKey(),
+              decidedBy: member.uid,
+              decidedAt: now,
+              rejectReason: '',
+              deliveredBy: null,
+              deliveredAt: null,
+              useMode: 'inPerson',
+            };
+            win = { ...win, orderId };
+          }
+        }
+        done = { ...round, status: 'done', outcome: 'win', prize: win };
+      }
+      state.clawRounds[familyId][roundId] = done;
+      commit();
+      return { ...done };
     },
 
     async hideNote(familyId, noteId, hidden) {

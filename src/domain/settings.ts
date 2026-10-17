@@ -1,4 +1,5 @@
 import { AppError, type FamilySettings } from '../backend/types';
+import { DEFAULT_CLAW, cleanClaw, normalizeClaw } from './claw';
 import { DEFAULT_FOOD_CATEGORIES, cleanFoodCategories, normalizeFoodCategories } from './foods';
 
 /** 놓친 반복 퀘스트를 며칠 전 것까지 보여 줄지 */
@@ -26,6 +27,7 @@ export const DEFAULT_SETTINGS: FamilySettings = {
   checkinCoins: 1,
   checkinPerDay: 3,
   foodCategories: DEFAULT_FOOD_CATEGORIES,
+  claw: DEFAULT_CLAW,
 };
 
 /** 늦게 한 반복 퀘스트는 절반만 받는다(홀수는 올림). */
@@ -52,6 +54,7 @@ export function normalizeSettings(raw: unknown): FamilySettings {
     checkinCoins: clampInt(r.checkinCoins, 0, MAX_CHECKIN_COINS, DEFAULT_SETTINGS.checkinCoins),
     checkinPerDay: clampInt(r.checkinPerDay, 1, MAX_CHECKIN_PER_DAY, DEFAULT_SETTINGS.checkinPerDay),
     foodCategories: normalizeFoodCategories(r.foodCategories),
+    claw: normalizeClaw(r.claw),
   };
 }
 
@@ -77,5 +80,5 @@ export function cleanSettings(input: FamilySettings): FamilySettings {
   if (praises.some((p) => p.length > MAX_PRAISE_LENGTH)) {
     throw new AppError(`칭찬 한마디는 ${MAX_PRAISE_LENGTH}자까지 쓸 수 있어요.`);
   }
-  return { ...input, praises, foodCategories: cleanFoodCategories(input.foodCategories) };
+  return { ...input, praises, foodCategories: cleanFoodCategories(input.foodCategories), claw: cleanClaw(input.claw) };
 }

@@ -52,6 +52,65 @@ export interface FamilySettings {
   checkinPerDay: number;
   /** 뭐먹지의 분류. 마지막은 항상 "기타" */
   foodCategories: FoodCategoryDef[];
+  /** 인형뽑기 게임 설정(부모가 정함) */
+  claw: ClawSettings;
+}
+
+export type ClawLevel = 'easy' | 'normal' | 'hard';
+
+/** 인형뽑기 상자에 들어갈 수 있는 것 한 칸. weight = 확률(%) */
+export interface ClawPrize {
+  kind: 'coin' | 'wardrobe' | 'sticker' | 'reward';
+  weight: number;
+  /** kind=coin: 코인 개수 */
+  amount?: number;
+  /** kind=reward: 현실 보상 이름(예: 게임 30분) */
+  title?: string;
+}
+
+export interface ClawSettings {
+  on: boolean;
+  /** 한 판 가격(코인) */
+  price: number;
+  /** 자녀 한 명이 하루에 할 수 있는 판 수(0이면 제한 없음) */
+  perDay: number;
+  level: ClawLevel;
+  /** 잡은 상자를 옮기다 떨어뜨릴 확률(%) */
+  dropRate: number;
+  /** 꾸미기·스티커가 나왔는데 이미 다 가졌을 때 대신 주는 코인 */
+  fallbackCoins: number;
+  prizes: ClawPrize[];
+}
+
+/** 상자에서 나온 것 */
+export type ClawWin =
+  | { kind: 'coin'; amount: number; converted?: boolean }
+  | { kind: 'wardrobe'; itemId: string; name: string }
+  | { kind: 'sticker'; packId: string; name: string }
+  | { kind: 'reward'; title: string; orderId: string };
+
+/** 인형뽑기 한 판. 목표 위치와 속도는 판을 시작할 때 정해지고, 결과는 끝낼 때 정해진다 */
+export interface ClawRound {
+  id: string;
+  uid: string;
+  /** 시작한 날(하루 횟수를 셀 때) */
+  day: string;
+  startedAt: number;
+  level: ClawLevel;
+  target: { x: number; y: number };
+  /** 가로·세로 속도(칸/초) */
+  vx: number;
+  vy: number;
+  wobblePeriod: number;
+  wobblePhase: number;
+  /** 화면 장식(다른 상자들의 자리)에 쓰는 씨앗값 */
+  seed: number;
+  /** 부모의 연습 판: 코인을 내지 않고 상품도 받지 않는다 */
+  practice: boolean;
+  status: 'playing' | 'done';
+  /** miss=못 잡음, drop=옮기다 떨어뜨림, win=상자를 열어 상품을 받음 */
+  outcome?: 'miss' | 'drop' | 'win';
+  prize?: ClawWin;
 }
 
 /** 뭐먹지의 분류 하나. id 는 메뉴에 저장되고, 이름과 그림은 설정에서 바꿀 수 있다. */
@@ -146,7 +205,7 @@ export interface Run {
 }
 
 /** quest=퀘스트 완료, bonus=연속 달성 보너스, gift=칭찬 코인, reward=상점 사용, checkin=위치 공유, adjust=조정 */
-export type LedgerType = 'quest' | 'bonus' | 'gift' | 'reward' | 'checkin' | 'adjust' | 'sticker' | 'wardrobe';
+export type LedgerType = 'quest' | 'bonus' | 'gift' | 'reward' | 'checkin' | 'adjust' | 'sticker' | 'wardrobe' | 'claw' | 'clawPrize';
 
 /** 부모가 상점 관리에서 정한 스티커 팩의 가격과 숨김 */
 export interface StickerPrice {
@@ -571,6 +630,14 @@ export interface Backend {
   setWardrobePrice(familyId: string, itemId: string, price: number, hidden: boolean): Promise<void>;
   /** 자녀가 꾸미기 상품을 코인으로 바로 산다(승인 없음, 부모에게 알림) */
   buyWardrobeItem(familyId: string, uid: string, itemId: string): Promise<void>;
+
+  // 인형뽑기
+  /** 오늘 내가 한 판들(하루 횟수 표시) */
+  watchMyClawRounds(familyId: string, uid: string, day: string, cb: (rounds: ClawRound[]) => void): Unsub;
+  /** 새 판: 가격을 내고 목표 위치와 속도를 받는다(부모는 연습 판) */
+  startClaw(familyId: string, uid: string): Promise<ClawRound>;
+  /** 판 끝내기: 버튼 두 번 누른 시각(판 시작부터 ms)을 보내고 결과를 받는다 */
+  finishClaw(familyId: string, roundId: string, presses: [number, number]): Promise<ClawRound>;
 
   // 자녀의 보상 제안과 가격 협상
   /** 협상 중인 제안과 최근에 끝난 제안 */

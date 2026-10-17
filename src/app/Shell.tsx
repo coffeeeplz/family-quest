@@ -12,6 +12,7 @@ import { useNotes } from '../features/notes/useNotes';
 import { useMyBoard } from '../features/quests/QuestCards';
 import { isUnreadFor, visibleNotes } from '../domain/notes';
 import { Celebrations } from '../features/celebrate/Celebrations';
+import { ClawPage } from '../features/claw/ClawPage';
 import { WardrobePage } from '../features/wardrobe/WardrobePage';
 import { FamilyPage } from '../features/family/FamilyPage';
 import { FoodCategoriesPage } from '../features/food/FoodCategoriesPage';
@@ -128,6 +129,7 @@ export function Shell() {
         <Route path="/log" element={<LedgerPage />} />
         <Route path="/family" element={<FamilyPage />} />
         <Route path="/wardrobe" element={<WardrobePage />} />
+        <Route path="/claw" element={<ClawPage />} />
         <Route path="/notify" element={<NotifyPage />} />
         <Route path="/updates" element={<UpdatesPage />} />
         <Route path="*" element={<Navigate to={tabs[0].to} replace />} />

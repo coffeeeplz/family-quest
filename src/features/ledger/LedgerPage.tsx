@@ -17,6 +17,8 @@ const TYPE_ICON: Record<LedgerEntry['type'], IconName> = {
   adjust: 'coin',
   sticker: 'bag',
   wardrobe: 'bag',
+  claw: 'game',
+  clawPrize: 'game',
 };
 
 /** 코인 기록. 자녀는 자기 기록을, 부모는 자녀별 기록을 본다. */

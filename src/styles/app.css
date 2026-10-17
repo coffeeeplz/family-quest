@@ -1511,3 +1511,93 @@ a.btn.inventory-btn {
   background: none;
   cursor: pointer;
 }
+
+/* 인형뽑기 */
+.claw-machine {
+  position: relative;
+  max-width: 420px;
+  width: 100%;
+  margin: 0 auto;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.claw-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  shape-rendering: crispEdges;
+}
+.claw-open {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(75, 59, 102, 0.55);
+  overflow: hidden;
+}
+.claw-bigbox {
+  width: 55%;
+  height: auto;
+  shape-rendering: crispEdges;
+}
+.claw-rays {
+  position: absolute;
+  width: 160%;
+  aspect-ratio: 1;
+  background: repeating-conic-gradient(rgba(255, 217, 94, 0.55) 0 10deg, transparent 10deg 30deg);
+  border-radius: 50%;
+  animation: claw-spin 2.4s linear infinite;
+}
+.claw-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+}
+.claw-prize {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px;
+  background: var(--card);
+  box-shadow: var(--px-shadow);
+  text-align: center;
+  animation: claw-pop 0.5s cubic-bezier(0.2, 1.6, 0.4, 1);
+  max-width: 80%;
+}
+.claw-prize-pic {
+  display: flex;
+  justify-content: center;
+}
+@keyframes claw-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes claw-pop {
+  from {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .claw-rays,
+  .claw-prize {
+    animation: none;
+  }
+}
+.claw-prize-row {
+  padding: 10px 12px;
+  gap: 8px;
+}
+.claw-weight {
+  width: 64px;
+  text-align: right;
+}
