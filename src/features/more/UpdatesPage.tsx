@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
+import { useSession } from '../../app/session';
 import { APP_VERSION, CHANGELOG, compareVersions } from '../../domain/changelog';
 import { formatDay } from '../../lib/dates';
 import { markUpdatesSeen, seenVersion } from '../../lib/updates';
 import { BackLink } from '../../ui/kit';
 
-/** 업데이트 소식: 버전별로 새로 생긴 기능. 열면 "새 소식" 표시가 사라진다. */
+/** 업데이트 소식: 버전별로 새로 생긴 기능. 열면 "새 소식" 표시가 사라진다. 부모용 줄은 부모에게만 보인다. */
 export function UpdatesPage() {
+  const { isParent } = useSession();
   // 열기 전에 본 버전을 기억해 두고, 그 뒤의 소식에 "새로" 표시를 붙인다.
   const [seen] = useState(seenVersion);
   useEffect(() => markUpdatesSeen(), []);
@@ -37,6 +39,13 @@ export function UpdatesPage() {
                 {item}
               </li>
             ))}
+            {isParent &&
+              release.parentItems?.map((item) => (
+                <li key={item} className="t-cap">
+                  <span className="t-capb">부모님께 </span>
+                  {item}
+                </li>
+              ))}
           </ul>
         </section>
       ))}
