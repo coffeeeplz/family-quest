@@ -55,6 +55,7 @@ import {
   type Firestore,
   type Query,
 } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { firebaseConfig, webPushKey } from '../config/firebase';
 import { deviceId, isIos, isPushMarkedOn, isStandalone, markPushOff, markPushOn, pushCapable, serviceWorkerReady } from '../lib/pushDevice';
 import { normalizePushPrefs } from '../domain/push';
@@ -84,6 +85,7 @@ import {
   AppError,
   type Backend,
   type CalendarEvent,
+  type ClawRound,
   type Family,
   type FamilySettings,
   type Food,
@@ -138,6 +140,8 @@ function toAppError(error: unknown): Error {
     if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
       return new AppError('');
     }
+    // 서버 함수(인형뽑기)가 보낸 안내는 그대로 보여 준다.
+    if (error.code === 'functions/failed-precondition' || error.code === 'functions/unauthenticated') return new AppError(error.message);
     const message = AUTH_MESSAGES[error.code] ?? STORE_MESSAGES[error.code];
     if (message) return new AppError(message);
   }
@@ -185,6 +189,11 @@ export function createFirebaseBackend(): Backend {
     // 오프라인에서도 마지막으로 본 내용을 보여 준다.
     localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
   });
+
+  // 인형뽑기 판정은 서버 함수가 한다(Firestore 와 같은 서울 지역).
+  const functions = getFunctions(app, 'asia-northeast3');
+  const callClawStart = httpsCallable<{ familyId: string; practice: boolean; layout?: number }, ClawRound>(functions, 'clawStart');
+  const callClawFinish = httpsCallable<{ familyId: string; roundId: string; presses: [number, number] }, ClawRound>(functions, 'clawFinish');
 
   const familyRef = (fid: string) => doc(db, 'families', fid);
   const memberRef = (fid: string, uid: string) => doc(db, 'families', fid, 'members', uid);
@@ -1360,17 +1369,17 @@ export function createFirebaseBackend(): Backend {
         });
       }),
 
-    // 인형뽑기는 서버 판정(Cloud Functions)이 붙는 다음 단계에서 열린다. 지금은 체험 모드에서만 된다.
-    watchMyClawRounds(_familyId, _uid, _day, cb) {
-      cb([]);
-      return () => {};
+    // 인형뽑기: 판은 서버 함수만 쓰고, 폰은 오늘 내 판들을 읽기만 한다.
+    watchMyClawRounds(familyId, uid, day, cb) {
+      return onSnapshot(
+        query(collection(db, 'families', familyId, 'clawRounds'), where('uid', '==', uid), where('day', '==', day)),
+        (snap) => cb(snap.docs.map((s) => ({ ...(s.data() as ClawRound), id: s.id }))),
+        () => cb([]),
+      );
     },
-    startClaw: () => guard(async () => {
-      throw new AppError('인형뽑기는 곧 열려요! 조금만 기다려 주세요.');
-    }),
-    finishClaw: () => guard(async () => {
-      throw new AppError('인형뽑기는 곧 열려요! 조금만 기다려 주세요.');
-    }),
+    startClaw: (familyId, _uid, options = {}) =>
+      guard(async () => (await callClawStart({ familyId, practice: options.practice === true, ...(options.layout !== undefined ? { layout: options.layout } : {}) })).data),
+    finishClaw: (familyId, roundId, presses) => guard(async () => (await callClawFinish({ familyId, roundId, presses })).data),
 
     watchNotes(familyId, cb, onError) {
       return onSnapshot(

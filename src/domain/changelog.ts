@@ -15,6 +15,15 @@ export interface Release {
 
 export const CHANGELOG: Release[] = [
   {
+    version: '1.17.0',
+    date: '2026-10-17',
+    items: ['인형뽑기를 이제 진짜 앱에서도 할 수 있어요! 홈의 [게임] 버튼을 눌러 보세요'],
+    parentItems: [
+      '잡았는지, 떨어뜨렸는지, 상자에서 무엇이 나올지는 서버가 정하고 코인과 상품도 서버가 지급해요(폰에서 바꿀 수 없어요)',
+      '인형뽑기에서 현실 보상이 나오면 부모님께 알림이 가요',
+    ],
+  },
+  {
     version: '1.16.0',
     date: '2026-10-17',
     items: [
