@@ -25,7 +25,7 @@ export const MAX_DROP_RATE = 90;
 
 export interface LevelSpec {
   name: string;
-  /** 목표 상자 중심에서 이만큼(가로·세로 각각) 안에 멈추면 잡는다 */
+  /** 집게 조준점(집게 끝 사이)이 목표 상자 중심에서 이만큼(가로·세로 각각) 안에 멈추면 잡는다. 화면에 점선 네모로 보인다 */
   reach: number;
   /** 가로·세로 속도(칸/초)의 범위. 판마다 이 안에서 정해진다 */
   speed: [number, number];
@@ -36,9 +36,9 @@ export interface LevelSpec {
 }
 
 export const LEVELS: Record<ClawLevel, LevelSpec> = {
-  easy: { name: '쉬움', reach: 9, speed: [18, 24], wobble: 0, lagMs: 150 },
-  normal: { name: '보통', reach: 6, speed: [24, 34], wobble: 2, lagMs: 120 },
-  hard: { name: '어려움', reach: 4, speed: [32, 44], wobble: 3.5, lagMs: 90 },
+  easy: { name: '쉬움', reach: 12, speed: [14, 18], wobble: 0, lagMs: 150 },
+  normal: { name: '보통', reach: 8, speed: [20, 28], wobble: 2, lagMs: 120 },
+  hard: { name: '어려움', reach: 5, speed: [32, 44], wobble: 3.5, lagMs: 90 },
 };
 export const LEVEL_ORDER: ClawLevel[] = ['easy', 'normal', 'hard'];
 

@@ -1512,15 +1512,34 @@ a.btn.inventory-btn {
   cursor: pointer;
 }
 
-/* 인형뽑기 */
+/* 인형뽑기: 기계와 버튼이 한 화면에 들어오게 촘촘히 */
+.claw-screen {
+  gap: 12px;
+  padding-top: calc(16px + var(--safe-top));
+}
 .claw-machine {
   position: relative;
-  max-width: 420px;
-  width: 100%;
+  /* 기계 높이가 화면의 52%를 넘지 않게(그림 비율 120:140) */
+  width: min(100%, 420px, calc(52vh * 6 / 7));
+  width: min(100%, 420px, calc(52dvh * 6 / 7));
   margin: 0 auto;
   touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
+}
+.claw-banner {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 34%;
+  padding: 10px 8px;
+  text-align: center;
+  background: var(--card);
+  border: 3px solid #4b3b66;
+  box-shadow: 0 4px 0 rgba(75, 59, 102, 0.25);
+  font-size: 18px;
+  line-height: 24px;
+  animation: claw-pop 0.35s ease-out;
 }
 .claw-svg {
   display: block;
@@ -1589,6 +1608,7 @@ a.btn.inventory-btn {
 }
 @media (prefers-reduced-motion: reduce) {
   .claw-rays,
+  .claw-banner,
   .claw-prize {
     animation: none;
   }

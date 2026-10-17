@@ -43,6 +43,8 @@ const CRISES = [0.3, 0.48];
 /** 게임판 좌표(0~100, 아래가 0) → 그림 좌표 */
 const sx = (x: number) => 10 + x;
 const sy = (y: number) => 122 - y;
+/** 집게 그림 가운데에서 조준점(집게 끝 사이)까지의 거리(그림 좌표, 크기 1일 때) */
+const AIM_DROP = 3.3;
 
 const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
 const clamp01 = (t: number) => Math.max(0, Math.min(1, t));
@@ -316,9 +318,13 @@ export function ClawPage() {
 
   const tapToPress = phase === 'x' || phase === 'y';
   const level = LEVELS[settings.level];
+  // 맞출 곳: 목표 상자 둘레의 점선 네모(잡히는 범위). 쉬움에서는 조준점이 들어오면 반짝인다.
+  const reach = round ? LEVELS[round.level].reach : 0;
+  const inZone = !!round && tapToPress && Math.abs(claw.x - round.target.x) <= reach && Math.abs(claw.y - round.target.y) <= reach;
+  const glow = inZone && round?.level === 'easy';
 
   return (
-    <main className="screen">
+    <main className="screen claw-screen">
       <button type="button" className="link back-link" onClick={() => navigate(-1)}>
         ‹ 뒤로
       </button>
@@ -350,6 +356,19 @@ export function ClawPage() {
           {/* 목표 상자(잡히기 전) */}
           {round && !carried && !falling && !(opening || phase === 'done' && result?.outcome !== 'miss') && (
             <>
+              {tapToPress && (
+                <rect
+                  x={sx(round.target.x - reach)}
+                  y={sy(round.target.y + reach)}
+                  width={reach * 2}
+                  height={reach * 2}
+                  fill={glow ? '#FFE38A' : '#FFFFFF'}
+                  fillOpacity={glow ? 0.7 : 0.45}
+                  stroke="#FF5C8A"
+                  strokeWidth={glow ? 1.3 : 0.9}
+                  strokeDasharray={glow ? undefined : '2 1.5'}
+                />
+              )}
               <Pix rows={BOX} cx={sx(round.target.x)} cy={sy(round.target.y)} size={15} color="#FFB3D1" />
               <Pix rows={SPARKLE} cx={sx(round.target.x) + 7} cy={sy(round.target.y) - 8} size={5} opacity={0.5 + 0.5 * Math.abs(Math.sin(now / 250))} />
             </>
@@ -362,8 +381,12 @@ export function ClawPage() {
             </g>
           )}
           {/* 집게 그림자와 집게 */}
-          <ellipse cx={sx(claw.x)} cy={sy(claw.y) + 6} rx={6 * clawScale} ry={1.5} fill="#4B3B66" opacity="0.18" />
-          <Pix rows={clawRows} cx={sx(claw.x)} cy={sy(claw.y) - 2} size={20 * clawScale} />
+          {/* 오른쪽으로 갈 때: 위로 올라갈 길을 점선으로 */}
+          {phase === 'x' && <line x1={sx(claw.x)} y1={sy(claw.y) - 8} x2={sx(claw.x)} y2={sy(BOARD)} stroke="#4B3B66" strokeWidth="0.5" strokeDasharray="1.5 1.5" opacity="0.45" />}
+          <ellipse cx={sx(claw.x)} cy={sy(claw.y) + 5} rx={6 * clawScale} ry={1.5} fill="#4B3B66" opacity="0.18" />
+          <Pix rows={clawRows} cx={sx(claw.x)} cy={sy(claw.y) - AIM_DROP * clawScale} size={20 * clawScale} />
+          {/* 조준점: 이 점이 점선 네모 안에 있을 때 멈추면 잡혀요 */}
+          {tapToPress && <circle cx={sx(claw.x)} cy={sy(claw.y)} r={1.3} fill="#FF5C8A" stroke="#FFFFFF" strokeWidth="0.5" />}
           {bubble && (
             <text x={Math.min(100, Math.max(20, sx(claw.x)))} y={Math.max(24, sy(claw.y) - 14)} textAnchor="middle" fontSize="7" fill="#4B3B66" fontFamily="var(--font-title)">
               {bubble}
@@ -385,23 +408,22 @@ export function ClawPage() {
             {flash > 0 && <div className="claw-flash" style={{ opacity: flash }} aria-hidden="true" />}
           </div>
         )}
+        {/* 놓치거나 떨어뜨린 결과는 기계 위에 띄운다(버튼 아래로 밀리지 않게) */}
+        {phase === 'done' && result && result.outcome !== 'win' && (
+          <p className="claw-banner t-title" role="status">
+            {result.outcome === 'drop' ? '앗, 떨어졌어요! 아깝다!' : '아깝다! 다시 해 볼까요?'}
+          </p>
+        )}
       </div>
 
-      {phase === 'done' && result && result.outcome !== 'win' && (
-        <p className="t-title center" role="status">
-          {result.outcome === 'drop' ? '앗, 떨어졌어요! 아깝다!' : '아깝다! 다시 해 볼까요?'}
-        </p>
-      )}
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
-
+      {/* 버튼은 기계 바로 밑에 둔다(한 화면에 보이게) */}
       {tapToPress ? (
-        <Button big block onPointerDown={press} aria-label={phase === 'x' ? '멈추고 위로' : '멈추고 집기'}>
-          {phase === 'x' ? '여기서 위로!' : '여기서 집기!'}
-        </Button>
+        <>
+          <Button big block onPointerDown={press} aria-label={phase === 'x' ? '멈추고 위로' : '멈추고 집기'}>
+            {phase === 'x' ? '여기서 위로!' : '여기서 집기!'}
+          </Button>
+          <p className="t-cap center">기계를 아무 데나 눌러도 돼요</p>
+        </>
       ) : (
         <>
           <Button big block disabled={!!blocked || (phase !== 'idle' && phase !== 'done')} onClick={() => void start()}>
@@ -410,8 +432,13 @@ export function ClawPage() {
           {blocked && (phase === 'idle' || phase === 'done') && <p className="t-capb center">{blocked}</p>}
         </>
       )}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
       {(phase === 'idle' || phase === 'starting') && (
-        <p className="t-cap center">집게가 오른쪽으로 가요. 버튼을 누르면 위로, 한 번 더 누르면 집어요. 반짝이는 상자 위에서 멈춰 보세요!</p>
+        <p className="t-cap center">집게가 오른쪽으로 가요. 버튼을 누르면 위로, 한 번 더 누르면 집어요. 집게 끝의 빨간 점이 상자 둘레 점선 네모 안에 있을 때 멈추면 잡혀요!</p>
       )}
     </main>
   );
