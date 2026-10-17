@@ -100,13 +100,6 @@ export function ShopPage() {
         캐릭터 꾸미기
       </Link>
 
-      {family.settings.claw.on && (
-        <Link className="btn mint block" to="/claw">
-          <Icon name="game" size={24} />
-          인형뽑기
-        </Link>
-      )}
-
       <StickerShop />
 
       <section className="stack" aria-label="보상 목록">

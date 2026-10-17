@@ -1392,6 +1392,7 @@ button.today-line {
 .head-btns > .btn:first-child {
   flex: 1;
 }
+a.btn.games-btn,
 a.btn.inventory-btn {
   text-decoration: none;
 }
@@ -1527,16 +1528,47 @@ a.btn.inventory-btn {
   user-select: none;
   -webkit-user-select: none;
 }
-.claw-preview-wrap {
-  /* 슬라이더를 움직이는 동안에도 보이게 위에 붙여 둔다 */
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  padding: 4px 0 6px;
+/* 세부 옵션 창: 위(미리보기)와 아래(버튼)는 고정, 가운데만 스크롤 */
+.claw-editor {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
   background: var(--bg);
 }
+.claw-editor-top {
+  padding: calc(14px + var(--safe-top)) var(--gutter) 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 var(--px) 0 0 var(--ink);
+}
+.claw-editor-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px var(--gutter);
+}
+.claw-editor-foot {
+  display: flex;
+  gap: 8px;
+  padding: 10px var(--gutter) calc(10px + var(--safe-bottom));
+  box-shadow: 0 calc(var(--px) * -1) 0 0 var(--ink);
+}
+.claw-editor-foot .btn {
+  flex: 1;
+}
+.claw-tune-card {
+  gap: 12px;
+  align-items: center;
+}
+.claw-thumb {
+  width: 96px;
+  flex-shrink: 0;
+}
 .claw-preview {
-  width: min(100%, 190px);
+  width: min(100%, 22vh, 190px);
+  width: min(100%, 22dvh, 190px);
 }
 .claw-slider {
   gap: 8px;

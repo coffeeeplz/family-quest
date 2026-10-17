@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useBackend, useSession } from '../../app/session';
 import type { ClawPrize, ClawPreset, ClawSettings, ClawTune } from '../../backend/types';
@@ -8,19 +8,16 @@ import {
   MAX_CLAW_PRIZES,
   MAX_CLAW_TITLE,
   MAX_PRACTICE_PER_DAY,
-  MAX_PRESET_NAME,
   PRACTICE_UNLIMITED,
-  TUNE_LIMITS,
   estimateCatch,
   expectedCoins,
+  layoutBoxes,
   prizeLabel,
-  sameTune,
-  savePreset,
 } from '../../domain/claw';
 import { CoinInput, parseCoins } from '../../ui/CoinInput';
 import { Button, Field, FieldGroup } from '../../ui/kit';
-import { errorText } from '../../ui/toast';
-import { ClawPreview } from './ClawPreview';
+import { ClawBoard, boxColors } from './ClawBoard';
+import { ClawTuneEditor } from './ClawTuneEditor';
 
 const PER_DAY_CHOICES = [0, 1, 2, 3, 5, 10];
 const DROP_CHOICES = [0, 10, 20, 30, 50];
@@ -53,51 +50,6 @@ const fromRow = (r: Row): ClawPrize => ({
   ...(r.kind === 'reward' ? { title: r.title } : {}),
 });
 
-/** 세부 옵션 한 줄: 슬라이더와 한 칸씩 움직이는 [−] [+] 버튼. scale 은 보여 줄 때 나누는 값(ms → 초) */
-function TuneSlider({
-  label,
-  value,
-  limits,
-  unit,
-  scale = 1,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  limits: { min: number; max: number; step: number };
-  unit: string;
-  scale?: number;
-  onChange: (v: number) => void;
-}) {
-  // 0.1 같은 소수 단계에서 생기는 아주 작은 오차를 없앤다.
-  const snap = (v: number) => Math.min(limits.max, Math.max(limits.min, Math.round(v / limits.step) * limits.step));
-  const shown = Math.round((value / scale) * 10) / 10;
-  return (
-    <Field label={`${label}: ${shown}${unit}`}>
-      {(id) => (
-        <div className="row claw-slider">
-          <button type="button" className="chip" aria-label={`${label} 줄이기`} disabled={value <= limits.min} onClick={() => onChange(snap(value - limits.step))}>
-            −
-          </button>
-          <input
-            id={id}
-            type="range"
-            className="claw-range grow"
-            min={limits.min}
-            max={limits.max}
-            step={limits.step}
-            value={value}
-            onChange={(e) => onChange(snap(Number(e.target.value)))}
-          />
-          <button type="button" className="chip" aria-label={`${label} 늘리기`} disabled={value >= limits.max} onClick={() => onChange(snap(value + limits.step))}>
-            +
-          </button>
-        </div>
-      )}
-    </Field>
-  );
-}
-
 /**
  * 가족 설정 → 인형뽑기: 켜기, 가격, 하루 횟수, 세부 옵션(미리보기와 저장한 세팅), 떨어뜨릴 확률, 상자 내용물과 확률.
  * 확률은 부모만 본다(아이 화면에는 나오지 않는다).
@@ -112,8 +64,9 @@ export function ClawSettingsBody({ save, error, busy }: { save: (patch: { claw: 
   const [practicePerDay, setPracticePerDay] = useState(now.practicePerDay);
   const [tune, setTune] = useState<ClawTune>(now.tune);
   const [presets, setPresets] = useState<ClawPreset[]>(now.presets);
-  const [presetName, setPresetName] = useState('');
-  const [presetError, setPresetError] = useState('');
+  const [editing, setEditing] = useState(false);
+  const thumbBoxes = useMemo(() => layoutBoxes(tune.boxes, 4), [tune.boxes]);
+  const thumbColors = useMemo(() => boxColors(4, thumbBoxes.length), [thumbBoxes.length]);
   const [dropRate, setDropRate] = useState(now.dropRate);
   const [fallback, setFallback] = useState(String(now.fallbackCoins));
   const [rows, setRows] = useState<Row[]>(now.prizes.map(toRow));
@@ -133,16 +86,6 @@ export function ClawSettingsBody({ save, error, busy }: { save: (patch: { claw: 
   const average = Number.isFinite(draft.price) && Number.isFinite(draft.fallbackCoins) && total === 100 ? Math.round(expectedCoins(draft, estimateCatch(tune))) : null;
 
   const setRow = (i: number, patch: Partial<Row>) => setRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
-  const setTuneValue = (patch: Partial<ClawTune>) => setTune({ ...tune, ...patch });
-  const keepPreset = () => {
-    try {
-      setPresets(savePreset(presets, presetName, tune));
-      setPresetName('');
-      setPresetError('');
-    } catch (e) {
-      setPresetError(errorText(e));
-    }
-  };
   const add = (kind: ClawPrize['kind']) => setRows([...rows, { kind, weight: '0', amount: kind === 'coin' ? '10' : '', title: '' }]);
 
   return (
@@ -197,68 +140,38 @@ export function ClawSettingsBody({ save, error, busy }: { save: (patch: { claw: 
       </FieldGroup>
 
       <section className="stack claw-tune" aria-label="게임 세부 옵션">
-        <p className="t-capb">게임 세부 옵션(미리보기를 보며 정해요)</p>
-        <ClawPreview tune={tune} />
-        <p className="t-cap center">
-          빨간 점이 점선 네모 안에 있을 때 멈추면 그 상자를 잡아요. 대략 {Math.round(estimateCatch(tune) * 100)}%쯤 잡을 거예요(아이 솜씨에 따라 달라요).
-        </p>
-
-        <FieldGroup label="저장한 세팅">
-          <div className="stack" style={{ gap: 8 }}>
-            {presets.map((p) => (
-              <div key={p.name} className="row" style={{ gap: 8 }}>
-                <button type="button" className="chip grow" aria-pressed={sameTune(p.tune, tune)} onClick={() => setTune(p.tune)}>
-                  {p.name} 불러오기
-                </button>
-                <button type="button" className="link" aria-label={`${p.name} 세팅 지우기`} onClick={() => setPresets(presets.filter((q) => q.name !== p.name))}>
-                  지우기
-                </button>
-              </div>
-            ))}
-            {presets.length === 0 && <p className="t-cap">저장한 세팅이 없어요.</p>}
+        <p className="t-capb">게임 세부 옵션</p>
+        <div className="row claw-tune-card">
+          <div className="claw-machine claw-thumb" aria-hidden="true">
+            <ClawBoard boxes={thumbBoxes} colors={thumbColors} reach={tune.reach} claw={{ x: 0, y: 0 }} />
           </div>
-        </FieldGroup>
-
-        <TuneSlider label="네모 크기(잡히는 범위)" value={tune.reach} limits={TUNE_LIMITS.reach} unit="칸" onChange={(v) => setTuneValue({ reach: v })} />
-        <TuneSlider label="집게 속도" value={tune.speed} limits={TUNE_LIMITS.speed} unit="" onChange={(v) => setTuneValue({ speed: v })} />
-        <TuneSlider label="흔들림" value={tune.wobble} limits={TUNE_LIMITS.wobble} unit="" onChange={(v) => setTuneValue({ wobble: v })} />
-        <FieldGroup label="상자 수">
-          <div className="chips six">
-            {[3, 4, 5, 6, 7, 8].map((n) => (
-              <button key={n} type="button" role="radio" className="chip" aria-checked={tune.boxes === n} onClick={() => setTuneValue({ boxes: n })}>
-                {n}개
-              </button>
-            ))}
+          <div className="stack grow" style={{ gap: 4 }}>
+            <p className="t-body">
+              네모 {tune.reach}칸 · 속도 {tune.speed} · 흔들림 {tune.wobble}
+            </p>
+            <p className="t-cap">
+              상자 {tune.boxes}개 · 반짝 도움 {tune.glow ? '켜짐' : '꺼짐'}
+            </p>
+            <p className="t-cap">
+              연출 {tune.grabMs / 1000}초 · {tune.carryMs / 1000}초 · {tune.openMs / 1000}초
+            </p>
+            <p className="t-cap">대략 {Math.round(estimateCatch(tune) * 100)}%쯤 잡아요</p>
           </div>
-        </FieldGroup>
-        <FieldGroup label="반짝 도움(빨간 점이 네모에 들어오면 반짝)">
-          <div className="segmented">
-            <button type="button" role="radio" className="chip" aria-checked={tune.glow} onClick={() => setTuneValue({ glow: true })}>
-              켜기
-            </button>
-            <button type="button" role="radio" className="chip" aria-checked={!tune.glow} onClick={() => setTuneValue({ glow: false })}>
-              끄기
-            </button>
-          </div>
-        </FieldGroup>
-
-        <p className="t-capb">연출 시간(맨 아래 '연습해 보기'로 확인해요)</p>
-        <TuneSlider label="집게가 오므리며 뜸 들이는 시간" value={tune.grabMs} limits={TUNE_LIMITS.grabMs} unit="초" scale={1000} onChange={(v) => setTuneValue({ grabMs: v })} />
-        <TuneSlider label="출구까지 옮기는 시간" value={tune.carryMs} limits={TUNE_LIMITS.carryMs} unit="초" scale={1000} onChange={(v) => setTuneValue({ carryMs: v })} />
-        <TuneSlider label="상자가 흔들리다 열리는 시간" value={tune.openMs} limits={TUNE_LIMITS.openMs} unit="초" scale={1000} onChange={(v) => setTuneValue({ openMs: v })} />
-
-        <Field label="지금 값을 세팅으로 저장" hint="같은 이름이면 덮어써요. 아래 '설정 저장하기'를 눌러야 가족 설정에 남아요.">
-          {(id) => (
-            <div className="row" style={{ gap: 8 }}>
-              <input id={id} className="input grow" placeholder="예: 동생용" maxLength={MAX_PRESET_NAME} value={presetName} onChange={(e) => setPresetName(e.target.value)} />
-              <Button onClick={keepPreset}>저장</Button>
-            </div>
-          )}
-        </Field>
-        {presetError && (
-          <p className="error" role="alert">
-            {presetError}
-          </p>
+        </div>
+        <Button block tone="plain" onClick={() => setEditing(true)}>
+          세부 옵션 조정
+        </Button>
+        {editing && (
+          <ClawTuneEditor
+            initial={tune}
+            initialPresets={presets}
+            onClose={() => setEditing(false)}
+            onApply={(t, p) => {
+              setTune(t);
+              setPresets(p);
+              setEditing(false);
+            }}
+          />
         )}
       </section>
 
