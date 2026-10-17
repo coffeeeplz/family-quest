@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useFamilyData } from '../../app/familyData';
 import { useBackend, useSession } from '../../app/session';
 import type { ClawRound } from '../../backend/types';
-import { BOARD, boxAt, cannotPractice, cannotStart, clawAt, playsToday, practiceLeft, winLabel } from '../../domain/claw';
+import { BOARD, boxAt, cannotPractice, cannotStart, clawAt, layoutBoxes, playsToday, practiceLeft, winLabel } from '../../domain/claw';
 import { availableCoins } from '../../domain/shop';
 import { findPack } from '../../domain/stickers';
 import { findEntry } from '../../domain/wardrobe';
@@ -78,7 +78,11 @@ export function ClawPage() {
   const grabMs = round?.grabMs ?? 900;
   const carryMs = round?.carryMs ?? 2800;
   const openTotal = round?.openMs ?? OPEN_BASE;
-  const colors = useMemo(() => (round ? boxColors(round.seed, round.targets.length) : []), [round]);
+  // 상자 자리는 화면에 들어올 때 정하고, 대기 화면에서도 보여 준다. 판을 시작하면 같은 자리 그대로 한다.
+  const [layout] = useState(() => Math.floor(Math.random() * 2 ** 31));
+  const idleBoxes = useMemo(() => layoutBoxes(settings.tune.boxes, layout), [settings.tune.boxes, layout]);
+  const boxes = round?.targets ?? idleBoxes;
+  const colors = useMemo(() => boxColors(layout, boxes.length), [layout, boxes.length]);
 
   // ── 시간이 흐르게 하기 ─────────────────────────────────────────────────────
   const moving = phase !== 'idle' && phase !== 'done' && phase !== 'starting';
@@ -145,7 +149,7 @@ export function ClawPage() {
     previewTune('tick');
     setPhase('starting');
     try {
-      const r = await backend.startClaw(family.id, me.uid, practice);
+      const r = await backend.startClaw(family.id, me.uid, { practice, layout });
       g.current = {
         t0: performance.now(),
         phaseAt: performance.now(),
@@ -176,11 +180,11 @@ export function ClawPage() {
       g.current.finishing = true;
       playTune('tick');
       go('grab');
+      // 결과(코인, 보상)는 지금 정해지지만, 다른 축하 장면과 코인 숫자는 상자가 열릴 때까지 기다리게 한다.
+      markCelebrating((round.grabMs + T.rise + round.carryMs + round.openMs) * slow() + 1500);
       backend
         .finishClaw(family.id, round.id, [g.current.press1 ?? 0, t])
         .then((done) => {
-          // 상품 코인이 들어와도 위쪽 숫자는 연출이 끝날 즈음에 올라가게 한다.
-          markCelebrating((done.grabMs + T.rise + done.carryMs + done.openMs) * slow());
           setResult(done);
         })
         .catch((e) => {
@@ -331,10 +335,10 @@ export function ClawPage() {
 
       <div className="claw-machine" onPointerDown={tapToPress ? press : undefined}>
         <ClawBoard
-          boxes={round?.targets ?? []}
+          boxes={boxes}
           colors={colors}
           hidden={lifted ? caught : null}
-          reach={round && tapToPress ? round.reach : null}
+          reach={tapToPress || phase === 'idle' || phase === 'starting' || phase === 'done' ? (round?.reach ?? settings.tune.reach) : null}
           glowBox={glowBox}
           claw={claw}
           clawRows={clawRows}
@@ -391,9 +395,9 @@ export function ClawPage() {
         <>
           {/* 자녀: 남은 연습이 있으면 연습과 바로 시작 중에서 고른다(한 화면에 보이게 나란히) */}
           <div className="claw-actions">
-            {!isParent && settings.practicePerDay > 0 && !practiceBlocked && (phase === 'idle' || phase === 'done') && (
+            {!isParent && !practiceBlocked && (phase === 'idle' || phase === 'done') && (
               <Button big tone="mint" onClick={() => void start(true)}>
-                연습(공짜) 남은 {practices}번
+                {practices === Infinity ? '연습하기(공짜)' : `연습(공짜) 남은 ${practices}번`}
               </Button>
             )}
             <Button big tone={!isParent && practices > 0 ? 'plain' : 'pink'} disabled={!!blocked || (phase !== 'idle' && phase !== 'done')} onClick={() => void start()}>

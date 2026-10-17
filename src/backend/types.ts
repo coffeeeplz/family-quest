@@ -99,7 +99,7 @@ export interface ClawSettings {
   tune: ClawTune;
   /** 저장해 둔 세팅들 */
   presets: ClawPreset[];
-  /** 자녀가 하루에 공짜로 해 볼 수 있는 연습 판 수(0이면 연습 없이 바로 시작) */
+  /** 자녀가 하루에 공짜로 해 볼 수 있는 연습 판 수(0이면 연습 없음, -1이면 무제한) */
   practicePerDay: number;
   /** 잡은 상자를 옮기다 떨어뜨릴 확률(%) */
   dropRate: number;
@@ -670,8 +670,11 @@ export interface Backend {
   // 인형뽑기
   /** 오늘 내가 한 판들(연습 판 포함, 하루 횟수와 남은 연습 표시) */
   watchMyClawRounds(familyId: string, uid: string, day: string, cb: (rounds: ClawRound[]) => void): Unsub;
-  /** 새 판: 가격을 내고 상자 자리와 속도를 받는다. practice=true 면 자녀의 공짜 연습 판(부모는 늘 연습 판) */
-  startClaw(familyId: string, uid: string, practice?: boolean): Promise<ClawRound>;
+  /**
+   * 새 판: 가격을 내고 속도를 받는다. practice=true 면 자녀의 공짜 연습 판(부모는 늘 연습 판).
+   * layout 은 대기 화면에 보여 준 상자 자리의 씨앗값(그 자리 그대로 시작한다)
+   */
+  startClaw(familyId: string, uid: string, options?: { practice?: boolean; layout?: number }): Promise<ClawRound>;
   /** 판 끝내기: 버튼 두 번 누른 시각(판 시작부터 ms)을 보내고 결과를 받는다 */
   finishClaw(familyId: string, roundId: string, presses: [number, number]): Promise<ClawRound>;
 

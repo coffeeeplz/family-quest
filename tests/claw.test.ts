@@ -15,7 +15,9 @@ import {
   makeRound,
   normalizeClaw,
   pickPrize,
+  layoutBoxes,
   placeBoxes,
+  PRACTICE_UNLIMITED,
   playsToday,
   practiceLeft,
   savePreset,
@@ -232,7 +234,7 @@ describe('설정 검사', () => {
     expect(() => cleanClaw({ ...DEFAULT_CLAW, tune: { ...DEFAULT_CLAW.tune, reach: 0.5 } })).toThrow('네모 크기');
     expect(cleanClaw({ ...DEFAULT_CLAW, tune: { ...DEFAULT_CLAW.tune, carryMs: 6300 } }).tune.carryMs).toBe(6300);
     expect(() => cleanClaw({ ...DEFAULT_CLAW, tune: { ...DEFAULT_CLAW.tune, openMs: 9000 } })).toThrow('연출 시간');
-    expect(() => cleanClaw({ ...DEFAULT_CLAW, practicePerDay: 11 })).toThrow('연습 횟수');
+    expect(() => cleanClaw({ ...DEFAULT_CLAW, practicePerDay: 100 })).toThrow('연습 횟수');
   });
 
   it('연출 시간이 없던 예전 세팅에는 기본 연출 시간을 채운다', () => {
@@ -425,7 +427,7 @@ describe('인형뽑기(체험 모드)', () => {
     const before = kid().coins;
     const count = ledger().length;
     for (let i = 0; i < 2; i++) {
-      const r = await backend.startClaw(FAMILY, 'demo-kid', true);
+      const r = await backend.startClaw(FAMILY, 'demo-kid', { practice: true });
       expect(r.practice).toBe(true);
       const done = await backend.finishClaw(FAMILY, r.id, perfect(r));
       expect(done.outcome).toBe('win');
@@ -433,13 +435,33 @@ describe('인형뽑기(체험 모드)', () => {
     }
     expect(kid().coins).toBe(before);
     expect(ledger().length).toBe(count);
-    await expect(backend.startClaw(FAMILY, 'demo-kid', true)).rejects.toThrow('연습은 다 했어요');
+    await expect(backend.startClaw(FAMILY, 'demo-kid', { practice: true })).rejects.toThrow('연습은 다 했어요');
     // 진짜 판은 그대로 3번 할 수 있다(연습은 세지 않음).
     const rounds = () => snapshot<ClawRound[]>((cb) => backend.watchMyClawRounds(FAMILY, 'demo-kid', dateKey(), cb));
     expect(playsToday(rounds(), 'demo-kid', dateKey())).toBe(0);
     expect(practiceLeft({ ...DEFAULT_CLAW, practicePerDay: 2 }, rounds(), 'demo-kid', dateKey())).toBe(0);
     await backend.startClaw(FAMILY, 'demo-kid');
     expect(playsToday(rounds(), 'demo-kid', dateKey())).toBe(1);
+  });
+
+  it('연습 무제한이면 몇 번이든 연습할 수 있다', async () => {
+    await setClaw({ practicePerDay: PRACTICE_UNLIMITED });
+    as('demo-kid');
+    for (let i = 0; i < 12; i++) await backend.startClaw(FAMILY, 'demo-kid', { practice: true });
+    const rounds = snapshot<ClawRound[]>((cb) => backend.watchMyClawRounds(FAMILY, 'demo-kid', dateKey(), cb));
+    expect(practiceLeft({ ...DEFAULT_CLAW, practicePerDay: PRACTICE_UNLIMITED }, rounds, 'demo-kid', dateKey())).toBe(Infinity);
+    expect(normalizeClaw({ practicePerDay: PRACTICE_UNLIMITED }).practicePerDay).toBe(PRACTICE_UNLIMITED);
+    expect(() => cleanClaw({ ...DEFAULT_CLAW, practicePerDay: -2 })).toThrow('연습 횟수');
+  });
+
+  it('대기 화면에 보여 준 상자 자리 그대로 시작한다', async () => {
+    as('demo-kid');
+    const r = await backend.startClaw(FAMILY, 'demo-kid', { layout: 12345 });
+    const family = snapshot<{ settings: typeof DEFAULT_SETTINGS } | null>((cb) => backend.watchFamily(FAMILY, cb))!;
+    expect(r.targets).toEqual(layoutBoxes(family.settings.claw.tune.boxes, 12345));
+    // 이상한 씨앗값이면 서버가 새로 정한다.
+    const odd = await backend.startClaw(FAMILY, 'demo-kid', { layout: -5 });
+    expect(odd.targets).toHaveLength(family.settings.claw.tune.boxes);
   });
 
   it('판에는 시작할 때의 연출 시간이 적힌다', async () => {

@@ -1497,7 +1497,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       return watch(() => Object.values(state.clawRounds[familyId] ?? {}).filter((r) => r.uid === uid && r.day === day).map((r) => ({ ...r })), cb);
     },
 
-    async startClaw(familyId, uid, practice = false) {
+    async startClaw(familyId, uid, { practice = false, layout }: { practice?: boolean; layout?: number } = {}) {
       requireSelf(uid);
       const member = requireMember(familyId);
       const settings = state.families[familyId].settings.claw;
@@ -1510,7 +1510,7 @@ export function createDemoBackend(store: KeyValueStore | null = defaultStore()):
       if (blocked) throw new AppError(blocked);
       const id = newId('claw');
       const now = Date.now();
-      const round: ClawRound = { id, uid, day, startedAt: now, ...makeRound(settings.tune, Math.random), practice: isParent || kidPractice, status: 'playing' };
+      const round: ClawRound = { id, uid, day, startedAt: now, ...makeRound(settings.tune, Math.random, layout), practice: isParent || kidPractice, status: 'playing' };
       if (!round.practice && settings.price > 0) {
         addLedger(familyId, { id: `claw-${id}`, uid, amount: -settings.price, type: 'claw', refId: id, memo: '인형뽑기', note: '', by: uid, at: now });
       }

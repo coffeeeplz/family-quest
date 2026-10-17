@@ -26,7 +26,9 @@ export const MAX_CLAW_TITLE = 20;
 export const MAX_DROP_RATE = 90;
 export const MAX_PRESETS = 5;
 export const MAX_PRESET_NAME = 10;
-export const MAX_PRACTICE_PER_DAY = 10;
+export const MAX_PRACTICE_PER_DAY = 99;
+/** 연습 횟수 무제한 */
+export const PRACTICE_UNLIMITED = -1;
 
 /** 세부 옵션의 범위(설정 화면의 슬라이더와 검사에 같이 쓴다) */
 export const TUNE_LIMITS = {
@@ -114,11 +116,17 @@ export function placeBoxes(count: number, random: () => number): { x: number; y:
   return out;
 }
 
-/** 새 판의 상자 자리와 속도를 정한다(서버나 체험 모드가 부른다). */
-export function makeRound(tune: ClawTune, random: () => number): RoundSpec {
+/** 상자 자리 씨앗값으로 쓸 수 있는 값인지(폰이 보낸 값을 그대로 믿지 않는다) */
+export const validLayout = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 0 && n < 2 ** 31;
+
+/** 대기 화면에 보여 줄 상자 자리(판을 시작하면 같은 씨앗값으로 같은 자리가 된다) */
+export const layoutBoxes = (boxes: number, layout: number) => placeBoxes(boxes, seededRandom(layout));
+
+/** 새 판의 상자 자리와 속도를 정한다(서버나 체험 모드가 부른다). layout 이 있으면 그 씨앗값의 상자 자리를 쓴다 */
+export function makeRound(tune: ClawTune, random: () => number, layout?: number): RoundSpec {
   const speed = () => Math.round(tune.speed * between(random, 0.85, 1.15) * 10) / 10;
   return {
-    targets: placeBoxes(tune.boxes, random),
+    targets: validLayout(layout) ? layoutBoxes(tune.boxes, layout) : placeBoxes(tune.boxes, random),
     reach: tune.reach,
     wobble: tune.wobble,
     glow: tune.glow,
@@ -321,7 +329,7 @@ export function normalizeClaw(raw: unknown): ClawSettings {
     perDay: isInt(r.perDay, 0, MAX_CLAW_PER_DAY) ? r.perDay : DEFAULT_CLAW.perDay,
     tune,
     presets,
-    practicePerDay: isInt(r.practicePerDay, 0, MAX_PRACTICE_PER_DAY) ? r.practicePerDay : DEFAULT_CLAW.practicePerDay,
+    practicePerDay: isInt(r.practicePerDay, PRACTICE_UNLIMITED, MAX_PRACTICE_PER_DAY) ? r.practicePerDay : DEFAULT_CLAW.practicePerDay,
     dropRate: isInt(r.dropRate, 0, MAX_DROP_RATE) ? r.dropRate : DEFAULT_CLAW.dropRate,
     fallbackCoins: isInt(r.fallbackCoins, 1, MAX_CLAW_COINS) ? r.fallbackCoins : DEFAULT_CLAW.fallbackCoins,
     prizes,
@@ -333,7 +341,7 @@ export function cleanClaw(input: ClawSettings): ClawSettings {
   if (!isInt(input.price, 0, MAX_CLAW_PRICE)) throw new AppError(`한 판 가격은 0부터 ${MAX_CLAW_PRICE} 코인 사이로 정해 주세요.`);
   if (!isInt(input.perDay, 0, MAX_CLAW_PER_DAY)) throw new AppError(`하루 횟수는 0(제한 없음)부터 ${MAX_CLAW_PER_DAY}번 사이로 정해 주세요.`);
   if (!validTune(input.tune)) throw new AppError('네모 크기, 집게 속도, 흔들림, 상자 수, 연출 시간을 다시 확인해 주세요.');
-  if (!isInt(input.practicePerDay, 0, MAX_PRACTICE_PER_DAY)) throw new AppError(`연습 횟수는 0부터 ${MAX_PRACTICE_PER_DAY}번 사이로 정해 주세요.`);
+  if (!isInt(input.practicePerDay, PRACTICE_UNLIMITED, MAX_PRACTICE_PER_DAY)) throw new AppError(`연습 횟수는 0부터 ${MAX_PRACTICE_PER_DAY}번 사이나 무제한으로 정해 주세요.`);
   if (!Array.isArray(input.presets) || input.presets.length > MAX_PRESETS) throw new AppError(`세팅은 ${MAX_PRESETS}개까지 저장할 수 있어요.`);
   const presets = input.presets.map((p) => {
     const name = (p.name ?? '').trim();
@@ -394,9 +402,11 @@ export const sameTune = (a: ClawTune, b: ClawTune) => (Object.keys(TUNE_KEYS) as
 export const playsToday = (rounds: Pick<ClawRound, 'uid' | 'day' | 'practice'>[], uid: string, day: string) =>
   rounds.filter((r) => r.uid === uid && r.day === day && !r.practice).length;
 
-/** 오늘 남은 연습 판 수(자녀) */
-export const practiceLeft = (settings: ClawSettings, rounds: Pick<ClawRound, 'uid' | 'day' | 'practice'>[], uid: string, day: string) =>
-  Math.max(0, settings.practicePerDay - rounds.filter((r) => r.uid === uid && r.day === day && r.practice).length);
+/** 오늘 남은 연습 판 수(자녀). 무제한이면 Infinity */
+export function practiceLeft(settings: ClawSettings, rounds: Pick<ClawRound, 'uid' | 'day' | 'practice'>[], uid: string, day: string): number {
+  if (settings.practicePerDay === PRACTICE_UNLIMITED) return Infinity;
+  return Math.max(0, settings.practicePerDay - rounds.filter((r) => r.uid === uid && r.day === day && r.practice).length);
+}
 
 /** 새 판을 시작할 수 없는 이유(없으면 null). 부모는 연습이라 막지 않는다 */
 export function cannotStart(settings: ClawSettings, isParent: boolean, freeCoins: number, todayPlays: number): string | null {

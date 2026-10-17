@@ -7,7 +7,9 @@ import {
   MAX_CLAW_PRICE,
   MAX_CLAW_PRIZES,
   MAX_CLAW_TITLE,
+  MAX_PRACTICE_PER_DAY,
   MAX_PRESET_NAME,
+  PRACTICE_UNLIMITED,
   TUNE_LIMITS,
   estimateCatch,
   expectedCoins,
@@ -21,7 +23,6 @@ import { errorText } from '../../ui/toast';
 import { ClawPreview } from './ClawPreview';
 
 const PER_DAY_CHOICES = [0, 1, 2, 3, 5, 10];
-const PRACTICE_CHOICES = [0, 1, 2, 3, 5, 10];
 const DROP_CHOICES = [0, 10, 20, 30, 50];
 
 const KIND_NAMES: Record<ClawPrize['kind'], string> = {
@@ -173,12 +174,24 @@ export function ClawSettingsBody({ save, error, busy }: { save: (patch: { claw: 
       </FieldGroup>
 
       <FieldGroup label="자녀가 하루에 공짜로 연습할 수 있는 횟수">
-        <div className="chips six">
-          {PRACTICE_CHOICES.map((n) => (
-            <button key={n} type="button" role="radio" className="chip" aria-checked={practicePerDay === n} onClick={() => setPracticePerDay(n)}>
-              {n === 0 ? '없음' : `${n}번`}
-            </button>
-          ))}
+        <div className="row" style={{ gap: 8 }}>
+          <button type="button" role="radio" className="chip" aria-checked={practicePerDay === 0} onClick={() => setPracticePerDay(0)}>
+            없음
+          </button>
+          <button type="button" role="radio" className="chip" aria-checked={practicePerDay === PRACTICE_UNLIMITED} onClick={() => setPracticePerDay(PRACTICE_UNLIMITED)}>
+            무제한
+          </button>
+          <label className="row grow" style={{ gap: 6 }}>
+            <input
+              className="input grow"
+              inputMode="numeric"
+              placeholder="횟수 적기"
+              aria-label="연습 횟수"
+              value={practicePerDay > 0 ? String(practicePerDay) : ''}
+              onChange={(e) => setPracticePerDay(Math.min(MAX_PRACTICE_PER_DAY, Number(e.target.value.replace(/\D/g, '')) || 0))}
+            />
+            <span className="t-cap">번</span>
+          </label>
         </div>
         <p className="t-cap">연습 판은 코인을 내지 않고 상품도 없어요. 아이가 연습하지 않고 바로 시작할 수도 있어요.</p>
       </FieldGroup>

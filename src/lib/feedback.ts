@@ -149,11 +149,12 @@ export function reducedMotion(): boolean {
   return typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-// 축하 화면이 떠 있는 동안에는 위쪽 코인 숫자가 화면에 가려지므로, 끝날 즈음에 올라가게 한다.
+// 축하 화면(또는 인형뽑기 연출)이 떠 있는 동안에는 위쪽 코인 숫자와 다른 축하 장면이 기다린다.
 let celebratingUntil = 0;
 
+/** 앞으로 ms 동안 연출 중이라고 알린다. 이미 더 길게 잡혀 있으면 줄이지 않는다. */
 export function markCelebrating(ms: number): void {
-  celebratingUntil = Date.now() + ms;
+  celebratingUntil = Math.max(celebratingUntil, Date.now() + ms);
 }
 
 /** 축하 화면이 앞으로 몇 ms 더 떠 있는지 */
